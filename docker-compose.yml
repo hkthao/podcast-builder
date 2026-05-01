@@ -1,0 +1,25 @@
+services:
+  podcast:
+    build: .
+    image: podcast-builder:latest
+    volumes:
+      - ./samples:/app/samples:ro
+      - ./script.txt:/app/script.txt:ro
+      - ./output:/app/output
+      - ./models:/app/models
+    environment:
+      - COQUI_TOS_AGREED=1
+
+  # GPU variant — requires an NVIDIA host with nvidia-container-toolkit.
+  # Edit the FROM line in Dockerfile to nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+  # and add `python3.10 python3-pip` to apt before using.
+  podcast-gpu:
+    extends: podcast
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
