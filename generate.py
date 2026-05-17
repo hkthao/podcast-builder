@@ -20,9 +20,14 @@ def _ensure_ffmpeg() -> None:
 
 def _validate_inputs() -> None:
     missing = []
-    for tag, fname in config.SPEAKERS.items():
-        if not (config.SAMPLES_DIR / fname).is_file():
-            missing.append(f"{config.SAMPLES_DIR / fname} (for {tag})")
+    for tag, (wav, txt) in config.SPEAKERS.items():
+        if not (config.SAMPLES_DIR / wav).is_file():
+            missing.append(f"{config.SAMPLES_DIR / wav} (audio for {tag})")
+        if not (config.SAMPLES_DIR / txt).is_file():
+            missing.append(
+                f"{config.SAMPLES_DIR / txt} (transcript for {tag} — "
+                f"the exact text spoken in {wav})"
+            )
     if not config.SCRIPT_PATH.is_file():
         missing.append(str(config.SCRIPT_PATH))
     if missing:
@@ -55,36 +60,50 @@ def parse_script(path: Path) -> list[tuple[str, str]]:
     return turns
 
 
+def _best_device() -> str:
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def init_tts():
-    os.environ.setdefault("COQUI_TOS_AGREED", "1")
-    os.environ.setdefault("TTS_HOME", str(config.MODELS_DIR))
     os.environ.setdefault("HF_HOME", str(config.MODELS_DIR / "hf"))
     config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     import torch
-    from huggingface_hub import snapshot_download
-    from TTS.tts.configs.xtts_config import XttsConfig
-    from TTS.tts.models.xtts import Xtts
+    from omnivoice.models.omnivoice import OmniVoice
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[init] device: {device}")
+    device = _best_device()
+    dtype = torch.float16 if device in ("cuda", "mps") else torch.float32
+    print(f"[init] device: {device}, dtype: {dtype}")
+    print(f"[init] loading {config.MODEL_NAME} (cached after first run)")
 
-    print(f"[init] downloading {config.MODEL_NAME} (cached after first run)")
-    model_dir = Path(
-        snapshot_download(
-            repo_id=config.MODEL_NAME,
-            cache_dir=str(config.MODELS_DIR / "hf"),
-        )
+    model = OmniVoice.from_pretrained(
+        config.MODEL_NAME,
+        device_map=device,
+        dtype=dtype,
     )
-
-    cfg = XttsConfig()
-    cfg.load_json(str(model_dir / "config.json"))
-    model = Xtts.init_from_config(cfg)
-    model.load_checkpoint(cfg, checkpoint_dir=str(model_dir), use_deepspeed=False)
-    if device == "cuda":
-        model.cuda()
     print("[init] model loaded")
     return model
+
+
+def build_voice_prompts(model) -> dict:
+    prompts = {}
+    for tag, (wav, txt) in config.SPEAKERS.items():
+        wav_path = config.SAMPLES_DIR / wav
+        ref_text = (config.SAMPLES_DIR / txt).read_text(encoding="utf-8").strip()
+        if not ref_text:
+            sys.exit(f"error: {config.SAMPLES_DIR / txt} is empty (need transcript of {wav})")
+        print(f"[clone] {tag}: encoding {wav} ({len(ref_text)} chars of ref_text)")
+        prompts[tag] = model.create_voice_clone_prompt(
+            ref_audio=str(wav_path),
+            ref_text=ref_text,
+        )
+    return prompts
 
 
 def _chunk_path(index: int, speaker_tag: str, key: str) -> Path:
@@ -92,37 +111,51 @@ def _chunk_path(index: int, speaker_tag: str, key: str) -> Path:
     return config.CHUNKS_DIR / f"chunk_{index:03d}_{slug}_{key}.wav"
 
 
-def _chunk_key(speaker_wav: Path, text: str) -> str:
+def _chunk_key(speaker_wav: Path, ref_text: str, text: str) -> str:
     h = hashlib.sha1()
     h.update(speaker_wav.read_bytes())
     h.update(b"\0")
+    h.update(ref_text.encode("utf-8"))
+    h.update(b"\0")
     h.update(text.encode("utf-8"))
+    h.update(b"\0")
+    h.update(config.MODEL_NAME.encode("utf-8"))
     return h.hexdigest()[:12]
 
 
-def generate_chunk(model, text: str, speaker_tag: str, index: int) -> Path:
+def generate_chunk(model, prompts, text: str, speaker_tag: str, index: int) -> Path:
+    import numpy as np
+    import soundfile as sf
     import torch
-    import torchaudio
 
-    speaker_wav = config.SAMPLES_DIR / config.SPEAKERS[speaker_tag]
-    key = _chunk_key(speaker_wav, text)
+    wav_name, txt_name = config.SPEAKERS[speaker_tag]
+    speaker_wav = config.SAMPLES_DIR / wav_name
+    ref_text = (config.SAMPLES_DIR / txt_name).read_text(encoding="utf-8").strip()
+    key = _chunk_key(speaker_wav, ref_text, text)
     out_path = _chunk_path(index, speaker_tag, key)
 
     if out_path.exists():
         print(f"  cache hit: {out_path.name}")
         return out_path
 
-    gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(
-        audio_path=[str(speaker_wav)]
-    )
-    result = model.inference(
+    audios = model.generate(
         text=text,
         language=config.LANGUAGE,
-        gpt_cond_latent=gpt_cond_latent,
-        speaker_embedding=speaker_embedding,
+        voice_clone_prompt=prompts[speaker_tag],
+        num_step=config.NUM_STEP,
+        guidance_scale=config.GUIDANCE_SCALE,
+        t_shift=config.T_SHIFT,
+        denoise=config.DENOISE,
+        postprocess_output=config.POSTPROCESS_OUTPUT,
+        speed=config.SPEED,
     )
-    wav = torch.tensor(result["wav"]).unsqueeze(0)
-    torchaudio.save(str(out_path), wav, 24000)
+    audio = audios[0]
+    if isinstance(audio, torch.Tensor):
+        audio = audio.detach().cpu().to(torch.float32).numpy()
+    # soundfile expects (frames,) mono or (frames, channels). Model returns
+    # (1, T) or (T,) — squeeze to 1-D.
+    audio = np.asarray(audio, dtype=np.float32).squeeze()
+    sf.write(str(out_path), audio, model.sampling_rate, subtype="PCM_16")
     return out_path
 
 
@@ -156,6 +189,7 @@ def main() -> None:
     print(f"[script] {total} turns")
 
     model = init_tts()
+    prompts = build_voice_prompts(model)
 
     chunk_files: list[Path] = []
     first_t: float | None = None
@@ -164,7 +198,7 @@ def main() -> None:
         print(f"[{i}/{total}] {tag} {preview!r}")
         t0 = time.monotonic()
         try:
-            out = generate_chunk(model, text, tag, i)
+            out = generate_chunk(model, prompts, text, tag, i)
         except Exception as e:
             sys.exit(f"error: failed to generate chunk {i} ({tag}): {e}")
         chunk_files.append(out)

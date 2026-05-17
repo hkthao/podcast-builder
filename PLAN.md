@@ -1,5 +1,14 @@
 # Podcast Builder — Implementation Plan (revised)
 
+> **Superseded — historical plan.** This document describes the original
+> viXTTS-based pipeline. The project has since switched to
+> [OmniVoice](https://github.com/k2-fsa/OmniVoice) (k2-fsa) — the engine
+> used by [OmniVoice Studio](https://github.com/debpalash/OmniVoice-Studio) —
+> for noticeably better Vietnamese quality and an Apache-2.0 license (no
+> longer CPML-only). See `README.md` for the current setup. Key deltas:
+> coqui-tts → omnivoice, Python 3.10 → 3.11, `samples/*.txt` ref transcripts
+> are now required, model size 2 GB → 2.4 GB.
+
 ## Goal
 Build a local TTS podcast builder that clones 2 voices (male / female) from short audio
 samples and assembles them into a complete podcast audio file from a Vietnamese script.

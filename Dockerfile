@@ -1,10 +1,8 @@
-FROM python:3.10-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    COQUI_TOS_AGREED=1 \
-    TTS_HOME=/app/models \
     HF_HOME=/app/models/hf
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,6 +15,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-COPY config.py generate.py ./
+COPY config.py generate.py transcribe.py ./
 
 ENTRYPOINT ["python", "generate.py"]
