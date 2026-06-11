@@ -1,39 +1,19 @@
-import { AbsoluteFill, Img } from "remotion";
+import { AbsoluteFill, Audio, staticFile } from "remotion";
 import { Background } from "./components/Background";
-import { BRAND, COLORS, FONTS, FORMAT, FPS, TYPE_SCALE } from "./theme";
+import type { EpisodeConfig } from "./episode";
 
-export const Video: React.FC = () => {
+export type CompProps = {
+  audioSrc: string;
+  transcriptSrc: string | null;
+  bgmSrc: string | null;
+  episode: EpisodeConfig;
+};
+
+export const Video: React.FC<CompProps> = ({ audioSrc }) => {
   return (
     <AbsoluteFill>
       <Background />
-      <AbsoluteFill
-        style={{
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 32,
-        }}
-      >
-        <Img src={BRAND.logoSrc} style={{ width: 160, height: 160 }} />
-        <div
-          style={{
-            fontFamily: FONTS.display,
-            color: COLORS.signature,
-            fontSize: TYPE_SCALE.title,
-            letterSpacing: "-0.01em",
-          }}
-        >
-          {BRAND.channelName}
-        </div>
-        <div
-          style={{
-            fontFamily: FONTS.body,
-            color: COLORS.textMuted,
-            fontSize: TYPE_SCALE.meta,
-          }}
-        >
-          {FORMAT.width}×{FORMAT.height} · {FPS} fps
-        </div>
-      </AbsoluteFill>
+      <Audio src={staticFile(audioSrc)} />
     </AbsoluteFill>
   );
 };
