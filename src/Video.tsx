@@ -7,6 +7,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { Background } from "./components/Background";
+import { BGMTrack } from "./components/BGMTrack";
 import { Captions } from "./components/Captions";
 import { Hook, HOOK_DURATION_FRAMES } from "./components/Hook";
 import { IntroCard, INTRO_DURATION_FRAMES } from "./components/IntroCard";
@@ -26,6 +27,7 @@ export type CompProps = {
 export const Video: React.FC<CompProps> = ({
   audioSrc,
   transcriptSrc,
+  bgmSrc,
   episode,
 }) => {
   const frame = useCurrentFrame();
@@ -46,10 +48,22 @@ export const Video: React.FC<CompProps> = ({
 
   const inMain = frame >= mainStartFrame && frame < mainEndFrame;
 
+  const outroStartMs = (mainEndFrame / fps) * 1000;
+
   return (
     <AbsoluteFill>
       <Background />
       {audioSrc ? <Audio src={staticFile(audioSrc)} /> : null}
+
+      {bgmSrc ? (
+        <BGMTrack
+          bgmSrc={bgmSrc}
+          transcriptSrc={transcriptSrc}
+          baseVolumeDb={episode.bgmVolumeDb}
+          fadeOutFromMs={outroStartMs}
+          speechOffsetMs={0}
+        />
+      ) : null}
 
       {audioSrc ? (
         <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
