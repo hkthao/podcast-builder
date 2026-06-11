@@ -1,5 +1,6 @@
 import { AbsoluteFill, Audio, staticFile } from "remotion";
 import { Background } from "./components/Background";
+import { Captions } from "./components/Captions";
 import { Visualizer } from "./components/Visualizer";
 import type { EpisodeConfig } from "./episode";
 
@@ -10,7 +11,7 @@ export type CompProps = {
   episode: EpisodeConfig;
 };
 
-export const Video: React.FC<CompProps> = ({ audioSrc, episode }) => {
+export const Video: React.FC<CompProps> = ({ audioSrc, transcriptSrc, episode }) => {
   const mood = episode.moodOverride ?? "social";
   return (
     <AbsoluteFill>
@@ -19,6 +20,7 @@ export const Video: React.FC<CompProps> = ({ audioSrc, episode }) => {
         <>
           <Audio src={staticFile(audioSrc)} />
           <Visualizer audioSrc={audioSrc} mood={mood} />
+          <Captions transcriptSrc={transcriptSrc} />
         </>
       ) : null}
     </AbsoluteFill>
