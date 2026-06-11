@@ -1,8 +1,19 @@
-import { AbsoluteFill, Audio, staticFile } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  Sequence,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
+} from "remotion";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
+import { Hook, HOOK_DURATION_FRAMES } from "./components/Hook";
+import { IntroCard, INTRO_DURATION_FRAMES } from "./components/IntroCard";
+import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
 import { SceneArt } from "./components/SceneArt";
 import { Visualizer } from "./components/Visualizer";
+import { Watermark } from "./components/Watermark";
 import type { EpisodeConfig } from "./episode";
 
 export type CompProps = {
@@ -12,18 +23,63 @@ export type CompProps = {
   episode: EpisodeConfig;
 };
 
-export const Video: React.FC<CompProps> = ({ audioSrc, transcriptSrc, episode }) => {
+export const Video: React.FC<CompProps> = ({
+  audioSrc,
+  transcriptSrc,
+  episode,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames } = useVideoConfig();
   const mood = episode.moodOverride ?? "social";
+
+  const introFrames = episode.showIntro ? INTRO_DURATION_FRAMES : 0;
+  const hookFrames = episode.hook ? HOOK_DURATION_FRAMES : 0;
+  const outroFrames = episode.showOutro ? OUTRO_DURATION_FRAMES : 0;
+  const mainStartFrame = introFrames + hookFrames;
+  const mainEndFrame = durationInFrames - outroFrames;
+
+  const hookStartMs = (introFrames / fps) * 1000;
+  const hookEndMs = ((introFrames + hookFrames) / fps) * 1000;
+  const captionHideRanges = episode.hook
+    ? [{ startMs: hookStartMs, endMs: hookEndMs }]
+    : [];
+
+  const inMain = frame >= mainStartFrame && frame < mainEndFrame;
+
   return (
     <AbsoluteFill>
       <Background />
+      {audioSrc ? <Audio src={staticFile(audioSrc)} /> : null}
+
       {audioSrc ? (
-        <>
-          <Audio src={staticFile(audioSrc)} />
+        <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
           <SceneArt transcriptSrc={transcriptSrc} episode={episode} />
           <Visualizer audioSrc={audioSrc} mood={mood} />
-          <Captions transcriptSrc={transcriptSrc} />
-        </>
+          <Captions transcriptSrc={transcriptSrc} hideRanges={captionHideRanges} />
+          <Watermark episodeNumber={episode.episodeNumber} />
+        </AbsoluteFill>
+      ) : null}
+
+      {episode.showIntro ? (
+        <Sequence from={0} durationInFrames={INTRO_DURATION_FRAMES} layout="none">
+          <IntroCard title={episode.title} episodeNumber={episode.episodeNumber} />
+        </Sequence>
+      ) : null}
+
+      {episode.hook ? (
+        <Sequence
+          from={introFrames}
+          durationInFrames={HOOK_DURATION_FRAMES}
+          layout="none"
+        >
+          <Hook hook={episode.hook} />
+        </Sequence>
+      ) : null}
+
+      {episode.showOutro && outroFrames > 0 ? (
+        <Sequence from={mainEndFrame} durationInFrames={outroFrames} layout="none">
+          <OutroCard />
+        </Sequence>
       ) : null}
     </AbsoluteFill>
   );
