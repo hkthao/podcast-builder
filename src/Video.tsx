@@ -1,6 +1,7 @@
 import { AbsoluteFill, Audio, staticFile } from "remotion";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
+import { SceneArt } from "./components/SceneArt";
 import { Visualizer } from "./components/Visualizer";
 import type { EpisodeConfig } from "./episode";
 
@@ -19,6 +20,7 @@ export const Video: React.FC<CompProps> = ({ audioSrc, transcriptSrc, episode })
       {audioSrc ? (
         <>
           <Audio src={staticFile(audioSrc)} />
+          <SceneArt transcriptSrc={transcriptSrc} episode={episode} />
           <Visualizer audioSrc={audioSrc} mood={mood} />
           <Captions transcriptSrc={transcriptSrc} />
         </>
