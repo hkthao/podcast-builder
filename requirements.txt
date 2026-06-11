@@ -1,9 +1,0 @@
-omnivoice @ git+https://github.com/k2-fsa/OmniVoice.git
-torch>=2.4
-torchaudio>=2.4
-transformers>=5.3.0
-accelerate
-soundfile
-numpy
-huggingface-hub>=0.23
-pydub==0.25.1

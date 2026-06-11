@@ -1,6 +1,22 @@
+# OS
+.DS_Store
+
+# Node
+node_modules/
+
+# Remotion pipeline
+input/*
+!input/.gitkeep
 output/
-models/
+tmp/
+public/*
+!public/.gitkeep
+!public/brand/
+whisper.cpp/
+
+# Legacy Python (will remove after migration done)
 __pycache__/
 *.pyc
 .venv/
 .env
+models/
