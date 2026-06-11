@@ -1,9 +1,0 @@
-.git
-.gitignore
-output/
-models/
-__pycache__/
-*.pyc
-.venv/
-.env
-PLAN.md
