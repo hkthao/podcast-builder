@@ -55,24 +55,45 @@ podcast-builder/
 ├── package.json
 ├── remotion.config.ts          # set concurrency, codec, image format
 ├── tsconfig.json
-├── input/                      # nơi bỏ file audio hằng ngày (gitignore)
-├── output/                     # video xuất ra (gitignore)
-├── tmp/                        # transcript JSON tạm + props file (gitignore)
-├── public/                     # audio được copy vào đây trước khi render (gitignore nội dung trừ .gitkeep)
+├── .env                        # API key (Pexels / image-gen) — gitignore
+├── input/                      # audio + episode-*.json hằng ngày
+├── output/                     # video + thumbnail + lock file (gitignore)
+├── tmp/                        # transcript + plan + audio normalized (gitignore)
+├── public/                     # audio copy + transcript copy cho Remotion (gitignore content trừ brand/)
 ├── whisper.cpp/                # binary + model whisper (gitignore)
+├── assets/
+│   ├── loops/                  # thư viện video nền trừu tượng (Hướng A) — tải 1 lần
+│   ├── loops.manifest.json     # map mood → danh sách clip + license info
+│   └── images-cache/           # ảnh AI đã sinh, cache theo hash prompt (Hướng B)
 ├── scripts/
-│   ├── setup-whisper.ts        # tải & cài whisper.cpp + model (chạy 1 lần)
-│   ├── transcribe.ts           # audio -> tmp/<name>.json (transcript có timestamp)
-│   └── make.ts                 # orchestrator: transcribe -> render -> output mp4
+│   ├── setup-whisper.ts        # tải & cài whisper.cpp + model
+│   ├── fetch-loops.ts          # (tuỳ chọn) tải clip nền từ Pexels theo mood
+│   ├── transcribe.ts           # audio → tmp/<name>.json (transcript có timestamp)
+│   ├── process-audio.ts        # ffmpeg loudnorm 2-pass → tmp/*.normalized.wav
+│   ├── plan-episode.ts         # transcript → tmp/<name>.plan.json (mood+source+asset/prompt)
+│   ├── gen-images.ts           # ảnh AI cho cảnh source=ai, cache theo hash prompt
+│   └── make.ts                 # orchestrator đầu-cuối
 └── src/
-    ├── Root.tsx                # đăng ký composition + calculateMetadata (duration động)
-    ├── theme.ts                # palette, font, hằng số phong cách (1 chỗ duy nhất)
-    ├── Video.tsx               # composition chính, ghép các layer lại
+    ├── Root.tsx                # đăng ký composition + calculateMetadata
+    ├── theme.ts                # palette, font, AI style suffix, hằng số phong cách
+    ├── episode.ts              # EpisodeConfig zod schema
+    ├── scenes.ts               # splitScenes + pickMood + assignSource (pure)
+    ├── Video.tsx               # composition chính, ghép các lớp
     └── components/
-        ├── Background.tsx      # nền gradient/noise chuyển động chậm
-        ├── Visualizer.tsx      # sóng âm phản ứng theo audio
-        ├── Captions.tsx        # caption chạy theo transcript
-        └── SceneArt.tsx        # animation minh hoạ nhẹ, đổi theo mốc thời gian
+        ├── Background.tsx      # nền gradient nền nền cùng (dưới VisualLayer)
+        ├── VisualLayer.tsx     # router stock / ai / procedural theo Scene
+        ├── visuals/
+        │   ├── StockLoop.tsx   # OffthreadVideo loop theo mood (Hướng A)
+        │   ├── AiImage.tsx     # ảnh AI + Ken Burns (Hướng B)
+        │   └── SceneArt.tsx    # procedural fallback (Hướng C — đã có)
+        ├── CohesionOverlay.tsx # gradient + grain + tint — đồng nhất A/B/C
+        ├── Visualizer.tsx      # sóng âm reactive
+        ├── Captions.tsx        # caption theo transcript
+        ├── BGMTrack.tsx        # nhạc nền + ducking khi có lời
+        ├── IntroCard.tsx       # 2.5s intro
+        ├── Hook.tsx            # 3.5s câu hook
+        ├── Watermark.tsx       # góc trên-phải xuyên suốt
+        └── OutroCard.tsx       # 4s CTA cuối
 ```
 
 ---
@@ -320,18 +341,77 @@ const bands = visualizeAudio({
 
 ---
 
-### Phase 5 — Animation minh hoạ nhẹ (SceneArt)
-- [ ] `src/components/SceneArt.tsx`: animation trừu tượng nhẹ làm "hồn" cho video — ví dụ: hình khối hình học trôi chậm, vòng tròn nở/co theo nhịp, hạt particle lững lờ, gradient dịch chuyển. Tất cả bằng SVG/Canvas + `interpolate()`/`spring()` theo `useCurrentFrame()`.
-- [ ] **Đổi "cảnh" theo nội dung — quy tắc chia đoạn cụ thể (không tự chế):**
-  - Duyệt segment của transcript, mở cảnh mới khi gặp **gap ≥ 1.5s** giữa 2 segment liên tiếp,
-  - HOẶC khi cảnh hiện tại đã chứa **≥ 4 câu** (đếm theo dấu `.` `?` `!`),
-  - HOẶC khi cảnh hiện tại đã dài **≥ 25s** (cap trên, tránh cảnh quá lâu cho podcast nói liên tục).
-  - Mỗi cảnh có `mood: MoodKey` từ `pickMood(text)` (xem Mục 3.3). Màu accent của cảnh = `theme.MOOD_ACCENTS[mood]`. Cross-fade ~1s giữa các cảnh.
-  - Bố cục/hình khối có thể đổi nhẹ theo cảnh (preset layout) NHƯNG nền + signature giữ nguyên — chỉ accent đổi.
-- [ ] Logic chia đoạn để trong hàm pure `splitScenes(transcript) → Scene[]` (dễ test, dễ chỉnh ngưỡng).
-- [ ] Giữ chuyển động **chậm và tối giản** — đây là kênh triết/tâm lý, không phải gaming.
+### Phase 5 — Lớp hình ảnh nền (Visual Layer A + B + C + CohesionOverlay)
 
-**Acceptance:** Video có chiều sâu thị giác, cảnh đổi nhẹ nhàng theo tiến trình lời nói (verify bằng cách in ra số cảnh + mốc thời gian), tổng thể hài hoà với visualizer + caption.
+> **Định hướng mới:** thay vì chỉ procedural SVG đơn điệu trên nền đen, video phải có **hình ảnh thật** phía sau text/visualizer. Kết hợp 3 nguồn (router theo cảnh) + 1 lớp đồng nhất khung. Chi tiết hệ thống ở **Mục 11**. KHÔNG render chữ trên nền đen trống nữa.
+
+#### 5.A. VisualLayer router
+
+- [ ] `src/components/VisualLayer.tsx`: router nhận `Scene` (từ episode plan ở 5.D) và chọn nguồn hình:
+  - `source: "stock"` → `<StockLoop>` render video loop trừu tượng hợp mood (Hướng A — chính).
+  - `source: "ai"` → `<AiImage>` render ảnh AI cảnh đó + chuyển động Ken Burns (Hướng B — điểm nhấn).
+  - `source: "procedural"` → `<SceneArt>` (hiện đã có) làm **dự phòng** khi không có asset hoặc API key.
+- [ ] **Cross-fade ~1s** giữa các cảnh — `interpolate()` opacity ở mép, không cắt khô.
+- [ ] **Fail an toàn:** thiếu loop/ảnh AI cho 1 cảnh → tự rơi về `procedural`; lỗi nặng → cảnh tĩnh, không sập render.
+
+#### 5.B. StockLoop (Hướng A — chính)
+
+- [ ] `src/components/visuals/StockLoop.tsx`: dùng `<OffthreadVideo>` (**KHÔNG** dùng `<Video>` — OffthreadVideo render ổn định hơn cho video dài).
+- [ ] Scale phủ kín khung 16:9 hoặc 9:16. Loop/trim cho khớp `endMs - startMs` của cảnh.
+- [ ] Đọc clip từ `assets/loops.manifest.json` theo `mood` (Mục 11.1).
+
+#### 5.C. AiImage (Hướng B — điểm nhấn)
+
+- [ ] `src/components/visuals/AiImage.tsx`: render ảnh tĩnh + Ken Burns chậm:
+  - Scale 1.0 → 1.08 qua suốt cảnh (`interpolate()` trên transform).
+  - Pan nhẹ theo phương ngẫu nhiên đã chốt ở scene plan (deterministic).
+  - Fade in/out ở mép cảnh để chuyển mượt với cảnh trước/sau.
+- [ ] Đọc ảnh từ `assets/images-cache/<hash>.jpg` (sinh ở Phase 8 qua `gen-images.ts` — xem Mục 11.2).
+
+#### 5.D. SceneArt (Hướng C — dự phòng, ĐÃ CÓ)
+
+- [ ] `src/components/SceneArt.tsx`: SVG procedural (OrbitRings / DriftingShapes / BreathCircles) theo mood — implementation hiện tại (commit `56d0987`) đã đạt yêu cầu cho Hướng C.
+- [ ] Khi user chưa setup loops/AI images, toàn bộ pipeline rơi về procedural — vẫn render được, vẫn đúng tông.
+
+#### 5.E. CohesionOverlay (BẮT BUỘC — làm A/B/C trông cùng kênh)
+
+- [ ] `src/components/CohesionOverlay.tsx`: phủ lên TẤT CẢ nguồn hình một stack 3 lớp thống nhất:
+  - **Gradient tối** (đậm ở vùng có chữ — bottom 40% safe-zone — để caption luôn đọc rõ).
+  - **Grain/noise** rất nhẹ (texture overlay, opacity ~5–8%) — tạo chất film, giấu artifacts của ảnh AI/clip stock.
+  - **Tint thương hiệu** (`COLORS.bg` + chút `COLORS.signature` blend mode `soft-light`/`overlay` opacity ~12%) — kéo mọi nguồn về cùng tông.
+- [ ] Đây là **tham số quan trọng nhất** quyết định cảm giác "chuyên nghiệp" — đầu tư tune kỹ hơn cả việc chọn loop/ảnh.
+
+#### 5.F. Episode plan — bộ não nối nội dung với hình ảnh
+
+- [ ] Mở rộng `Scene` schema trong `src/scenes.ts`:
+  ```ts
+  type Scene = {
+    startMs: number;
+    endMs: number;
+    mood: MoodKey;
+    text: string;
+    source: "stock" | "ai" | "procedural";  // mới
+    assetRef?: string;  // stock: tên file trong loops.manifest; ai: hash prompt cho cache
+    aiPrompt?: string;  // dành cho source=ai, ghép với STYLE_SUFFIX
+  };
+  ```
+- [ ] **Nhịp đổi cảnh cho video dài:** điều chỉnh `splitScenes()`:
+  - Min duration 8s (không vụn) / max 90s (chống chán) — thay vì 4s/25s như version cũ.
+  - Mặc định 45–60s/cảnh cho podcast 15–20 phút (~15–25 cảnh tổng).
+- [ ] Hàm `assignSource(scene): {source, assetRef?, aiPrompt?}` — quy tắc:
+  - Cảnh có keyword cụ thể (hang/băng/mê cung/mạng lưới — bảng Mục 12.3) → `ai` với prompt sinh ra.
+  - Còn lại → `stock` với clip random-không-lặp từ `loops.manifest.json` theo mood.
+  - Thiếu asset bất kỳ → `procedural`.
+- [ ] Ghi `tmp/<name>.plan.json` để user **sửa tay** trước render (đổi source / clip / prompt) — đây là kiểm soát quan trọng nhất cho quy trình hằng ngày.
+
+**Acceptance:**
+- **Hướng C (procedural)** — đã pass ở `56d0987` (Phase 5 cũ).
+- **Hướng A + B (mới)** — render 1 đoạn vài cảnh có loop + ảnh AI: chữ vẫn đọc rõ nhờ CohesionOverlay, cảnh chuyển mượt ~1s, các cảnh khác nguồn vẫn cùng tông (do overlay). Sửa `tmp/<name>.plan.json` đổi source thấy đổi.
+
+**Thứ tự triển khai (đã chốt):**
+1. **C** (đã xong) — fallback luôn có sẵn.
+2. **A + CohesionOverlay** — đủ để video hết "toàn chữ trên nền đen" ngay.
+3. **B (ảnh AI)** — cho các cảnh điểm nhấn, kèm cache theo hash prompt.
 
 ---
 
@@ -389,30 +469,34 @@ Layer "khung" cho mọi video — đây là phần xây thương hiệu kênh v�
 ### Phase 8 — Orchestrator `make` (tự động hoá đầu-cuối)
 - [ ] `scripts/make.ts`: nhận 1 đối số đường dẫn audio + flags optional (`--preview`, `--no-thumb`), tự động:
   1. **Load episode config:** đọc `input/<name>.json`, validate bằng zod. Nếu không tồn tại → tạo template từ tên file + dừng, in hướng dẫn điền `title`/`hook`.
-  2. **Process audio** (Phase 6): chuẩn hoá loudness → `tmp/<name>.normalized.48k.wav` + `tmp/<name>.normalized.wav`.
-  3. **Copy** audio normalize + BGM (nếu có) vào `public/<name>.wav` + `public/bgm-<name>.<ext>`.
-  4. **Transcribe** (Phase 3, cache-aware) trên bản 16kHz → `public/<name>.json`.
-  5. **Ghi props file** `tmp/props-<name>.json` với `{audioSrc, transcriptSrc, bgmSrc, episode}` — KHÔNG inline qua `--props='{...}'` (escape shell khổ).
-  6. **Preview hay full?**
+  2. **Process audio** (Phase 7): chuẩn hoá loudness → `tmp/<name>.normalized.48k.wav` + `tmp/<name>.normalized.16k.wav`.
+  3. **Transcribe** (Phase 3, cache-aware) trên bản 16kHz → `tmp/<name>.json`.
+  4. **Plan episode** (Mục 11.4): `scripts/plan-episode.ts` đọc transcript → ghi `tmp/<name>.plan.json` với scenes + mood + source + assetRef/aiPrompt. **Skip** nếu file đã tồn tại (cho phép sửa tay).
+  5. **Gen images** (Mục 11.2): với các scene `source: "ai"`, gọi `scripts/gen-images.ts` sinh ảnh, cache theo hash prompt vào `assets/images-cache/`. Skip nếu đã có cache.
+  6. **Copy** audio normalize + transcript + plan + BGM (nếu có) + loops/images-cache cần dùng vào `public/`.
+  7. **Ghi props file** `tmp/props-<name>.json` với `{audioSrc, transcriptSrc, planSrc, bgmSrc, episode}` — KHÔNG inline qua `--props='{...}'` (escape shell khổ).
+  8. **Preview hay full?**
      - `--preview`: render 480×854 (low-res 9:16), 10s đầu, codec nhanh (CRF cao). Output `output/<name>.preview.mp4`. Dùng để soi lỗi trước khi tốn 5-10 phút render full.
      - Mặc định: render full theo spec Facebook ở Mục 9 (1080×1920, H.264 + AAC 192k, video bitrate ~8Mbps).
-  7. Gọi `renderMedia()` của `@remotion/renderer`.
-  8. **Thumbnail** (skip nếu `--no-thumb` hoặc preview mode): `renderStill()` ở frame của Hook (~frame 90) → `output/<name>.thumb.jpg`. Đây là cover up Facebook.
-  9. **Lock file:** ghi `output/<name>.lock.json`:
+  9. Gọi `renderMedia()` của `@remotion/renderer`.
+  10. **Thumbnail** (skip nếu `--no-thumb` hoặc preview mode): `renderStill()` ở frame của Hook (~frame 90) → `output/<name>.thumb.jpg`. Đây là cover up Facebook.
+  11. **Lock file:** ghi `output/<name>.lock.json`:
      ```json
      {
        "renderedAt": "2026-06-12T...",
        "remotionVersion": "...",
        "themeHash": "sha256:...",
        "episodeHash": "sha256:...",
+       "planHash": "sha256:...",
        "whisperModel": "medium",
        "audioHash": "sha256:..."
      }
      ```
      Đủ để biết tập này render từ version nào → tái lập sau này.
-  10. Cleanup `public/` (xoá file đã copy vào, giữ logo + brand assets cố định). Giữ `tmp/` để debug.
+  12. Cleanup `public/` (xoá file đã copy vào, giữ logo + brand assets cố định). Giữ `tmp/` để debug.
 - [ ] `package.json` scripts:
   - `"setup": "tsx scripts/setup-whisper.ts"`
+  - `"fetch-loops": "tsx scripts/fetch-loops.ts"` (tuỳ chọn — Hướng A)
   - `"make": "tsx scripts/make.ts"`
   - `"preview": "tsx scripts/make.ts --preview"`
   - `"studio": "remotion studio"`
@@ -508,3 +592,156 @@ Sau **Phase 2** (visualizer), **Phase 5** (SceneArt), và **Phase 6** (Bookend) 
 - Render video dọc 1080×1920 dài vài phút có thể tốn thời gian/CPU → concurrency đã set ở Phase 0, có thể override bằng `--concurrency` khi gọi `make`.
 - `useAudioData` fetch file audio qua HTTP từ Remotion bundler → file phải nằm trong `public/`, không phải absolute path tuỳ ý. Đã xử lý ở Phase 6 (copy vào `public/`).
 - `parseMedia` không support được mọi container — nếu input là `.m4a`/`.ogg` lạ, fallback sang `getAudioDurationInSeconds` qua ffprobe trong `make.ts` rồi pass `durationInFrames` xuống làm prop.
+- **Video 15–20 phút** (~27–36k frame): tránh `filter: blur()`, `box-shadow` lớn, SVG filter nặng — đắt khi nhân với chục nghìn frame. Particle/node giới hạn vài trăm. Cân nhắc `fps = 24` thay vì 30 cho nội dung tĩnh lặng (giảm ~20% frame).
+- **`useAudioData` nạp toàn bộ waveform** vào RAM — 20 phút thường ổn trên M-series, nhưng nếu OOM thì giảm sample rate khi phân tích.
+
+---
+
+## 11. Hệ thống hình ảnh A + B + C (nâng cấp chính sau bản v1)
+
+> Mục tiêu: thay nền trống bằng **hình ảnh chuyên nghiệp**. Kết hợp 3 nguồn (Mục 5) đi qua `CohesionOverlay` để trông cùng một kênh.
+
+### 11.1 Hướng A — Thư viện video loop trừu tượng
+
+- **Nội dung clip mong muốn:** chuyển động chậm, trừu tượng, hợp tông trầm — mực loang trong nước, khói/sương, mây trôi, bokeh, hạt bụi, vân đá/giấy, sóng nước tối. **TRÁNH** clip có người, chữ, logo, hành động nhanh.
+- **Nguồn & license:** **Pexels** hoặc **Pixabay** — miễn phí cho mục đích thương mại, không bắt buộc ghi công (vẫn lưu nguồn + license vào `loops.manifest.json`). Tải bản 1080p hoặc 4K, 16:9 ngang.
+- **Quy mô đủ dùng:** ~5–8 clip mỗi mood (4 mood ở Mục 3.2) → tổng ~30–40 clip. Đủ xoay vòng cho video dài mà không lặp lộ.
+- **`scripts/fetch-loops.ts`** (tuỳ chọn): dùng Pexels API (key trong `.env`) tải theo từ khoá mood, lưu `assets/loops/` + ghi manifest. Có thể làm thủ công lúc đầu, tự động hoá sau.
+- **`assets/loops.manifest.json`** schema:
+  ```json
+  {
+    "social": [
+      {"file": "ink-blue-01.mp4", "source": "pexels:12345", "license": "Pexels free", "tags": ["ink", "water"]}
+    ],
+    "emotional": [...],
+    "existential": [...],
+    "contemplative": [...]
+  }
+  ```
+- **Xử lý khi render:** `<OffthreadVideo>`, scale phủ kín, loop nếu clip ngắn hơn cảnh. Luôn áp `CohesionOverlay` lên trên.
+
+### 11.2 Hướng B — Ảnh AI sinh theo cảnh
+
+- **Khi nào dùng `ai`:** cảnh có hình ảnh **cụ thể** mà stock trừu tượng không thể hiện được — vd hang Plato, tảng băng ý thức/vô thức, mê cung lựa chọn, mạng lưới xã hội. Mặc định đa số cảnh dùng `stock`; chỉ vài cảnh "điểm nhấn" dùng `ai`.
+- **Provider:** image-gen API cấu hình được (key trong `.env`) — không khoá cứng vào một hãng. `scripts/gen-images.ts` gọi API, lưu cache.
+- **Nhất quán phong cách (CỰC KỲ QUAN TRỌNG):** mọi prompt PHẢI nối **style suffix cố định** trong `theme.ts`, ví dụ:
+  ```
+  dark, minimal, painterly, muted palette of deep navy and brass gold, contemplative, cinematic atmosphere, abstract, no text, no people
+  ```
+  Đây là thứ giữ ảnh AI không bị "mỗi cái một kiểu".
+- **Tỷ lệ:** sinh 16:9 (hoặc lớn hơn rồi crop) để khớp khung.
+- **Cache theo hash prompt:** lưu vào `assets/images-cache/<sha256(prompt)>.jpg`. Trước khi gọi API luôn check cache → không re-gen khi render lại cùng nội dung. Đây là cơ chế kiểm soát chi phí.
+- **Ken Burns:** ảnh tĩnh phải có chuyển động (xem `AiImage.tsx` ở Phase 5).
+- **Fail an toàn:** thiếu API key / lỗi sinh → cảnh đó rơi về `stock` hoặc `procedural`, không chặn render.
+
+### 11.3 CohesionOverlay — thứ làm A/B/C "cùng một kênh"
+
+Không skip mục này — phần lớn cảm giác "chuyên nghiệp" của video đến từ overlay tốt + chuyển cảnh chậm mượt, KHÔNG chỉ từ chất lượng clip/ảnh.
+
+3 lớp xếp chồng theo thứ tự (dưới → trên):
+
+1. **Tint** (`mix-blend-mode: soft-light` hoặc `overlay`, opacity ~12%): rectangle phủ `COLORS.bg` + chấm nhẹ `COLORS.signature` ở centroid — kéo mọi nguồn về tông trầm + chút vàng đồng signature.
+2. **Grain** (texture noise PNG hoặc SVG fractalNoise, opacity ~5–8%): chất film, giấu artifacts của ảnh AI / nén video stock.
+3. **Gradient tối ở bottom**: linear gradient từ `bg` 0% → transparent ~45% chiều cao. Đảm bảo caption (nằm bottom, trong safe-zone) luôn đọc rõ trên mọi nguồn nền.
+
+Toàn bộ overlay nằm DƯỚI visualizer + caption + bookend; nằm TRÊN VisualLayer.
+
+### 11.4 Episode plan — file JSON sửa tay được
+
+`scripts/plan-episode.ts` đọc transcript → ghi `tmp/<name>.plan.json`:
+
+```json
+{
+  "scenes": [
+    {
+      "startMs": 0,
+      "endMs": 52000,
+      "mood": "contemplative",
+      "source": "stock",
+      "assetRef": "ink-blue-01.mp4"
+    },
+    {
+      "startMs": 52000,
+      "endMs": 98000,
+      "mood": "existential",
+      "source": "ai",
+      "aiPrompt": "Plato's cave, dark stone walls, single distant light, silhouettes",
+      "assetRef": "sha256:abc123..."
+    },
+    ...
+  ]
+}
+```
+
+User mở file này bằng editor, đổi mood/source/file/prompt thoải mái → render lại không cần đụng code. Đây là "kiểm soát hoàn toàn" cho quy trình hằng ngày.
+
+### 11.5 Thứ tự triển khai (sau khi v1 Phase 0–9 đã xong)
+
+1. **CohesionOverlay** + tích hợp vào current `SceneArt` (procedural) — đã có overlay giúp procedural cũng đẹp hơn.
+2. **Hướng A** (`StockLoop` + `fetch-loops.ts` + manifest) — tải ~5 clip mỗi mood để test. Video hết "toàn chữ trên nền đen" ngay.
+3. **Episode plan tự động** (`plan-episode.ts`) + cho sửa tay JSON.
+4. **Hướng B** (`AiImage` + `gen-images.ts` + cache hash) — chỉ cho các cảnh điểm nhấn.
+
+---
+
+## 12. Thư viện scene procedural (chi tiết Hướng C)
+
+> Đây là **dự phòng**, không phải hình ảnh chính. Vẫn giữ vì đảm bảo video luôn render được kể cả khi thiếu mạng / API / asset.
+
+### 12.1 Nguyên tắc thị giác (áp cho mọi scene procedural)
+
+- Chuyển động **chậm, có khoảng nghỉ, ít màu**. Tạo không khí, KHÔNG cướp chú ý khỏi lời nói.
+- Mỗi scene nhận `accentColor` từ ngoài (theo `MOOD_ACCENTS[mood]`) để phối được; nền + signature giữ nguyên.
+- Phản ứng nhẹ với `audioLevel` (biên độ giọng) để "thở" cùng audio — tinh tế, không nhảy giật.
+
+### 12.2 Bộ scene type đã có / cần dựng
+
+Hiện tại `src/components/SceneArt.tsx` (commit `56d0987`) đã có 3 layout cycle:
+
+| # | Tên | Mood gợi ý | Mô tả |
+|---|---|---|---|
+| 1 | `OrbitRings` | tĩnh lặng / mặc định | 3 vòng tròn đồng tâm, bán kính dao động chậm theo sin. Scene NỀN an toàn. |
+| 2 | `DriftingShapes` | trầm tư / cảm xúc | Hình vuông trôi/xoay chậm trong vùng dưới. |
+| 3 | `BreathCircles` | chiêm nghiệm / hơi thở | Vòng tròn nở-co theo nhịp "thở" sin chậm. |
+
+**Bộ scene type mở rộng đề xuất (chưa làm, làm khi cần thêm đa dạng):**
+
+| # | Tên | Mood | Mô tả ngắn |
+|---|---|---|---|
+| 4 | `FlowField` | tĩnh lặng | Dòng hạt trôi theo trường vô hình |
+| 5 | `GradientMorph` | cảm xúc | Gradient nhiều tông morph rất chậm |
+| 6 | `Network` | xã hội / kết nối | Node nối nhau bằng đường mảnh |
+| 7 | `Emergence` | tập thể | Chấm tự tổ chức thành mẫu (flocking) |
+| 8 | `Geometry` | sáng tỏ / lý trí | Hình học tối giản tự vẽ rồi tan |
+| 9 | `CaveLight` | nhận thức / ảo ảnh | Ánh sáng – vật thể – bóng (ẩn dụ Plato) |
+| 10 | `Iceberg` | nội tâm / lớp lang | Tảng băng nổi-chìm (ý thức/vô thức) |
+| 11 | `CosmosDrift` | hiện sinh | Chấm sáng lững lờ trong khoảng tối |
+
+### 12.3 Bảng gợi ý nguồn hình theo chủ đề (dùng cho `assignSource` ở 5.F)
+
+| Chủ đề đoạn nói (keyword) | source | assetRef / prompt gợi ý |
+|---|---|---|
+| Hang/Plato/ảo ảnh/cái bóng | `ai` | "Plato's cave, dark stone, single light source" |
+| Tảng băng/ý thức/vô thức | `ai` | "iceberg, half submerged, dark cold sea" |
+| Mê cung/lựa chọn/ngã ba | `ai` | "labyrinth from above, dim path lighting" |
+| Mạng lưới/lan truyền/quan hệ | `ai` | "network of nodes glowing, dark void" |
+| Đám đông/chuẩn mực | `stock` (mood:social) | clip Pexels: crowd silhouettes/abstract dots |
+| Cảm xúc/chữa lành/mất mát | `stock` (mood:emotional) | clip: ink in water, warm tones |
+| Im lặng/hơi thở/thiền | `stock` (mood:contemplative) | clip: mist/fog/slow water |
+| Vô hạn/hư vô/thời gian | `stock` (mood:existential) | clip: cosmos/particles/stars |
+| Mặc định khi không match | `procedural` | `OrbitRings` (fallback) |
+
+### 12.4 API đồng nhất giữa các scene procedural
+
+Mọi scene component nhận props giống nhau để VisualLayer hoán đổi tự do + cross-fade dễ:
+
+```ts
+type SceneProps = {
+  mood: MoodKey;
+  accentColor: string;       // = MOOD_ACCENTS[mood]
+  progress: number;          // 0..1 trong cảnh
+  audioLevel?: number;       // 0..1 biên độ audio frame hiện tại (optional)
+};
+```
+
+Lỗi/thiếu dữ liệu → return `null`, không sập render.
