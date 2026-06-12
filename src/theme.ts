@@ -62,3 +62,25 @@ export const withAlpha = (hex: string, alpha: number): string => {
     .padStart(2, "0");
   return `${hex}${a}`;
 };
+
+/**
+ * Style suffix nối vào mọi AI image prompt — giữ visual identity nhất quán
+ * giữa các ảnh. KHÔNG đổi giữa các tập (chỉ đổi khi rebrand toàn kênh).
+ */
+export const STYLE_SUFFIX =
+  "Dark moody palette of deep navy and brass gold tones, painterly with subtle film grain, contemplative and minimal cinematic atmosphere, soft focus, abstract conceptual, no text, no logos, no captions, no people's faces, philosophy podcast cover art aesthetic, vertical 9:16 framing with strong central composition.";
+
+/**
+ * Mood-specific hints chèn trước STYLE_SUFFIX trong prompt.
+ * Giúp AI gen ra hình hợp tông cảm xúc của đoạn nói.
+ */
+export const MOOD_PROMPT_HINTS: Record<MoodKey, string> = {
+  social:
+    "feeling of human connection and society, abstract crowds or networks in silhouette, distant figures, threads connecting,",
+  emotional:
+    "feeling of tenderness or quiet sorrow, intimate atmosphere, warm muted hues, soft fabric or candlelight, single subject,",
+  existential:
+    "feeling of vastness and meaning, cosmic void elements, distant light in darkness, scale of the infinite, single small figure in vast space,",
+  contemplative:
+    "feeling of stillness and reflection, natural elements like mist, still water, stone, single tree, dawn light,",
+};

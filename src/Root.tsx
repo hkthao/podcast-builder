@@ -7,7 +7,9 @@ import { buildEpisodeTemplate, EpisodeConfigSchema } from "./episode";
 const defaultProps: CompProps = {
   audioSrc: "",
   transcriptSrc: null,
+  planSrc: null,
   bgmSrc: null,
+  availableImages: {},
   episode: EpisodeConfigSchema.parse(buildEpisodeTemplate("Bản nháp")),
 };
 

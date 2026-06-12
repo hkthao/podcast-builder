@@ -9,10 +9,11 @@ import {
 import { Background } from "./components/Background";
 import { BGMTrack } from "./components/BGMTrack";
 import { Captions } from "./components/Captions";
+import { CohesionOverlay } from "./components/CohesionOverlay";
 import { Hook, HOOK_DURATION_FRAMES } from "./components/Hook";
 import { IntroCard, INTRO_DURATION_FRAMES } from "./components/IntroCard";
 import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
-import { SceneArt } from "./components/SceneArt";
+import { VisualLayer } from "./components/VisualLayer";
 import { Visualizer } from "./components/Visualizer";
 import { Watermark } from "./components/Watermark";
 import type { EpisodeConfig } from "./episode";
@@ -20,14 +21,19 @@ import type { EpisodeConfig } from "./episode";
 export type CompProps = {
   audioSrc: string;
   transcriptSrc: string | null;
+  planSrc: string | null;
   bgmSrc: string | null;
+  /** Map imageHash → filename trong public/. Truyền từ make.ts khi chuẩn bị render. */
+  availableImages: Record<string, string>;
   episode: EpisodeConfig;
 };
 
 export const Video: React.FC<CompProps> = ({
   audioSrc,
   transcriptSrc,
+  planSrc,
   bgmSrc,
+  availableImages,
   episode,
 }) => {
   const frame = useCurrentFrame();
@@ -47,7 +53,6 @@ export const Video: React.FC<CompProps> = ({
     : [];
 
   const inMain = frame >= mainStartFrame && frame < mainEndFrame;
-
   const outroStartMs = (mainEndFrame / fps) * 1000;
 
   return (
@@ -67,7 +72,8 @@ export const Video: React.FC<CompProps> = ({
 
       {audioSrc ? (
         <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
-          <SceneArt transcriptSrc={transcriptSrc} episode={episode} />
+          <VisualLayer planSrc={planSrc} availableImages={availableImages} />
+          <CohesionOverlay />
           <Visualizer audioSrc={audioSrc} mood={mood} />
           <Captions transcriptSrc={transcriptSrc} hideRanges={captionHideRanges} />
           <Watermark episodeNumber={episode.episodeNumber} />

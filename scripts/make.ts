@@ -11,6 +11,7 @@ import {
   renderStill,
   selectComposition,
 } from "@remotion/renderer";
+import dotenv from "dotenv";
 import {
   buildEpisodeTemplate,
   EpisodeConfigSchema,
@@ -19,10 +20,15 @@ import {
 import { processAudio } from "./process-audio";
 import { transcribeAudio } from "./transcribe";
 import { getModel } from "./whisper-config";
+import { planEpisode } from "./plan-episode";
+import { generateImages } from "./gen-images";
+
+dotenv.config();
 
 const PUBLIC_DIR = path.resolve("public");
 const OUTPUT_DIR = path.resolve("output");
 const TMP_DIR = path.resolve("tmp");
+const IMAGES_CACHE_DIR = path.resolve("assets/images-cache");
 const THEME_PATH = path.resolve("src/theme.ts");
 
 const COMPOSITION_ID = "Podcast";
@@ -123,12 +129,48 @@ async function main() {
   const transcriptJson = path.join(TMP_DIR, `${baseName}.json`);
   await transcribeAudio(whisperWav, transcriptJson);
 
-  // 4. Copy assets vào public/ cho Remotion staticFile()
+  // 4. Plan episode — cắt cảnh + sinh visual prompts (cache-aware, cho user sửa tay)
+  const planJsonPath = path.join(TMP_DIR, `${baseName}.plan.json`);
+  const plan = await planEpisode(transcriptJson, episode, planJsonPath);
+
+  // 5. Gen images — gọi OpenAI cho cảnh chưa có cache. Skip nếu thiếu API key
+  //    (vẫn render được với placeholder).
+  if (process.env.OPENAI_API_KEY) {
+    const result = await generateImages(plan);
+    if (result.errors > 0) {
+      console.warn(
+        `[make] ⚠ ${result.errors} ảnh gen lỗi — placeholder sẽ hiện cho cảnh đó.`,
+      );
+    }
+  } else {
+    console.warn(
+      `[make] ⚠ Thiếu OPENAI_API_KEY — bỏ qua gen-images, dùng placeholder.`,
+    );
+  }
+
+  // 6. Copy assets vào public/ cho Remotion staticFile()
   const audioPublicName = `${baseName}.audio.wav`;
   const transcriptPublicName = `${baseName}.transcript.json`;
+  const planPublicName = `${baseName}.plan.json`;
   copyToPublic(renderWav, audioPublicName);
   copyToPublic(transcriptJson, transcriptPublicName);
-  const cleanupList = [audioPublicName, transcriptPublicName];
+  copyToPublic(planJsonPath, planPublicName);
+  const cleanupList = [audioPublicName, transcriptPublicName, planPublicName];
+
+  // Copy ảnh có sẵn từ assets/images-cache/ vào public/, build map hash→filename
+  const availableImages: Record<string, string> = {};
+  for (const scene of plan.scenes) {
+    const cachedPng = path.join(IMAGES_CACHE_DIR, `${scene.imageHash}.png`);
+    if (fs.existsSync(cachedPng)) {
+      const pubName = `img-${scene.imageHash}.png`;
+      copyToPublic(cachedPng, pubName);
+      availableImages[scene.imageHash] = pubName;
+      cleanupList.push(pubName);
+    }
+  }
+  console.log(
+    `[make] images: ${Object.keys(availableImages).length}/${plan.scenes.length} có sẵn`,
+  );
 
   let bgmPublicName: string | null = null;
   if (episode.bgm) {
@@ -141,11 +183,13 @@ async function main() {
     cleanupList.push(bgmPublicName);
   }
 
-  // 5. Build props
+  // 7. Build props
   const inputProps = {
     audioSrc: audioPublicName,
     transcriptSrc: transcriptPublicName,
+    planSrc: planPublicName,
     bgmSrc: bgmPublicName,
+    availableImages,
     episode,
   };
 
@@ -176,22 +220,18 @@ async function main() {
     );
 
     if (args.preview) {
-      const previewFrames = Math.min(
-        composition.durationInFrames,
-        composition.fps * 10,
+      const lastFrame = Math.min(
+        composition.durationInFrames - 1,
+        composition.fps * 10 - 1,
       );
       await renderMedia({
         serveUrl,
-        composition: {
-          ...composition,
-          durationInFrames: previewFrames,
-          width: 480,
-          height: 854,
-        },
+        composition,
         codec: "h264",
         outputLocation: outputPath,
         inputProps,
-        videoBitrate: "1500K",
+        frameRange: [0, lastFrame],
+        videoBitrate: "4000K",
         audioBitrate: "128K",
         audioCodec: "aac",
       });
