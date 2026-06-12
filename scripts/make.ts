@@ -2,10 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  bundle,
-  type BundleOptions,
-} from "@remotion/bundler";
+import { bundle, type BundleOptions } from "@remotion/bundler";
 import {
   renderMedia,
   renderStill,
@@ -20,15 +17,14 @@ import {
 import { processAudio } from "./process-audio";
 import { transcribeAudio } from "./transcribe";
 import { getModel } from "./whisper-config";
+import { spellFix } from "./spell-fix";
 import { planEpisode } from "./plan-episode";
-import { generateImages } from "./gen-images";
 
 dotenv.config();
 
 const PUBLIC_DIR = path.resolve("public");
 const OUTPUT_DIR = path.resolve("output");
 const TMP_DIR = path.resolve("tmp");
-const IMAGES_CACHE_DIR = path.resolve("assets/images-cache");
 const THEME_PATH = path.resolve("src/theme.ts");
 
 const COMPOSITION_ID = "Podcast";
@@ -37,6 +33,7 @@ type Args = {
   audioPath: string;
   preview: boolean;
   noThumb: boolean;
+  planOnly: boolean;
 };
 
 const parseArgs = (argv: string[]): Args => {
@@ -44,13 +41,16 @@ const parseArgs = (argv: string[]): Args => {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   const audio = positional[0];
   if (!audio) {
-    console.error("Usage: tsx scripts/make.ts <audio> [--preview] [--no-thumb]");
+    console.error(
+      "Usage: tsx scripts/make.ts <audio> [--preview] [--no-thumb] [--plan-only]",
+    );
     process.exit(1);
   }
   return {
     audioPath: path.resolve(audio),
     preview: flags.has("--preview"),
     noThumb: flags.has("--no-thumb"),
+    planOnly: flags.has("--plan-only"),
   };
 };
 
@@ -129,48 +129,30 @@ async function main() {
   const transcriptJson = path.join(TMP_DIR, `${baseName}.json`);
   await transcribeAudio(whisperWav, transcriptJson);
 
-  // 4. Plan episode — cắt cảnh + sinh visual prompts (cache-aware, cho user sửa tay)
-  const planJsonPath = path.join(TMP_DIR, `${baseName}.plan.json`);
-  const plan = await planEpisode(transcriptJson, episode, planJsonPath);
+  // 3.5. Spell fix — sửa chính tả tiếng Việt qua OpenAI, giữ timestamps + ý nghĩa.
+  // Cache theo tồn tại file → user sửa tay xong xoá file để force.
+  const correctedJson = path.join(TMP_DIR, `${baseName}.corrected.json`);
+  await spellFix(transcriptJson, correctedJson);
 
-  // 5. Gen images — gọi OpenAI cho cảnh chưa có cache. Skip nếu thiếu API key
-  //    (vẫn render được với placeholder).
-  if (process.env.OPENAI_API_KEY) {
-    const result = await generateImages(plan);
-    if (result.errors > 0) {
-      console.warn(
-        `[make] ⚠ ${result.errors} ảnh gen lỗi — placeholder sẽ hiện cho cảnh đó.`,
-      );
-    }
-  } else {
-    console.warn(
-      `[make] ⚠ Thiếu OPENAI_API_KEY — bỏ qua gen-images, dùng placeholder.`,
-    );
+  // 4. Plan episode — đọc transcript đã sửa.
+  const planJsonPath = path.join(TMP_DIR, `${baseName}.plan.json`);
+  await planEpisode(correctedJson, episode, planJsonPath);
+
+  if (args.planOnly) {
+    console.log(`[make] --plan-only: dừng ở đây. Sửa ${planJsonPath} rồi chạy lại.`);
+    return;
   }
 
-  // 6. Copy assets vào public/ cho Remotion staticFile()
+  // 5. Copy assets vào public/ cho Remotion staticFile().
+  // Caption đọc bản đã sửa chính tả (fallback raw nếu spell-fix skip).
   const audioPublicName = `${baseName}.audio.wav`;
   const transcriptPublicName = `${baseName}.transcript.json`;
   const planPublicName = `${baseName}.plan.json`;
+  const transcriptSource = fs.existsSync(correctedJson) ? correctedJson : transcriptJson;
   copyToPublic(renderWav, audioPublicName);
-  copyToPublic(transcriptJson, transcriptPublicName);
+  copyToPublic(transcriptSource, transcriptPublicName);
   copyToPublic(planJsonPath, planPublicName);
   const cleanupList = [audioPublicName, transcriptPublicName, planPublicName];
-
-  // Copy ảnh có sẵn từ assets/images-cache/ vào public/, build map hash→filename
-  const availableImages: Record<string, string> = {};
-  for (const scene of plan.scenes) {
-    const cachedPng = path.join(IMAGES_CACHE_DIR, `${scene.imageHash}.png`);
-    if (fs.existsSync(cachedPng)) {
-      const pubName = `img-${scene.imageHash}.png`;
-      copyToPublic(cachedPng, pubName);
-      availableImages[scene.imageHash] = pubName;
-      cleanupList.push(pubName);
-    }
-  }
-  console.log(
-    `[make] images: ${Object.keys(availableImages).length}/${plan.scenes.length} có sẵn`,
-  );
 
   let bgmPublicName: string | null = null;
   if (episode.bgm) {
@@ -183,18 +165,17 @@ async function main() {
     cleanupList.push(bgmPublicName);
   }
 
-  // 7. Build props
+  // 6. Build props (Hướng A thuần — không còn availableImages)
   const inputProps = {
     audioSrc: audioPublicName,
     transcriptSrc: transcriptPublicName,
     planSrc: planPublicName,
     bgmSrc: bgmPublicName,
-    availableImages,
     episode,
   };
 
   try {
-    // 6. Bundle Remotion project (1 lần / run)
+    // 7. Bundle Remotion project (1 lần / run)
     console.log(`[make] bundling Remotion project...`);
     const bundleOptions: BundleOptions = {
       entryPoint: path.resolve("src/index.ts"),
@@ -202,7 +183,7 @@ async function main() {
     };
     const serveUrl = await bundle(bundleOptions);
 
-    // 7. Select composition (resolve duration qua calculateMetadata)
+    // 8. Select composition (resolve duration qua calculateMetadata)
     const composition = await selectComposition({
       serveUrl,
       id: COMPOSITION_ID,
@@ -213,7 +194,7 @@ async function main() {
         `${composition.durationInFrames} frames (${(composition.durationInFrames / composition.fps).toFixed(2)}s)`,
     );
 
-    // 8. Render
+    // 9. Render
     const outputPath = path.join(
       OUTPUT_DIR,
       args.preview ? `${baseName}.preview.mp4` : `${baseName}.mp4`,
@@ -250,7 +231,7 @@ async function main() {
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[make] ✓ ${outputPath} (${elapsed}s)`);
 
-    // 9. Thumbnail (skip preview hoặc --no-thumb)
+    // 10. Thumbnail (skip preview hoặc --no-thumb)
     if (!args.preview && !args.noThumb) {
       const thumbPath = path.join(OUTPUT_DIR, `${baseName}.thumb.jpg`);
       const thumbFrame = Math.min(
@@ -269,13 +250,15 @@ async function main() {
       console.log(`[make] ✓ ${thumbPath}`);
     }
 
-    // 10. Lock file
+    // 11. Lock file
     if (!args.preview) {
       const lockPath = path.join(OUTPUT_DIR, `${baseName}.lock.json`);
+      const plan = JSON.parse(fs.readFileSync(planJsonPath, "utf-8"));
       const lock = {
         renderedAt: new Date().toISOString(),
         themeHash: `sha256:${sha256File(THEME_PATH)}`,
         episodeHash: `sha256:${sha256Object(episode)}`,
+        planHash: `sha256:${sha256Object(plan)}`,
         audioHash: `sha256:${sha256File(args.audioPath)}`,
         whisperModel: getModel(),
       };
@@ -283,7 +266,7 @@ async function main() {
       console.log(`[make] ✓ ${lockPath}`);
     }
   } finally {
-    // 11. Cleanup public/ — giữ brand/
+    // 12. Cleanup public/ — giữ brand/
     cleanupPublic(cleanupList);
   }
 }

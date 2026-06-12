@@ -9,7 +9,6 @@ const defaultProps: CompProps = {
   transcriptSrc: null,
   planSrc: null,
   bgmSrc: null,
-  availableImages: {},
   episode: EpisodeConfigSchema.parse(buildEpisodeTemplate("Bản nháp")),
 };
 

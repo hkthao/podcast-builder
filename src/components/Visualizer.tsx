@@ -1,17 +1,22 @@
 import { useMemo } from "react";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
-import { COLORS, FORMAT, MOOD_ACCENTS, type MoodKey, withAlpha } from "../theme";
+import { COLORS, FORMAT, MOOD_ACCENTS, type MoodKey } from "../theme";
 
-const NUM_BANDS = 32;
-const SMOOTH_WINDOW = 3;
+const NUM_BANDS = 64;
+const SMOOTH_WINDOW = 2;
+const MAX_HEIGHT = 280;
+const MIN_HEIGHT = 14;
+const HEIGHT_POW = 0.5;
+const BAR_WIDTH = 7;
+const BAR_GAP = 3;
 
 type Props = {
   audioSrc: string;
   mood?: MoodKey;
 };
 
-export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "social" }) => {
+export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const audioData = useAudioData(staticFile(audioSrc));
@@ -30,55 +35,27 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "social" }) => {
         }),
       );
     }
-    const half: number[] = new Array(NUM_BANDS).fill(0);
+    const result: number[] = new Array(NUM_BANDS).fill(0);
     for (const bands of frames) {
       for (let i = 0; i < NUM_BANDS; i++) {
-        half[i] += bands[i] ?? 0;
+        result[i] += bands[i] ?? 0;
       }
     }
-    return half.map((v) => v / frames.length);
+    return result.map((v) => v / frames.length);
   }, [audioData, frame, fps]);
 
   if (!smoothed) return null;
 
   const accent = MOOD_ACCENTS[mood];
-  const barWidth = (FORMAT.width - 240) / (NUM_BANDS * 2 - 1);
-  const gap = barWidth * 0.35;
-  const centerY = FORMAT.height / 2;
-  const maxHeight = 280;
-
-  const bars = [];
-  for (let i = 0; i < NUM_BANDS; i++) {
-    const v = smoothed[i] ?? 0;
-    const h = Math.max(6, Math.pow(v, 0.7) * maxHeight);
-    const xRight = FORMAT.width / 2 + i * (barWidth + gap);
-    const xLeft = FORMAT.width / 2 - (i + 1) * (barWidth + gap);
-    bars.push(
-      <rect
-        key={`r${i}`}
-        x={xRight}
-        y={centerY - h / 2}
-        width={barWidth}
-        height={h}
-        rx={barWidth / 2}
-        fill={COLORS.signature}
-        opacity={0.85 - i * 0.005}
-      />,
-      <rect
-        key={`l${i}`}
-        x={xLeft}
-        y={centerY - h / 2}
-        width={barWidth}
-        height={h}
-        rx={barWidth / 2}
-        fill={COLORS.signature}
-        opacity={0.85 - i * 0.005}
-      />,
-    );
-  }
+  // Bars mirror đối xứng quanh trung tâm. Tổng 2*NUM_BANDS bars.
+  const totalBars = NUM_BANDS * 2;
+  const totalWidth = totalBars * BAR_WIDTH + (totalBars - 1) * BAR_GAP;
+  const leftX = (FORMAT.width - totalWidth) / 2;
+  const centerY = FORMAT.height * 0.72;
+  const gradientId = `wave-grad-${mood}`;
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
       <svg
         width={FORMAT.width}
         height={FORMAT.height}
@@ -86,19 +63,42 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "social" }) => {
         style={{ position: "absolute", inset: 0 }}
       >
         <defs>
-          <radialGradient id="vizGlow" cx="50%" cy="50%" r="40%">
-            <stop offset="0%" stopColor={withAlpha(accent, 0.35)} />
-            <stop offset="100%" stopColor={withAlpha(accent, 0)} />
-          </radialGradient>
+          {/*
+            Gradient ngang: navy ngoài → accent (coral) ở giữa → navy về phải.
+            Tạo cảm giác "energy peak" tự nhiên ở center, không hard cut.
+          */}
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={COLORS.ink} />
+            <stop offset="35%" stopColor={COLORS.ink} />
+            <stop offset="48%" stopColor={accent} />
+            <stop offset="52%" stopColor={accent} />
+            <stop offset="65%" stopColor={COLORS.ink} />
+            <stop offset="100%" stopColor={COLORS.ink} />
+          </linearGradient>
         </defs>
-        <ellipse
-          cx={FORMAT.width / 2}
-          cy={centerY}
-          rx={FORMAT.width * 0.45}
-          ry={maxHeight * 0.9}
-          fill="url(#vizGlow)"
-        />
-        {bars}
+        {/*
+          Render 2*NUM_BANDS bars mirror, mỗi bar height từ frequency band.
+          Bar đối xứng: i<NUM_BANDS dùng band (NUM_BANDS-1-i), i>=NUM_BANDS dùng band (i-NUM_BANDS).
+          → 2 mép bằng cao tần (band cuối), giữa bằng bass (band 0).
+        */}
+        {Array.from({ length: totalBars }).map((_, i) => {
+          const bandIdx =
+            i < NUM_BANDS ? NUM_BANDS - 1 - i : i - NUM_BANDS;
+          const v = smoothed[bandIdx] ?? 0;
+          const h = Math.max(MIN_HEIGHT, Math.pow(v, HEIGHT_POW) * MAX_HEIGHT);
+          const x = leftX + i * (BAR_WIDTH + BAR_GAP);
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={centerY - h / 2}
+              width={BAR_WIDTH}
+              height={h}
+              rx={BAR_WIDTH / 2}
+              fill={`url(#${gradientId})`}
+            />
+          );
+        })}
       </svg>
     </AbsoluteFill>
   );

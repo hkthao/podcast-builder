@@ -15,29 +15,34 @@ export const Watermark: React.FC<Props> = ({ episodeNumber }) => {
           right: SAFE_ZONE.right,
           display: "flex",
           alignItems: "center",
-          gap: 14,
-          opacity: 0.45,
+          gap: 12,
+          backgroundColor: COLORS.white,
+          border: `3px solid ${COLORS.ink}`,
+          borderRadius: 20,
+          padding: "8px 16px",
         }}
       >
-        <Img src={BRAND.logoSrc} style={{ width: 40, height: 40 }} />
+        <Img src={BRAND.markSrc} style={{ width: 36, height: 36 }} />
         <div
           style={{
-            fontFamily: FONTS.body,
-            color: COLORS.textPrimary,
+            fontFamily: FONTS.display,
+            fontWeight: 700,
+            color: COLORS.ink,
             fontSize: TYPE_SCALE.watermark,
             lineHeight: 1,
           }}
         >
-          <div>{BRAND.channelName}</div>
-          <div
-            style={{
-              color: COLORS.textMuted,
-              fontSize: TYPE_SCALE.watermark - 6,
-              marginTop: 4,
-            }}
-          >
-            #{String(episodeNumber).padStart(3, "0")}
-          </div>
+          {BRAND.channelName}
+        </div>
+        <div
+          style={{
+            fontFamily: FONTS.body,
+            fontWeight: 600,
+            color: COLORS.accentRed,
+            fontSize: TYPE_SCALE.watermark - 4,
+          }}
+        >
+          #{String(episodeNumber).padStart(3, "0")}
         </div>
       </div>
     </AbsoluteFill>

@@ -1,5 +1,7 @@
 import { AbsoluteFill, Img, interpolate, useCurrentFrame } from "remotion";
-import { BRAND, COLORS, FONTS, FPS, TYPE_SCALE } from "../theme";
+import { BRAND, COLORS, FPS } from "../theme";
+import { StickerText } from "./StickerText";
+import { Sparkle, StarSmall } from "./doodles";
 
 export const OUTRO_DURATION_FRAMES = Math.round(FPS * 4);
 const FADE_FRAMES = 18;
@@ -24,31 +26,38 @@ export const OutroCard: React.FC = () => {
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: COLORS.bg,
-        gap: 40,
+        gap: 56,
+        padding: "0 60px",
         opacity,
       }}
     >
-      <Img src={BRAND.logoSrc} style={{ width: 220, height: 220 }} />
+      <Sparkle x={160} y={400} color={COLORS.accentRed} size={70} delay={4} />
+      <StarSmall x={920} y={520} color={COLORS.accentBlue} size={60} delay={8} />
+      <Sparkle x={920} y={1480} color={COLORS.accentTeal} size={64} delay={12} />
+      <StarSmall x={160} y={1380} color={COLORS.ink} size={56} delay={14} />
+
+      <Img
+        src={BRAND.logoSrc}
+        style={{ width: 920, height: 614, objectFit: "contain" }}
+      />
+
       <div
         style={{
-          fontFamily: FONTS.display,
-          color: COLORS.signature,
-          fontSize: 56,
-          letterSpacing: "-0.01em",
-          textAlign: "center",
-          padding: "0 60px",
+          backgroundColor: COLORS.accentRed,
+          border: `6px solid ${COLORS.ink}`,
+          borderRadius: 36,
+          padding: "28px 48px",
+          boxShadow: `10px 10px 0 ${COLORS.ink}`,
         }}
       >
-        {BRAND.cta}
-      </div>
-      <div
-        style={{
-          fontFamily: FONTS.body,
-          color: COLORS.textMuted,
-          fontSize: TYPE_SCALE.meta,
-        }}
-      >
-        {BRAND.channelName}
+        <StickerText
+          fontSize={60}
+          color={COLORS.ink}
+          outlineWidth={6}
+          shadowOffset={0}
+        >
+          {BRAND.cta}
+        </StickerText>
       </div>
     </AbsoluteFill>
   );

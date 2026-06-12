@@ -1,5 +1,83 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
-  <circle cx="60" cy="60" r="48" fill="none" stroke="#C9A96A" stroke-width="2" opacity="0.6"/>
-  <circle cx="60" cy="60" r="32" fill="none" stroke="#C9A96A" stroke-width="2" opacity="0.85"/>
-  <circle cx="60" cy="60" r="6" fill="#C9A96A"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <!--
+    ByteCast Tech logo — mic hexagon + </> code symbol + circuit branches.
+    Đã đơn giản hoá để rõ khi hiển thị 200-260px:
+      - Mic outline stroke dày 8 → đọc khoẻ.
+      - Inner </>: stroke 6, brackets cách xa nhau để slash đi GIỮA mà không xuyên qua.
+      - Bỏ 5 crown hatches dày, chỉ giữ 1 notch chính giữa cho dấu mic.
+      - Circuit: 3 trace mỗi bên, spaced rộng, nốt to hơn (r=5).
+    Phối brand "không quá sáng": gradient ink → accentBlue, slash coral.
+  -->
+  <defs>
+    <linearGradient id="bc-stroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16244F"/>
+      <stop offset="1" stop-color="#3F6FD0"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Mic hexagon body — proportions rộng, đỉnh phẳng -->
+    <path
+      d="M 88 58
+         L 100 38
+         L 140 38
+         L 152 58
+         L 152 140
+         Q 152 172 120 172
+         Q 88 172 88 140
+         Z"
+      stroke="url(#bc-stroke)"
+      stroke-width="8"
+    />
+
+    <!-- Center notch ở đỉnh mic -->
+    <line x1="120" y1="38" x2="120" y2="56" stroke="url(#bc-stroke)" stroke-width="6"/>
+
+    <!-- </> code symbol — brackets nhỏ, cách xa nhau -->
+    <!-- < bracket -->
+    <path
+      d="M 110 84 L 100 110 L 110 136"
+      stroke="url(#bc-stroke)"
+      stroke-width="6"
+    />
+    <!-- > bracket -->
+    <path
+      d="M 130 84 L 140 110 L 130 136"
+      stroke="url(#bc-stroke)"
+      stroke-width="6"
+    />
+
+    <!-- Mic stand stem + base -->
+    <line x1="120" y1="172" x2="120" y2="194" stroke="url(#bc-stroke)" stroke-width="8"/>
+    <line x1="100" y1="202" x2="140" y2="202" stroke="url(#bc-stroke)" stroke-width="8"/>
+
+    <!-- Circuit branches LEFT (3 traces) -->
+    <path d="M 88 76 L 64 76 L 64 62" stroke="url(#bc-stroke)" stroke-width="6"/>
+    <path d="M 88 100 L 54 100" stroke="url(#bc-stroke)" stroke-width="6"/>
+    <path d="M 88 124 L 64 124 L 64 140" stroke="url(#bc-stroke)" stroke-width="6"/>
+
+    <!-- Circuit branches RIGHT (mirrored) -->
+    <path d="M 152 76 L 176 76 L 176 62" stroke="url(#bc-stroke)" stroke-width="6"/>
+    <path d="M 152 100 L 186 100" stroke="url(#bc-stroke)" stroke-width="6"/>
+    <path d="M 152 124 L 176 124 L 176 140" stroke="url(#bc-stroke)" stroke-width="6"/>
+  </g>
+
+  <!-- Slash `/` trong </> — coral, đi giữa 2 brackets không chạm -->
+  <path
+    d="M 134 78 L 106 142"
+    fill="none"
+    stroke="#FF7E9D"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+
+  <!-- Nốt circuit — accentBlue đặc, to hơn để thấy ở size nhỏ -->
+  <g fill="#3F6FD0">
+    <circle cx="64" cy="56" r="5"/>
+    <circle cx="48" cy="100" r="5"/>
+    <circle cx="64" cy="146" r="5"/>
+    <circle cx="176" cy="56" r="5"/>
+    <circle cx="192" cy="100" r="5"/>
+    <circle cx="176" cy="146" r="5"/>
+  </g>
 </svg>

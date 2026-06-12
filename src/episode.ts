@@ -1,13 +1,16 @@
 import { z } from "zod";
-import { MOOD_ACCENTS } from "./theme";
+import { MOOD_ACCENTS, SCENE_TYPES } from "./theme";
 
 export const MoodKeySchema = z.enum(
   Object.keys(MOOD_ACCENTS) as [keyof typeof MOOD_ACCENTS, ...Array<keyof typeof MOOD_ACCENTS>],
 );
 
+export const SceneTypeSchema = z.enum(SCENE_TYPES);
+
 export const SceneOverrideSchema = z.object({
   startMs: z.number().nonnegative(),
-  mood: MoodKeySchema,
+  mood: MoodKeySchema.optional(),
+  sceneType: SceneTypeSchema.optional(),
 });
 
 export const EpisodeConfigSchema = z.object({

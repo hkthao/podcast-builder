@@ -1,39 +1,71 @@
 import { staticFile } from "remotion";
-import { loadFont as loadLora } from "@remotion/google-fonts/Lora";
+import { loadFont as loadBaloo2 } from "@remotion/google-fonts/Baloo2";
 import { loadFont as loadBeVietnamPro } from "@remotion/google-fonts/BeVietnamPro";
 
-const lora = loadLora("normal", { weights: ["400", "500", "600"], subsets: ["vietnamese", "latin"] });
-const beVietnamPro = loadBeVietnamPro("normal", { weights: ["400", "500", "600"], subsets: ["vietnamese", "latin"] });
+const baloo2 = loadBaloo2("normal", {
+  weights: ["600", "700", "800"],
+  subsets: ["vietnamese", "latin"],
+});
+const beVietnamPro = loadBeVietnamPro("normal", {
+  weights: ["500", "600", "700"],
+  subsets: ["vietnamese", "latin"],
+});
 
 export const FONTS = {
-  display: `"${lora.fontFamily}", Georgia, serif`,
+  display: `"${baloo2.fontFamily}", system-ui, sans-serif`,
   body: `"${beVietnamPro.fontFamily}", system-ui, sans-serif`,
 };
 
+/**
+ * Brand palette v3 — TƯƠI SÁNG SCRAPBOOK theo bullet journal aesthetic.
+ * 3 token bất biến: bg vàng tươi + ink navy + white sticker outline.
+ * Tránh đỏ máu / xám tối — accentRed thực ra là hồng coral, accentTeal là xanh mint.
+ */
 export const COLORS = {
-  bg: "#0E0F13",
-  bgLayer: "#1A1C22",
-  textPrimary: "#ECE8E1",
-  textMuted: "#8A8A94",
-  signature: "#C9A96A",
-  accentCool: "#5E7C8B",
+  bg: "#FFD400",
+  bgAlt: "#FFF4E0",
+  ink: "#16244F",
+  inkMuted: "#5C6885",
+  white: "#FFFFFF",
+  /** "đỏ" trong code = hồng coral tươi, không phải đỏ máu. */
+  accentRed: "#FF7E9D",
+  accentBlue: "#3F6FD0",
+  /** "teal" trong code = xanh mint tươi. */
+  accentTeal: "#7DDDB2",
+  /** Màu giấy grid mờ trên bg vàng. */
+  gridLine: "rgba(22, 36, 79, 0.06)",
 } as const;
 
-export type MoodKey = "social" | "emotional" | "existential" | "contemplative";
+export type MoodKey =
+  | "positive"
+  | "social"
+  | "healing"
+  | "energetic"
+  | "contemplative";
 
 export const MOOD_ACCENTS: Record<MoodKey, string> = {
-  social: "#5E7C8B",
-  emotional: "#A56B5C",
-  existential: "#6E5E7C",
-  contemplative: "#7C8B5E",
+  positive: COLORS.accentRed,
+  social: COLORS.accentBlue,
+  healing: COLORS.accentTeal,
+  energetic: COLORS.accentRed,
+  contemplative: COLORS.ink,
+};
+
+/** Mood `contemplative` dùng nền kem thay vì vàng để đổi không khí. */
+export const MOOD_BG: Record<MoodKey, string> = {
+  positive: COLORS.bg,
+  social: COLORS.bg,
+  healing: COLORS.bg,
+  energetic: COLORS.bg,
+  contemplative: COLORS.bgAlt,
 };
 
 export const TYPE_SCALE = {
-  hook: 88,
-  title: 64,
-  caption: 56,
-  meta: 36,
-  watermark: 28,
+  hook: 96,
+  title: 72,
+  caption: 60,
+  meta: 38,
+  watermark: 30,
 } as const;
 
 export const SAFE_ZONE = {
@@ -44,8 +76,19 @@ export const SAFE_ZONE = {
 } as const;
 
 export const BRAND = {
-  channelName: "Triết Học Đời Thường",
-  logoSrc: staticFile("brand/logo.svg"),
+  channelName: "ByteCast Tech",
+  /** Slogan in trong logo lockup — show dưới logo ở Intro/Outro. */
+  slogan: "Giữa Công Nghệ Và Bản Chất Con Người",
+  /**
+   * Mô tả kênh — dùng cho metadata video / mô tả Facebook khi cần.
+   * Không hiển thị trong video render.
+   */
+  description:
+    "ByteCast Tech khám phá những câu hỏi lớn của thời đại AI, nơi công nghệ giao thoa với triết học, tâm lý học và xã hội học để giúp chúng ta hiểu rõ hơn về con người, ý nghĩa và tương lai.",
+  /** Logo lockup đầy đủ (1536×1024 PNG) — dùng ở Intro/Outro. */
+  logoSrc: staticFile("brand/logo.png"),
+  /** Mark đơn giản (SVG) — dùng ở Watermark / chỗ size nhỏ <80px. */
+  markSrc: staticFile("brand/logo.svg"),
   cta: "Theo dõi để xem thêm",
 } as const;
 
@@ -64,23 +107,19 @@ export const withAlpha = (hex: string, alpha: number): string => {
 };
 
 /**
- * Style suffix nối vào mọi AI image prompt — giữ visual identity nhất quán
- * giữa các ảnh. KHÔNG đổi giữa các tập (chỉ đổi khi rebrand toàn kênh).
+ * Bộ scene recipe — mỗi key là một bố cục sticker + doodle trong
+ * `src/components/scenes/`. PodcastDesk là mặc định / fallback.
  */
-export const STYLE_SUFFIX =
-  "Dark moody palette of deep navy and brass gold tones, painterly with subtle film grain, contemplative and minimal cinematic atmosphere, soft focus, abstract conceptual, no text, no logos, no captions, no people's faces, philosophy podcast cover art aesthetic, vertical 9:16 framing with strong central composition.";
+export const SCENE_TYPES = [
+  "PodcastDesk",
+  "Idea",
+  "Connection",
+  "Crowd",
+  "InnerSelf",
+  "Choice",
+  "Knowledge",
+] as const;
 
-/**
- * Mood-specific hints chèn trước STYLE_SUFFIX trong prompt.
- * Giúp AI gen ra hình hợp tông cảm xúc của đoạn nói.
- */
-export const MOOD_PROMPT_HINTS: Record<MoodKey, string> = {
-  social:
-    "feeling of human connection and society, abstract crowds or networks in silhouette, distant figures, threads connecting,",
-  emotional:
-    "feeling of tenderness or quiet sorrow, intimate atmosphere, warm muted hues, soft fabric or candlelight, single subject,",
-  existential:
-    "feeling of vastness and meaning, cosmic void elements, distant light in darkness, scale of the infinite, single small figure in vast space,",
-  contemplative:
-    "feeling of stillness and reflection, natural elements like mist, still water, stone, single tree, dawn light,",
-};
+export type SceneType = (typeof SCENE_TYPES)[number];
+
+export const DEFAULT_SCENE: SceneType = "PodcastDesk";

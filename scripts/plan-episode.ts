@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildVisualPlan, type VisualPlan } from "../src/visualPlan";
+import { buildScenePlan, type ScenePlan } from "../src/scenes";
 import { EpisodeConfigSchema, buildEpisodeTemplate, type EpisodeConfig } from "../src/episode";
 import type { Transcript } from "./transcribe";
 
@@ -19,24 +19,32 @@ const loadEpisode = (audioPath: string): EpisodeConfig => {
   return EpisodeConfigSchema.parse(raw);
 };
 
+/**
+ * Sinh `tmp/<name>.plan.json` từ transcript.
+ *
+ * Cache-aware: nếu plan đã tồn tại và không có `--force` → giữ nguyên
+ * (cho phép user sửa tay sceneType/mood trước khi render).
+ */
 export async function planEpisode(
   transcriptPath: string,
   episode: EpisodeConfig,
   planPath: string,
   { force = false }: { force?: boolean } = {},
-): Promise<VisualPlan> {
+): Promise<ScenePlan> {
   if (!fs.existsSync(transcriptPath)) {
     throw new Error(`Transcript không tồn tại: ${transcriptPath}`);
   }
   if (fs.existsSync(planPath) && !force) {
-    const cached = JSON.parse(fs.readFileSync(planPath, "utf-8")) as VisualPlan;
-    console.log(`[plan-episode] [cache] skip ${planPath} (${cached.scenes.length} scenes)`);
+    const cached = JSON.parse(fs.readFileSync(planPath, "utf-8")) as ScenePlan;
+    console.log(
+      `[plan-episode] [cache] skip ${planPath} (${cached.scenes.length} scenes)`,
+    );
     return cached;
   }
 
   const transcript = JSON.parse(fs.readFileSync(transcriptPath, "utf-8")) as Transcript;
   console.log(`[plan-episode] đọc ${transcript.transcription.length} segments...`);
-  const plan = buildVisualPlan(transcript, episode);
+  const plan = buildScenePlan(transcript, episode.moodOverride, episode.sceneOverrides);
 
   ensureDir(path.dirname(planPath));
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2));
@@ -47,12 +55,12 @@ export async function planEpisode(
   );
   console.log(
     `  ✓ ${plan.scenes.length} scenes, ${(totalSec / 60).toFixed(1)} phút, ` +
-      `${(totalSec / plan.scenes.length).toFixed(1)}s/scene trung bình`,
+      `${(totalSec / Math.max(1, plan.scenes.length)).toFixed(1)}s/scene trung bình`,
   );
   plan.scenes.forEach((s) => {
     const dur = ((s.endMs - s.startMs) / 1000).toFixed(1);
     console.log(
-      `   #${String(s.index).padStart(2, "0")} [${dur}s ${s.mood}] ${s.text.slice(0, 70)}${s.text.length > 70 ? "…" : ""}`,
+      `   #${String(s.index).padStart(2, "0")} [${dur}s ${s.mood}/${s.sceneType}] ${s.text.slice(0, 60)}${s.text.length > 60 ? "…" : ""}`,
     );
   });
   return plan;
