@@ -19,12 +19,12 @@ export const SCENE_W = FORMAT.width;
 export const SCENE_H = FORMAT.height;
 
 /**
- * Vùng "an toàn" cho sticker — KHÔNG đè caption (bottom 280) cũng KHÔNG
- * đè watermark (top 120). Sticker chính nên nằm khoảng y: 240..1340.
+ * Vùng "an toàn" cho sticker — KHÔNG đè watermark (top 160 + badge ~80px)
+ * cũng KHÔNG đè wave + caption (bottom ~720px sau khi visualizer lên 0.62).
  */
 export const STICKER_BAND = {
-  yTop: 240,
-  yBottom: 1340,
+  yTop: 280,
+  yBottom: 1100,
   xCenter: SCENE_W / 2,
 } as const;
 

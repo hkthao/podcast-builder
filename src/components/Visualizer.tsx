@@ -5,11 +5,12 @@ import { COLORS, FORMAT, MOOD_ACCENTS, type MoodKey } from "../theme";
 
 const NUM_BANDS = 64;
 const SMOOTH_WINDOW = 2;
-const MAX_HEIGHT = 280;
-const MIN_HEIGHT = 14;
+const MAX_HEIGHT = 220;
+const MIN_HEIGHT = 12;
 const HEIGHT_POW = 0.5;
-const BAR_WIDTH = 7;
-const BAR_GAP = 3;
+/** Bar thinner để toàn wave fit trong SAFE_ZONE (avoid right action buttons FB Reels). */
+const BAR_WIDTH = 4;
+const BAR_GAP = 2;
 
 type Props = {
   audioSrc: string;
@@ -51,7 +52,8 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive" }) => 
   const totalBars = NUM_BANDS * 2;
   const totalWidth = totalBars * BAR_WIDTH + (totalBars - 1) * BAR_GAP;
   const leftX = (FORMAT.width - totalWidth) / 2;
-  const centerY = FORMAT.height * 0.72;
+  // centerY 0.67 — wave bottom edge ~1396 nằm sát caption top edge (~1410) → gap ~14px.
+  const centerY = FORMAT.height * 0.67;
   const gradientId = `wave-grad-${mood}`;
 
   return (

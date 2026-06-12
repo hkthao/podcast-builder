@@ -68,11 +68,16 @@ export const TYPE_SCALE = {
   watermark: 30,
 } as const;
 
+/**
+ * SAFE_ZONE v2 — đo trực tiếp trên FB Reels mobile (06/2026).
+ * Bottom rộng vì FB chèn caption + user info + title + comment input.
+ * Right rộng vì cột action buttons (like/comment/share/save) lấy ~120-140px.
+ */
 export const SAFE_ZONE = {
-  top: 120,
-  bottom: 280,
-  left: 60,
-  right: 60,
+  top: 160,
+  bottom: 380,
+  left: 80,
+  right: 140,
 } as const;
 
 export const BRAND = {

@@ -1,22 +1,18 @@
-import { AbsoluteFill, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { BRAND, COLORS, FONTS, FPS } from "../theme";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { COLORS, FONTS, FPS } from "../theme";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
 /**
- * Cover 3s — TITLE LÀ HERO. Reel/Shorts/TikTok viewer cần biết chủ đề trong 1s đầu.
- * Brand mark thu nhỏ ở góc trên; episode badge nhỏ dưới; title chia 1–3 line với
- * line giữa được phóng to + tô coral để nhấn từ khoá. Tái dùng cho mọi tập:
- * input chỉ là `title` + `episodeNumber` từ episode.json.
+ * Cover 3s — TITLE LÀ HERO duy nhất, chiếm toàn frame để gây tò mò.
+ * Brand đã có trong Watermark (top-left) — KHÔNG lặp logo/episode badge ở cover.
+ * Emphasis line: coral sticker bar uppercase trắng — đối lập cực mạnh với nền vàng.
  */
 export const INTRO_DURATION_FRAMES = Math.round(FPS * 3.0);
 
 const T = {
-  /** Underline doodle scaleX — emphasis line only, sau khi title đã visible. */
   underlineIn: 10,
   underlineSettle: 28,
-  /** Badge slide từ dưới. */
-  badge: 20,
   outStart: INTRO_DURATION_FRAMES - 16,
 } as const;
 
@@ -25,12 +21,10 @@ type Props = {
   episodeNumber: number;
 };
 
-/** Chia title thành 1–3 line theo dấu phẩy hoặc đếm từ. Line giữa = nhấn. */
 const splitIntoLines = (title: string): string[] => {
   const cleaned = title.trim();
   if (cleaned.includes(",")) {
-    const parts = cleaned.split(",").map((s) => s.trim()).filter(Boolean);
-    return parts.slice(0, 3);
+    return cleaned.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3);
   }
   const words = cleaned.split(/\s+/);
   if (words.length <= 4) return [cleaned];
@@ -46,33 +40,23 @@ const splitIntoLines = (title: string): string[] => {
   ];
 };
 
-export const IntroCard: React.FC<Props> = ({ title, episodeNumber }) => {
+export const IntroCard: React.FC<Props> = ({ title }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
   const lines = splitIntoLines(title);
   const emphasisIdx = Math.floor(lines.length / 2);
 
-  // Underline doodle reveal cho emphasis line (animation duy nhất trên title).
+  const emphasisPulse = interpolate(
+    frame,
+    [4, 12, 22],
+    [0.94, 1.04, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
   const underlineScale = interpolate(
     frame,
     [T.underlineIn, T.underlineSettle],
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  // Emphasis line pulse nhẹ frame 4-16 để thu hút mắt (scale 1.0 → 1.05 → 1.0).
-  const emphasisPulse = interpolate(
-    frame,
-    [4, 10, 18],
-    [1, 1.06, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
-  const badgeSpring = spring({
-    frame: frame - T.badge,
-    fps,
-    config: { damping: 13, mass: 0.7, stiffness: 110 },
-    durationInFrames: 18,
-  });
   const outOpacity = interpolate(
     frame,
     [T.outStart, INTRO_DURATION_FRAMES],
@@ -80,17 +64,20 @@ export const IntroCard: React.FC<Props> = ({ title, episodeNumber }) => {
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
-  // Title line font size theo độ dài line, emphasis = lớn nhất.
-  const fontSizeFor = (text: string, isEmphasis: boolean): number => {
-    const len = text.length;
-    if (isEmphasis) {
-      if (len <= 12) return 130;
-      if (len <= 18) return 110;
-      return 88;
-    }
-    if (len <= 14) return 84;
-    if (len <= 20) return 72;
-    return 60;
+  // Font size cho line thường (navy 3D bubble).
+  const normalFontSize = (line: string): number => {
+    const len = line.length;
+    if (len <= 14) return 110;
+    if (len <= 20) return 92;
+    return 78;
+  };
+
+  // Font size cho line emphasis (coral sticker bar, UPPERCASE → cần nhỏ hơn).
+  const emphasisFontSize = (line: string): number => {
+    const len = line.length;
+    if (len <= 14) return 132;
+    if (len <= 20) return 112;
+    return 90;
   };
 
   return (
@@ -100,128 +87,103 @@ export const IntroCard: React.FC<Props> = ({ title, episodeNumber }) => {
         paddingLeft: 60,
         paddingRight: 60,
         opacity: outOpacity,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 36,
       }}
     >
       {/* Decoration sparkles ở 4 góc */}
-      <Sparkle x={140} y={200} color={COLORS.accentRed} size={70} delay={0} />
-      <StarSmall x={940} y={280} color={COLORS.accentBlue} size={56} delay={6} />
-      <Sparkle x={920} y={1640} color={COLORS.accentTeal} size={64} delay={10} />
-      <StarSmall x={140} y={1520} color={COLORS.ink} size={54} delay={14} />
+      <Sparkle x={120} y={260} color={COLORS.accentRed} size={84} delay={0} />
+      <StarSmall x={960} y={340} color={COLORS.accentBlue} size={70} delay={6} />
+      <Sparkle x={960} y={1600} color={COLORS.accentTeal} size={76} delay={10} />
+      <StarSmall x={120} y={1500} color={COLORS.ink} size={64} delay={14} />
 
-      {/* Brand mark — góc trên-giữa, thu nhỏ, visible từ frame 0 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 200,
-          left: 0,
-          right: 0,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <Img
-          src={BRAND.logoSrc}
-          style={{ width: 380, height: 240, objectFit: "contain" }}
-        />
-      </div>
-
-      {/* Title — hero center */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 22,
-          paddingTop: 200,
-        }}
-      >
-        {lines.map((line, i) => {
-          const isEmphasis = i === emphasisIdx && lines.length > 1;
-          // Title VISIBLE từ frame 0; chỉ emphasis line pulse nhẹ.
-          const scale = isEmphasis ? emphasisPulse : 1;
+      {lines.map((line, i) => {
+        const isEmphasis = i === emphasisIdx && lines.length > 1;
+        if (isEmphasis) {
           return (
-            <div key={i} style={{ transform: `scale(${scale})` }}>
-              <StickerText
-                fontSize={fontSizeFor(line, isEmphasis)}
-                color={isEmphasis ? COLORS.accentRed : COLORS.ink}
-                outlineWidth={isEmphasis ? 14 : 10}
-                shadowOffset={isEmphasis ? 14 : 9}
+            <div
+              key={i}
+              style={{
+                width: "100%",
+                transform: `scale(${emphasisPulse})`,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              {/* Coral sticker bar — uppercase trắng, viền navy, shadow đậm. */}
+              <div
+                style={{
+                  backgroundColor: COLORS.accentRed,
+                  border: `6px solid ${COLORS.ink}`,
+                  borderRadius: 22,
+                  padding: "16px 36px",
+                  boxShadow: `12px 12px 0 ${COLORS.ink}`,
+                  textAlign: "center",
+                }}
               >
-                {line}
-              </StickerText>
-              {isEmphasis ? (
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    marginTop: 12,
+                    fontFamily: FONTS.display,
+                    fontWeight: 800,
+                    color: COLORS.white,
+                    fontSize: emphasisFontSize(line),
+                    textTransform: "uppercase",
+                    letterSpacing: "0.02em",
+                    lineHeight: 1.05,
+                    textShadow: `3px 3px 0 ${COLORS.ink}`,
+                    textAlign: "center",
                   }}
                 >
-                  <svg
-                    width={480}
-                    height={26}
-                    style={{
-                      transform: `scaleX(${underlineScale})`,
-                      transformOrigin: "center",
-                      display: "block",
-                    }}
-                  >
-                    <path
-                      d="M 16 14 Q 120 4 240 12 Q 360 22 464 8"
-                      stroke={COLORS.accentRed}
-                      strokeWidth={9}
-                      fill="none"
-                      strokeLinecap="round"
-                    />
-                  </svg>
+                  {line}
                 </div>
-              ) : null}
+              </div>
+              <svg
+                width={520}
+                height={28}
+                style={{
+                  transform: `scaleX(${underlineScale})`,
+                  transformOrigin: "center",
+                  display: "block",
+                }}
+              >
+                <path
+                  d="M 18 16 Q 130 4 260 14 Q 390 24 502 8"
+                  stroke={COLORS.ink}
+                  strokeWidth={10}
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </svg>
             </div>
           );
-        })}
-      </div>
-
-      {/* Episode badge — bottom */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 220,
-          left: 0,
-          right: 0,
-          display: "flex",
-          justifyContent: "center",
-          transform: `translateY(${interpolate(badgeSpring, [0, 1], [50, 0])}px)`,
-          opacity: badgeSpring,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            backgroundColor: COLORS.ink,
-            color: COLORS.bg,
-            fontFamily: FONTS.body,
-            fontWeight: 700,
-            fontSize: 32,
-            letterSpacing: "0.14em",
-            padding: "12px 28px",
-            borderRadius: 999,
-            transform: "rotate(-2deg)",
-            boxShadow: `5px 5px 0 ${COLORS.accentRed}`,
-          }}
-        >
-          TẬP #{String(episodeNumber).padStart(3, "0")}
-        </div>
-      </div>
+        }
+        // Normal line: 3D bubble navy với outline trắng dày + shadow đậm để contrast max.
+        return (
+          <div
+            key={i}
+            style={{
+              width: "100%",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <StickerText
+              fontSize={normalFontSize(line)}
+              color={COLORS.ink}
+              outlineWidth={14}
+              shadowOffset={12}
+              align="center"
+            >
+              {line}
+            </StickerText>
+          </div>
+        );
+      })}
     </AbsoluteFill>
   );
 };

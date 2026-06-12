@@ -8,11 +8,16 @@ type Props = {
 export const Watermark: React.FC<Props> = ({ episodeNumber }) => {
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {/*
+        Chuyển sang top-LEFT — FB Reels Mobile chèn mute icon + follow button
+        ở top-right. Top-left chỉ có status bar (40px) + back chevron (60px),
+        SAFE_ZONE.top 160 đủ né.
+      */}
       <div
         style={{
           position: "absolute",
           top: SAFE_ZONE.top + 20,
-          right: SAFE_ZONE.right,
+          left: SAFE_ZONE.left,
           display: "flex",
           alignItems: "center",
           gap: 12,
