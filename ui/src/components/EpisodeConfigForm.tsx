@@ -110,7 +110,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
       </div>
 
       <div className="space-y-5">
-        <Field label="Title" required>
+        <Field label="Tiêu đề" required>
           <Input
             value={form.title}
             onChange={(e) => update({ title: e.target.value })}
@@ -133,7 +133,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Episode number" required>
+          <Field label="Số tập" required>
             <Input
               type="number"
               min={1}
@@ -170,7 +170,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         </div>
 
         <Field
-          label="BGM path"
+          label="Đường dẫn BGM"
           hint="Đường dẫn relative tới audio (vd ./assets/bgm/contemplative.mp3). Để trống = không nhạc nền."
         >
           <Input
@@ -181,8 +181,8 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         </Field>
 
         <Field
-          label={`BGM volume: ${form.bgmVolumeDb} dB`}
-          hint="-28 dB là default. Ducking 35% khi có lời (xem Phase 7 PLAN)."
+          label={`Âm lượng BGM: ${form.bgmVolumeDb} dB`}
+          hint="-28 dB là mặc định. Ducking 35% khi có lời (xem Phase 7 PLAN)."
         >
           <input
             type="range"
@@ -200,13 +200,13 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
 
         <div className="grid grid-cols-2 gap-5 pt-2">
           <SwitchRow
-            label="Show Intro (3s cover)"
-            hint="Title hero 3 dòng + emphasis"
+            label="Hiện Intro (3s cover)"
+            hint="Tiêu đề hero 3 dòng + emphasis"
             checked={form.showIntro}
             onChange={(v) => update({ showIntro: v })}
           />
           <SwitchRow
-            label="Show Outro (4s CTA)"
+            label="Hiện Outro (4s CTA)"
             hint="Logo + 'Theo dõi để xem thêm'"
             checked={form.showOutro}
             onChange={(v) => update({ showOutro: v })}

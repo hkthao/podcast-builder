@@ -461,7 +461,7 @@ export function EssayPage() {
                   onClick={cancelStream}
                 >
                   <Square className="size-4" />
-                  Cancel
+                  Huỷ
                 </Button>
               ) : (
                 <Button
@@ -469,7 +469,7 @@ export function EssayPage() {
                   disabled={!title.trim() || !model}
                 >
                   <Sparkles className="size-4" />
-                  {activeId ? "Regen" : "Generate"}
+                  {activeId ? "Tạo lại" : "Tạo bài luận"}
                 </Button>
               )}
             </div>
@@ -506,7 +506,7 @@ export function EssayPage() {
                   <Library className="size-4 mt-0.5 shrink-0 text-accent" />
                   <span>
                     <strong>Suggest tài liệu tham khảo</strong> — LLM gợi ý
-                    5-7 sách/bài/video liên quan, click "Add to library" để
+                    5-7 sách/bài/video liên quan, click "Thêm vào thư viện" để
                     save vào References.
                   </span>
                 </li>
@@ -604,7 +604,7 @@ export function EssayPage() {
                   disabled={!activeId || streaming || saveMut.isPending}
                 >
                   <Save className="size-3.5" />
-                  Save
+                  Lưu
                 </Button>
                 <Button
                   variant="outline"
@@ -640,7 +640,7 @@ export function EssayPage() {
                 <div className="ml-auto flex items-center gap-2">
                   {!nlmPrompt && (
                     <span className="text-xs text-muted-foreground">
-                      Click "Generate" để LLM tạo prompt từ essay
+                      Bấm "Tạo prompt" để LLM viết từ essay
                     </span>
                   )}
                 </div>
@@ -678,7 +678,7 @@ export function EssayPage() {
                   ) : (
                     <Sparkles className="size-3.5" />
                   )}
-                  {nlmPrompt ? "Regen" : "Generate"}
+                  {nlmPrompt ? "Tạo lại" : "Tạo prompt"}
                 </Button>
                 <CopyButton text={nlmPrompt} />
                 <Button variant="outline" size="sm" asChild>
@@ -746,12 +746,12 @@ export function EssayPage() {
                   ) : (
                     <Sparkles className="size-3.5" />
                   )}
-                  {suggestions.length > 0 ? "Suggest lại" : "Suggest"}
+                  {suggestions.length > 0 ? "Đề xuất lại" : "Đề xuất"}
                 </Button>
                 <Button variant="outline" size="sm" asChild>
                   <a href="/references">
                     <Library className="size-3.5" />
-                    Browse library ↗
+                    Mở thư viện ↗
                   </a>
                 </Button>
               </div>
@@ -892,7 +892,7 @@ function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
           }
         >
           <Library className="size-3.5" />
-          Add to library →
+          Thêm vào thư viện →
         </Button>
       </div>
     </div>

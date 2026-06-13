@@ -52,7 +52,7 @@ export function EpisodeList() {
       <div className="container max-w-5xl py-10">
         <header className="mb-8 flex items-center justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-serif tracking-tight">Episodes</h1>
+            <h1 className="text-3xl font-serif tracking-tight">Danh sách tập</h1>
             <p className="mt-1 text-muted-foreground text-sm">
               {data ? `${data.episodes.length} tập` : "Đang tải…"}
               {" · "}

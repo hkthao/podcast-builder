@@ -33,7 +33,7 @@ export function WorkflowPage() {
         <div>
           <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
             <WorkflowIcon className="size-7 text-accent" />
-            Workflow
+            Quy trình
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
             {chains.length} chain — tóm progress brainstorm → essay → NLM → audio → render
@@ -76,6 +76,7 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
     {
       key: "brainstorm",
       label: "Brainstorm",
+      // Keep English — feature name, dùng đa ngữ OK
       icon: <Lightbulb className="size-3.5" />,
       state: chain.brainstorm ? "done" : "todo",
       hint: chain.brainstorm
@@ -85,7 +86,7 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
     },
     {
       key: "essay",
-      label: "Essay",
+      label: "Bài luận",
       icon: <FileText className="size-3.5" />,
       state: chain.essay
         ? chain.essay.wordCount > 100
@@ -105,7 +106,8 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
     },
     {
       key: "refs",
-      label: chain.refsCount > 0 ? `Refs ${chain.refsCount}` : "Refs",
+      label:
+        chain.refsCount > 0 ? `Tài liệu ${chain.refsCount}` : "Tài liệu",
       icon: <Library className="size-3.5" />,
       state:
         chain.refsCount >= 3
@@ -117,9 +119,9 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
               : "todo",
       hint:
         chain.refsCount > 0
-          ? `${chain.refsCount} linked`
+          ? `${chain.refsCount} đã link`
           : chain.essay
-            ? "0 — suggest từ essay"
+            ? "0 — đề xuất từ bài luận"
             : null,
       to: "/references",
     },

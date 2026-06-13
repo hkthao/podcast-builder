@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { ServerMonitor } from "./ServerMonitor";
+import { ShortcutsHelp } from "./ShortcutsHelp";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <ServerMonitor />
         <div className="flex-1">{children}</div>
       </main>
+      <ShortcutsHelp />
     </div>
   );
 }

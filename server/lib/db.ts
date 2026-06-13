@@ -1,0 +1,104 @@
+/**
+ * SQLite database (better-sqlite3) — local-only, 1 file ở `data.db`.
+ * Sync API, ACID, no daemon. Replace JSON file stores cho:
+ *   - brainstorm sessions
+ *   - essays
+ *   - references
+ *   - server error log
+ *
+ * Episode config vẫn giữ file (input/<name>.json) vì render pipeline đọc.
+ */
+import Database from "better-sqlite3";
+import path from "node:path";
+import fs from "node:fs";
+
+const DB_PATH = process.env.STUDIO_DB_PATH ?? path.resolve("data.db");
+
+let dbInstance: Database.Database | null = null;
+
+export function getDb(): Database.Database {
+  if (dbInstance) return dbInstance;
+  // Đảm bảo parent dir tồn tại (path.resolve thường = cwd nên OK)
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  dbInstance = new Database(DB_PATH);
+  dbInstance.pragma("journal_mode = WAL");
+  dbInstance.pragma("foreign_keys = ON");
+  initSchema(dbInstance);
+  return dbInstance;
+}
+
+function initSchema(db: Database.Database): void {
+  // Brainstorm sessions — denormalized: ideas[] as JSON column
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS brainstorm_sessions (
+      id TEXT PRIMARY KEY,
+      topic TEXT NOT NULL,
+      tone TEXT NOT NULL,
+      picked_idx INTEGER,
+      categories_json TEXT NOT NULL DEFAULT '[]',
+      provider TEXT,
+      model TEXT,
+      created_at TEXT NOT NULL,
+      ideas_json TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_brainstorm_created
+      ON brainstorm_sessions(created_at DESC);
+  `);
+
+  // Essays
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS essays (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      outline TEXT,
+      content TEXT NOT NULL DEFAULT '',
+      nlm_prompt TEXT,
+      brainstorm_ref_json TEXT,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_essays_updated
+      ON essays(updated_at DESC);
+  `);
+
+  // References library (table name `reference_items` để tránh từ khóa SQL "references")
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reference_items (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL UNIQUE,
+      pdf_url TEXT,
+      title TEXT NOT NULL,
+      author TEXT,
+      type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      notes TEXT NOT NULL DEFAULT '',
+      added_at TEXT NOT NULL,
+      last_accessed_at TEXT,
+      used_in_episodes_json TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX IF NOT EXISTS idx_refs_added
+      ON reference_items(added_at DESC);
+  `);
+
+  // Server error log — auto-rotate 100 entries
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS server_errors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      source TEXT NOT NULL,
+      message TEXT NOT NULL,
+      stack TEXT,
+      context_json TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_errors_id
+      ON server_errors(id DESC);
+  `);
+}
+
+export function getDbPath(): string {
+  return DB_PATH;
+}

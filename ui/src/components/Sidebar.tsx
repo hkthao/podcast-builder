@@ -10,6 +10,7 @@ import {
   Workflow as WorkflowIcon,
   Network,
   Image as ImageIcon,
+  Star,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { api, type EpisodeStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { usePersistedState } from "@/lib/persist";
 import {
   getTheme,
   setTheme,
@@ -32,8 +34,24 @@ export function Sidebar() {
     queryFn: () => api.listEpisodes(),
   });
   const location = useLocation();
+  const [pinned, setPinned] = usePersistedState<string[]>(
+    "sidebar.pinned",
+    [],
+  );
+  const togglePin = (name: string) => {
+    setPinned((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
+  };
+  const isPinned = (name: string) => pinned.includes(name);
 
-  const recent = data?.episodes.slice(0, 8) ?? [];
+  // Pinned trước, recent sau (loại trùng), tối đa 8
+  const allEps = data?.episodes ?? [];
+  const pinnedEps = allEps.filter((e) => isPinned(e.name));
+  const restEps = allEps
+    .filter((e) => !isPinned(e.name))
+    .slice(0, Math.max(0, 8 - pinnedEps.length));
+  const recent = [...pinnedEps, ...restEps];
 
   return (
     <aside className="w-64 shrink-0 border-r bg-card flex flex-col h-screen sticky top-0">
@@ -48,7 +66,7 @@ export function Sidebar() {
       </div>
 
       <nav className="p-3 space-y-0.5">
-        <NavItem to="/" icon={<Home className="size-4" />} label="Episodes" />
+        <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
         <NavItem
           to="/workflow"
           icon={<WorkflowIcon className="size-4" />}
@@ -62,27 +80,27 @@ export function Sidebar() {
         <NavItem
           to="/essay"
           icon={<FileText className="size-4" />}
-          label="Essay"
+          label="Bài luận"
         />
         <NavItem
           to="/knowledge"
           icon={<Network className="size-4" />}
-          label="Knowledge"
+          label="Tri thức"
         />
         <NavItem
           to="/visual"
           icon={<ImageIcon className="size-4" />}
-          label="Visual"
+          label="Hình ảnh"
         />
         <NavItem
           to="/references"
           icon={<Library className="size-4" />}
-          label="References"
+          label="Tài liệu"
         />
       </nav>
 
       <div className="px-5 py-2 text-xs uppercase tracking-wider text-muted-foreground">
-        Recent
+        {pinnedEps.length > 0 ? "Pinned + Recent" : "Recent"}
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
@@ -94,25 +112,61 @@ export function Sidebar() {
         {recent.map((ep) => {
           const path = `/episodes/${encodeURIComponent(ep.name)}`;
           const active = location.pathname === path;
+          const pinned = isPinned(ep.name);
           return (
-            <NavLink
+            <div
               key={ep.name}
-              to={path}
               className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                "group flex items-center gap-1 rounded-md text-sm transition-colors",
                 "hover:bg-secondary",
                 active && "bg-secondary text-foreground font-medium",
               )}
-              title={ep.config.title}
             >
-              <StatusDot status={ep.status} />
-              <span className="truncate">{ep.config.title || ep.name}</span>
-            </NavLink>
+              <NavLink
+                to={path}
+                className="flex items-center gap-2 flex-1 min-w-0 px-3 py-2"
+                title={ep.config.title}
+              >
+                <StatusDot status={ep.status} />
+                <span className="truncate">{ep.config.title || ep.name}</span>
+              </NavLink>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  togglePin(ep.name);
+                }}
+                className={cn(
+                  "pr-2.5 py-2 transition-opacity",
+                  pinned
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100",
+                )}
+                title={pinned ? "Bỏ pin" : "Pin episode"}
+              >
+                <Star
+                  className={cn(
+                    "size-3.5",
+                    pinned
+                      ? "text-amber-500 fill-amber-500"
+                      : "text-muted-foreground",
+                  )}
+                />
+              </button>
+            </div>
           );
         })}
       </div>
 
-      <div className="border-t p-3">
+      <div className="border-t p-3 space-y-2">
+        <p
+          className="text-xs text-muted-foreground text-center"
+          title="Bấm ?"
+        >
+          Phím tắt:{" "}
+          <kbd className="font-mono text-[10px] px-1 py-0.5 rounded border bg-secondary/50">
+            ?
+          </kbd>
+        </p>
         <ThemeSwitcher />
       </div>
     </aside>

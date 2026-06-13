@@ -50,7 +50,7 @@ export function VisualPage() {
       <header className="mb-6">
         <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
           <ImageIcon className="size-7 text-accent" />
-          Visual Library
+          Thư viện hình ảnh
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
           {total} ẩn dụ hình ảnh đã có. Tái dùng cho thumbnail / AI gen
@@ -62,6 +62,7 @@ export function VisualPage() {
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            data-search
             placeholder="Tìm metaphor / topic…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

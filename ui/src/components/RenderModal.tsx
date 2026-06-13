@@ -28,12 +28,12 @@ type Props = {
 };
 
 const PHASES: Array<{ key: RenderPhase; label: string }> = [
-  { key: "process-audio", label: "Process audio (loudness norm)" },
+  { key: "process-audio", label: "Xử lý audio (loudness norm)" },
   { key: "transcribe", label: "Whisper transcribe" },
-  { key: "spell-fix", label: "Spell-fix (OpenAI)" },
-  { key: "plan-episode", label: "Plan scenes" },
+  { key: "spell-fix", label: "Sửa chính tả (OpenAI)" },
+  { key: "plan-episode", label: "Lên kế hoạch cảnh" },
   { key: "bundle", label: "Bundle Remotion" },
-  { key: "render", label: "Render frames" },
+  { key: "render", label: "Render frame" },
   { key: "thumbnail", label: "Thumbnail + lock file" },
 ];
 
@@ -264,7 +264,7 @@ export function RenderModal({ open, episodeName, preview, onClose }: Props) {
                   download
                 >
                   <Download className="size-4" />
-                  Download mp4
+                  Tải mp4
                 </a>
               </Button>
               <Button
@@ -280,7 +280,7 @@ export function RenderModal({ open, episodeName, preview, onClose }: Props) {
                 }}
               >
                 <FolderOpen className="size-4" />
-                Show in Finder
+                Mở trong Finder
               </Button>
             </>
           )}

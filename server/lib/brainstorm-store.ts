@@ -6,11 +6,8 @@
  * Idea schema cố tình tổng quát (title/hook/angle/why) để dùng cho cả
  * Vietnamese ByteCast Tech lẫn các kênh khác sau này.
  */
-import path from "node:path";
-import fs from "node:fs/promises";
 import { chat, type LLMProvider } from "./llm-providers";
-
-const BRAINSTORM_DIR = path.resolve("brainstorm");
+import { getDb } from "./db";
 const DEFAULT_PROVIDER: LLMProvider =
   (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
 const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
@@ -135,37 +132,61 @@ const slugify = (s: string): string =>
     .replace(/^-|-$/g, "")
     .slice(0, 60);
 
-const ensureDir = async () => {
-  await fs.mkdir(BRAINSTORM_DIR, { recursive: true });
+type DbRow = {
+  id: string;
+  topic: string;
+  tone: string;
+  picked_idx: number | null;
+  categories_json: string;
+  provider: string | null;
+  model: string | null;
+  created_at: string;
+  ideas_json: string;
 };
 
-const filePath = (id: string): string =>
-  path.join(BRAINSTORM_DIR, `${id}.json`);
+const rowToSession = (r: DbRow): BrainstormSession => {
+  const s: BrainstormSession = {
+    id: r.id,
+    topic: r.topic,
+    tone: r.tone,
+    pickedIdx: r.picked_idx,
+    categories: JSON.parse(r.categories_json) as TopicCategory[],
+    provider: (r.provider ?? undefined) as LLMProvider | undefined,
+    model: r.model ?? undefined,
+    createdAt: r.created_at,
+    ideas: JSON.parse(r.ideas_json) as BrainstormIdea[],
+  };
+  return normalizeSession(s);
+};
+
+const saveSession = (s: BrainstormSession): void => {
+  getDb()
+    .prepare(
+      `INSERT OR REPLACE INTO brainstorm_sessions
+        (id, topic, tone, picked_idx, categories_json, provider, model, created_at, ideas_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      s.id,
+      s.topic,
+      s.tone,
+      s.pickedIdx,
+      JSON.stringify(s.categories),
+      s.provider ?? null,
+      s.model ?? null,
+      s.createdAt,
+      JSON.stringify(s.ideas),
+    );
+};
 
 export async function listSessions(): Promise<BrainstormSession[]> {
-  await ensureDir();
-  let entries: string[];
-  try {
-    entries = await fs.readdir(BRAINSTORM_DIR);
-  } catch {
-    return [];
-  }
-  const ids = entries
-    .filter((f) => f.endsWith(".json") && !f.startsWith("."))
-    .map((f) => f.replace(/\.json$/, ""));
-  const sessions = await Promise.all(
-    ids.map(async (id) => {
-      try {
-        const buf = await fs.readFile(filePath(id), "utf-8");
-        return normalizeSession(JSON.parse(buf) as BrainstormSession);
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return sessions
-    .filter((s): s is BrainstormSession => s !== null)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM brainstorm_sessions ORDER BY created_at DESC",
+    )
+    .all() as DbRow[];
+  return rows.map(rowToSession);
 }
 
 const clampScore = (v: unknown): number => {
@@ -215,25 +236,18 @@ const normalizeSession = (s: BrainstormSession): BrainstormSession => {
 export async function getSession(
   id: string,
 ): Promise<BrainstormSession | null> {
-  try {
-    const buf = await fs.readFile(filePath(id), "utf-8");
-    return normalizeSession(JSON.parse(buf) as BrainstormSession);
-  } catch {
-    return null;
-  }
+  const row = getDb()
+    .prepare("SELECT * FROM brainstorm_sessions WHERE id = ?")
+    .get(id) as DbRow | undefined;
+  return row ? rowToSession(row) : null;
 }
 
 export async function deleteSession(id: string): Promise<boolean> {
-  // Whitelist: id phải khớp với pattern slug-only (no path chars)
   if (!/^[a-z0-9-]+$/.test(id)) return false;
-  try {
-    await fs.unlink(filePath(id));
-    return true;
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    if (err.code === "ENOENT") return false;
-    throw e;
-  }
+  const result = getDb()
+    .prepare("DELETE FROM brainstorm_sessions WHERE id = ?")
+    .run(id);
+  return result.changes > 0;
 }
 
 export async function updatePickedIdx(
@@ -250,7 +264,11 @@ export async function updatePickedIdx(
     }
   }
   s.pickedIdx = pickedIdx;
-  await fs.writeFile(filePath(s.id), JSON.stringify(s, null, 2));
+  getDb()
+    .prepare(
+      "UPDATE brainstorm_sessions SET picked_idx = ? WHERE id = ?",
+    )
+    .run(pickedIdx, id);
   return s;
 }
 
@@ -520,7 +538,6 @@ export async function generateAndSave(
     provider,
     model,
   };
-  await ensureDir();
-  await fs.writeFile(filePath(id), JSON.stringify(session, null, 2));
+  saveSession(session);
   return session;
 }

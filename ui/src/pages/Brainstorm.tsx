@@ -290,7 +290,7 @@ export function Brainstorm() {
                   ) : (
                     <Sparkles className="size-4" />
                   )}
-                  {genMut.isPending ? "Đang gen…" : "Generate"}
+                  {genMut.isPending ? "Đang tạo…" : "Tạo ý tưởng"}
                 </Button>
               </div>
               {genMut.isError && (
@@ -379,6 +379,7 @@ function HistorySidebar({
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <input
+            data-search
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Tìm topic / ý tưởng…"
@@ -723,7 +724,7 @@ function IdeaCard({
         )}
       </div>
       <div className="px-6 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
-        <CopyButton text={idea.title} label="Title" />
+        <CopyButton text={idea.title} label="Tiêu đề" />
         <CopyButton text={idea.hook} label="Hook" />
         <Button
           variant="outline"

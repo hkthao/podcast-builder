@@ -15,6 +15,12 @@ brainstorm/*
 !brainstorm/.gitkeep
 essays/*
 !essays/.gitkeep
+
+# SQLite DB (created/migrated tại data.db)
+data.db
+data.db-journal
+data.db-wal
+data.db-shm
 public/*
 !public/.gitkeep
 !public/brand/

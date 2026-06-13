@@ -67,7 +67,7 @@ export function KnowledgePage() {
       <header className="mb-6">
         <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
           <Network className="size-7 text-accent" />
-          Knowledge Graph
+          Bản đồ tri thức
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
           {total} concept đã dùng qua các session. Click concept → xem session
@@ -78,6 +78,7 @@ export function KnowledgePage() {
       <div className="mb-6 relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
+          data-search
           placeholder="Tìm framework / thinker / session topic…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

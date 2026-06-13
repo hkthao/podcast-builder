@@ -96,11 +96,11 @@ export function EpisodeEdit() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="size-4" />
-          Episodes
+          Danh sách tập
         </Link>
         <Card className="border-destructive/40 bg-destructive/5 p-6">
           <div className="font-medium text-destructive">
-            Không load được episode "{name}"
+            Không load được tập "{name}"
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             {String(epQ.error)}
@@ -126,7 +126,7 @@ export function EpisodeEdit() {
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft className="size-4" />
-        Episodes
+        Danh sách tập
       </Link>
 
       <header className="mb-6 flex items-start justify-between gap-6">
@@ -147,7 +147,7 @@ export function EpisodeEdit() {
                 title={ep.config.essayId}
               >
                 <FileText className="size-3" />
-                Linked essay: <code className="font-mono">{ep.config.essayId}</code>
+                Essay đã link: <code className="font-mono">{ep.config.essayId}</code>
               </Link>
             </p>
           )}
@@ -158,16 +158,16 @@ export function EpisodeEdit() {
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Meta icon={<Hash className="size-4" />} label="Episode #">
+        <Meta icon={<Hash className="size-4" />} label="Số tập">
           {String(ep.config.episodeNumber).padStart(3, "0")}
         </Meta>
         <Meta icon={<FileAudio2 className="size-4" />} label="Audio">
           {ep.audioPath ? "✓" : "—"}
         </Meta>
-        <Meta icon={<Calendar className="size-4" />} label="Rendered">
+        <Meta icon={<Calendar className="size-4" />} label="Đã render">
           {ep.renderedAt ? new Date(ep.renderedAt).toLocaleDateString() : "—"}
         </Meta>
-        <Meta icon={<Download className="size-4" />} label="Output">
+        <Meta icon={<Download className="size-4" />} label="Đầu ra">
           {ep.hasOutput ? "✓ mp4" : "—"}
         </Meta>
       </div>
@@ -178,13 +178,13 @@ export function EpisodeEdit() {
           active={tab === "config"}
           onClick={() => setTab("config")}
           icon={<Settings className="size-4" />}
-          label="Config"
+          label="Cấu hình"
         />
         <TabButton
           active={tab === "scenes"}
           onClick={() => setTab("scenes")}
           icon={<Film className="size-4" />}
-          label={`Scenes${planCount > 0 ? ` (${planCount})` : ""}`}
+          label={`Cảnh${planCount > 0 ? ` (${planCount})` : ""}`}
         />
         <TabButton
           active={tab === "transcript"}
@@ -196,13 +196,13 @@ export function EpisodeEdit() {
           active={tab === "references"}
           onClick={() => setTab("references")}
           icon={<Library className="size-4" />}
-          label={`References${refsCount > 0 ? ` (${refsCount})` : ""}`}
+          label={`Tài liệu${refsCount > 0 ? ` (${refsCount})` : ""}`}
         />
         <TabButton
           active={tab === "files"}
           onClick={() => setTab("files")}
           icon={<Files className="size-4" />}
-          label={`Files${filesCount > 0 ? ` (${filesCount})` : ""}`}
+          label={`File${filesCount > 0 ? ` (${filesCount})` : ""}`}
         />
       </div>
 
@@ -400,7 +400,7 @@ function ScenesPanel({
             ) : (
               <Film className="size-3.5" />
             )}
-            {thumbUrls.length > 0 ? "Render lại thumbs" : "Render thumbs"}
+            {thumbUrls.length > 0 ? "Render lại ảnh" : "Render ảnh cảnh"}
           </Button>
         </div>
       </div>
@@ -408,7 +408,7 @@ function ScenesPanel({
         <div className="px-6 py-2 bg-destructive/10 text-destructive text-sm border-b">
           {saveMutation.isError
             ? `Save thất bại: ${String(saveMutation.error)}`
-            : `Render thumbs thất bại: ${String(genThumbsMut.error)}`}
+            : `Render ảnh thất bại: ${String(genThumbsMut.error)}`}
         </div>
       )}
       <div className="divide-y">
@@ -786,7 +786,7 @@ function TranscriptPanel({
 
       {saveMutation.isError && (
         <div className="px-6 py-2 bg-destructive/10 text-destructive text-sm border-b">
-          Save fail: {String(saveMutation.error)}
+          Lưu thất bại: {String(saveMutation.error)}
         </div>
       )}
 
@@ -944,7 +944,7 @@ function ReferencesPanel({
             variant={showPicker ? "secondary" : "default"}
           >
             <Plus className="size-4" />
-            {showPicker ? "Đóng" : "Add from library"}
+            {showPicker ? "Đóng" : "Thêm từ thư viện"}
           </Button>
         </div>
 
@@ -1173,7 +1173,7 @@ function FilesPanel({
             <Button variant="outline" size="sm" asChild>
               <a href={fullVideo.url} download>
                 <Download className="size-4" />
-                Download
+                Tải về
               </a>
             </Button>
             <Button
@@ -1218,7 +1218,7 @@ function FilesPanel({
             <Button variant="outline" size="sm" asChild>
               <a href={previewVideo.url} download>
                 <Download className="size-4" />
-                Download
+                Tải về
               </a>
             </Button>
             <Button
@@ -1356,7 +1356,7 @@ function FileSection({
                 <Button variant="outline" size="sm" asChild>
                   <a href={f.url} download={f.filename}>
                     <Download className="size-3.5" />
-                    Download
+                    Tải về
                   </a>
                 </Button>
                 <Button

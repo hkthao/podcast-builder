@@ -13,6 +13,7 @@
     "preview": "tsx scripts/make.ts --preview",
     "spell-fix": "tsx scripts/spell-fix.ts",
     "render": "remotion render",
+    "migrate": "tsx scripts/migrate-json-to-sqlite.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@remotion/media-parser": "4.0.420",
     "@remotion/media-utils": "4.0.420",
     "@remotion/renderer": "4.0.420",
+    "better-sqlite3": "^12.10.0",
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.2",
     "hono": "^4.12.25",
@@ -35,6 +37,7 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "22.10.2",
     "@types/react": "19.0.2",
     "concurrently": "^10.0.3",

@@ -5,11 +5,8 @@
  *
  * Optional `brainstormRef` link tới ý tưởng đã pick để truy ngược.
  */
-import path from "node:path";
-import fs from "node:fs/promises";
 import type { LLMProvider } from "./llm-providers";
-
-const ESSAYS_DIR = path.resolve("essays");
+import { getDb } from "./db";
 
 export type EssayBrainstormRef = {
   id: string;
@@ -40,69 +37,77 @@ const slugify = (s: string): string =>
     .replace(/^-|-$/g, "")
     .slice(0, 60);
 
-const ensureDir = async () => {
-  await fs.mkdir(ESSAYS_DIR, { recursive: true });
-};
-
-const filePath = (id: string): string => path.join(ESSAYS_DIR, `${id}.json`);
-
 const validId = (id: string): boolean => /^[a-z0-9-]+$/.test(id);
 
+type DbRow = {
+  id: string;
+  title: string;
+  outline: string | null;
+  content: string;
+  nlm_prompt: string | null;
+  brainstorm_ref_json: string | null;
+  provider: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const rowToEssay = (r: DbRow): Essay => ({
+  id: r.id,
+  title: r.title,
+  outline: r.outline,
+  content: r.content,
+  nlmPrompt: r.nlm_prompt,
+  brainstormRef: r.brainstorm_ref_json
+    ? (JSON.parse(r.brainstorm_ref_json) as EssayBrainstormRef)
+    : null,
+  provider: r.provider as LLMProvider,
+  model: r.model,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
 export async function listEssays(): Promise<Essay[]> {
-  await ensureDir();
-  let entries: string[];
-  try {
-    entries = await fs.readdir(ESSAYS_DIR);
-  } catch {
-    return [];
-  }
-  const ids = entries
-    .filter((f) => f.endsWith(".json") && !f.startsWith("."))
-    .map((f) => f.replace(/\.json$/, ""));
-  const essays = await Promise.all(
-    ids.map(async (id) => {
-      try {
-        const buf = await fs.readFile(filePath(id), "utf-8");
-        const e = JSON.parse(buf) as Essay;
-        if (e.nlmPrompt === undefined) e.nlmPrompt = null;
-        return e;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return essays
-    .filter((e): e is Essay => e !== null)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rows = getDb()
+    .prepare("SELECT * FROM essays ORDER BY updated_at DESC")
+    .all() as DbRow[];
+  return rows.map(rowToEssay);
 }
 
 export async function getEssay(id: string): Promise<Essay | null> {
-  try {
-    const buf = await fs.readFile(filePath(id), "utf-8");
-    const e = JSON.parse(buf) as Essay;
-    // Normalize: legacy essays trước khi thêm field nlmPrompt
-    if (e.nlmPrompt === undefined) e.nlmPrompt = null;
-    return e;
-  } catch {
-    return null;
-  }
+  const row = getDb()
+    .prepare("SELECT * FROM essays WHERE id = ?")
+    .get(id) as DbRow | undefined;
+  return row ? rowToEssay(row) : null;
 }
 
 export async function deleteEssay(id: string): Promise<boolean> {
   if (!validId(id)) return false;
-  try {
-    await fs.unlink(filePath(id));
-    return true;
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    if (err.code === "ENOENT") return false;
-    throw e;
-  }
+  const result = getDb()
+    .prepare("DELETE FROM essays WHERE id = ?")
+    .run(id);
+  return result.changes > 0;
 }
 
 export async function saveEssay(essay: Essay): Promise<void> {
-  await ensureDir();
-  await fs.writeFile(filePath(essay.id), JSON.stringify(essay, null, 2));
+  getDb()
+    .prepare(
+      `INSERT OR REPLACE INTO essays
+         (id, title, outline, content, nlm_prompt, brainstorm_ref_json, provider, model, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      essay.id,
+      essay.title,
+      essay.outline,
+      essay.content,
+      essay.nlmPrompt,
+      essay.brainstormRef ? JSON.stringify(essay.brainstormRef) : null,
+      essay.provider,
+      essay.model,
+      essay.createdAt,
+      essay.updatedAt,
+    );
 }
 
 export async function updateEssayContent(

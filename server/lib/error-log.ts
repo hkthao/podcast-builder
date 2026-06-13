@@ -1,12 +1,9 @@
 /**
- * Persistent error log — tmp/server-error.log JSONL format.
- * Persist qua restart để user vẫn xem được lỗi sau khi server reload.
- * Auto-rotate khi vượt MAX_ENTRIES (giữ N entry mới nhất).
+ * Persistent error log — SQLite table `server_errors`.
+ * Persist qua restart. Auto-rotate khi vượt MAX_ENTRIES.
  */
-import fs from "node:fs";
-import path from "node:path";
+import { getDb } from "./db";
 
-const LOG_PATH = path.resolve("tmp", "server-error.log");
 const MAX_ENTRIES = 100;
 
 export type ErrorSource = "uncaught" | "rejection" | "api" | "manual";
@@ -22,18 +19,13 @@ export type ErrorEntry = {
   } | null;
 };
 
-const ensureDir = () => {
-  const dir = path.dirname(LOG_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-};
-
 export function logError(input: {
   source: ErrorSource;
   error: unknown;
   context?: ErrorEntry["context"];
 }): void {
   try {
-    ensureDir();
+    const db = getDb();
     const err = input.error;
     const message =
       err instanceof Error
@@ -42,36 +34,45 @@ export function logError(input: {
           ? err
           : JSON.stringify(err);
     const stack = err instanceof Error ? (err.stack ?? null) : null;
-    const entry: ErrorEntry = {
-      timestamp: new Date().toISOString(),
-      source: input.source,
+    db.prepare(
+      `INSERT INTO server_errors (timestamp, source, message, stack, context_json)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(
+      new Date().toISOString(),
+      input.source,
       message,
       stack,
-      context: input.context ?? null,
-    };
-    fs.appendFileSync(LOG_PATH, JSON.stringify(entry) + "\n", "utf-8");
-    // Console mirror để dev cũng thấy ngay
+      input.context ? JSON.stringify(input.context) : null,
+    );
     console.error(
       `[error-log:${input.source}]`,
       message,
       input.context ?? "",
     );
-    rotateIfNeeded();
+    rotateIfNeeded(db);
   } catch (e) {
     // Logging không được throw — chỉ console.error
     console.error("[error-log] FAILED to log error:", e);
   }
 }
 
-function rotateIfNeeded(): void {
+function rotateIfNeeded(db: ReturnType<typeof getDb>): void {
   try {
-    if (!fs.existsSync(LOG_PATH)) return;
-    const content = fs.readFileSync(LOG_PATH, "utf-8");
-    const lines = content.split("\n").filter((l) => l.trim().length > 0);
-    if (lines.length <= MAX_ENTRIES) return;
-    // Giữ N entry mới nhất
-    const kept = lines.slice(-MAX_ENTRIES);
-    fs.writeFileSync(LOG_PATH, kept.join("\n") + "\n", "utf-8");
+    const count = (
+      db.prepare("SELECT COUNT(*) as c FROM server_errors").get() as {
+        c: number;
+      }
+    ).c;
+    if (count <= MAX_ENTRIES) return;
+    // Xoá các entry cũ nhất (id thấp nhất), giữ MAX_ENTRIES mới nhất
+    db.prepare(
+      `DELETE FROM server_errors
+       WHERE id IN (
+         SELECT id FROM server_errors
+         ORDER BY id ASC
+         LIMIT ?
+       )`,
+    ).run(count - MAX_ENTRIES);
   } catch (e) {
     console.error("[error-log] rotate failed:", e);
   }
@@ -79,19 +80,27 @@ function rotateIfNeeded(): void {
 
 export function listErrors(): ErrorEntry[] {
   try {
-    if (!fs.existsSync(LOG_PATH)) return [];
-    const content = fs.readFileSync(LOG_PATH, "utf-8");
-    const entries: ErrorEntry[] = [];
-    for (const line of content.split("\n")) {
-      if (!line.trim()) continue;
-      try {
-        entries.push(JSON.parse(line) as ErrorEntry);
-      } catch {
-        /* skip corrupted line */
-      }
-    }
-    // Mới nhất trước
-    return entries.reverse();
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT timestamp, source, message, stack, context_json
+         FROM server_errors
+         ORDER BY id DESC`,
+      )
+      .all() as Array<{
+      timestamp: string;
+      source: string;
+      message: string;
+      stack: string | null;
+      context_json: string | null;
+    }>;
+    return rows.map((r) => ({
+      timestamp: r.timestamp,
+      source: r.source as ErrorSource,
+      message: r.message,
+      stack: r.stack,
+      context: r.context_json ? JSON.parse(r.context_json) : null,
+    }));
   } catch {
     return [];
   }
@@ -99,7 +108,8 @@ export function listErrors(): ErrorEntry[] {
 
 export function clearErrors(): void {
   try {
-    if (fs.existsSync(LOG_PATH)) fs.unlinkSync(LOG_PATH);
+    const db = getDb();
+    db.prepare("DELETE FROM server_errors").run();
   } catch (e) {
     console.error("[error-log] clear failed:", e);
   }

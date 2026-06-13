@@ -84,15 +84,15 @@ export function ReferenceList() {
     <div className="container max-w-6xl py-10">
       <header className="mb-6 flex items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-serif tracking-tight">References</h1>
+          <h1 className="text-3xl font-serif tracking-tight">Tài liệu</h1>
           <p className="mt-1 text-muted-foreground text-sm">
             {filtersQ.data?.items.length ?? 0} tài liệu —
-            chỉ lưu metadata, KHÔNG download. Click "Open" để mở browser.
+            chỉ lưu metadata, KHÔNG tải về. Bấm "Mở" để xem trên browser.
           </p>
         </div>
         <Button onClick={() => setShowAddForm((v) => !v)}>
           {showAddForm ? <XIcon className="size-4" /> : <Plus className="size-4" />}
-          {showAddForm ? "Đóng form" : "Thêm reference"}
+          {showAddForm ? "Đóng form" : "Thêm tài liệu"}
         </Button>
       </header>
 
@@ -110,6 +110,7 @@ export function ReferenceList() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            data-search
             placeholder="Tìm theo title, author, URL, notes…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -448,7 +449,7 @@ function ReferenceRow({ ref }: { ref: Reference }) {
         <Button variant="outline" size="sm" asChild>
           <a href={ref.url} target="_blank" rel="noreferrer noopener">
             <ExternalLink className="size-3.5" />
-            Open page
+            Mở trang
           </a>
         </Button>
         {ref.pdfUrl && (
@@ -460,7 +461,7 @@ function ReferenceRow({ ref }: { ref: Reference }) {
               download
             >
               <FileDown className="size-3.5" />
-              Open PDF
+              Mở PDF
             </a>
           </Button>
         )}
