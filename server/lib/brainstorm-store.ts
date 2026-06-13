@@ -87,6 +87,30 @@ const DEFAULT_SCORES: BrainstormScores = {
   originality: 5,
 };
 
+/**
+ * Phase C: Topic Database — category enum cố định để tránh fragmentation.
+ * Mỗi session 1-3 category. UI dùng để filter + dedup check.
+ */
+export const TOPIC_CATEGORIES = [
+  "Meaning",
+  "Psychology",
+  "Time",
+  "AI",
+  "Loss",
+  "Freedom",
+  "Self",
+  "Death",
+  "Memory",
+  "Connection",
+  "Power",
+  "Technology",
+  "Happiness",
+  "Solitude",
+  "Ethics",
+  "Future",
+] as const;
+export type TopicCategory = (typeof TOPIC_CATEGORIES)[number];
+
 export type BrainstormSession = {
   id: string;
   topic: string;
@@ -94,6 +118,8 @@ export type BrainstormSession = {
   ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
+  /** Phase C: 1-3 category cố định từ TOPIC_CATEGORIES. [] cho legacy. */
+  categories: TopicCategory[];
   /** Provider+model dùng để gen. Optional cho session cũ. */
   provider?: LLMProvider;
   model?: string;
@@ -159,6 +185,14 @@ const normalizeScores = (raw: unknown): BrainstormScores => {
 };
 
 const normalizeSession = (s: BrainstormSession): BrainstormSession => {
+  // Phase C: backfill categories cho session legacy
+  if (!Array.isArray(s.categories)) {
+    s.categories = [];
+  } else {
+    s.categories = s.categories.filter((c): c is TopicCategory =>
+      (TOPIC_CATEGORIES as readonly string[]).includes(c),
+    );
+  }
   // Backfill cho idea legacy (trước v2)
   for (const idea of s.ideas) {
     if (typeof idea.outline !== "string") idea.outline = "";
@@ -326,8 +360,14 @@ Cho 1 chủ đề (topic) + 1 tone, hãy đề xuất {N} ý tưởng tập podc
    - Mục 11: KHÔNG bao giờ kết bằng lời khuyên ("hãy trân trọng…"). Phải là câu hỏi mở để người xem mang theo.
    - Mục 12: 3-5 hình ảnh ẩn dụ CỤ THỂ (đồng hồ cát chảy / chiếc lá vàng rơi / cửa khép / ánh sáng cuối ngày / sợi chỉ đứt) — sẽ dùng cho AI gen ảnh sau này.
 
+Phase C — Topic Database:
+Ngoài "ideas", emit thêm field "categories" cấp session: 1-3 tag từ enum CỐ ĐỊNH (chọn category phù hợp nhất chủ đề, KHÔNG bịa tag khác):
+Meaning, Psychology, Time, AI, Loss, Freedom, Self, Death, Memory, Connection, Power, Technology, Happiness, Solitude, Ethics, Future.
+
+Nếu user content có "EXISTING TOPICS" list → DIVERSIFY: nếu topic mới gần trùng với có sẵn, gen ideas với GÓC NHÌN KHÁC (lens khác, hoặc reframe). KHÔNG lặp angle/framework/thinker đã dùng.
+
 Output JSON CHẶT theo schema:
-{"ideas": [{"title":"...","hook":"...","angle":"...","why":"...","observation":"...","scores":{"universal":<int>,"emotional":<int>,"philosophical":<int>,"aiRelevance":<int>,"originality":<int>},"knowledgeMap":["...","..."],"contrarianView":"...","thumbnailHooks":["...","...","..."],"futureConnection":"...","historicalExamples":["...","..."],"storyBank":["[Hiện đại] ...","[Cá nhân] ..."],"outline":"..."}, ...]}
+{"categories":["Loss","Time"],"ideas": [{"title":"...","hook":"...","angle":"...","why":"...","observation":"...","scores":{"universal":<int>,"emotional":<int>,"philosophical":<int>,"aiRelevance":<int>,"originality":<int>},"knowledgeMap":["...","..."],"contrarianView":"...","thumbnailHooks":["...","...","..."],"futureConnection":"...","historicalExamples":["...","..."],"storyBank":["[Hiện đại] ...","[Cá nhân] ..."],"outline":"..."}, ...]}
 
 Không thêm field, không markdown wrap toàn JSON, không lời mở đầu.`;
 
@@ -362,18 +402,42 @@ export async function generateAndSave(
     throw err;
   }
 
+  // Pass danh sách topic đã có để LLM diversify (Phase C dedup)
+  const existing = await listSessions();
+  const existingTopics = existing
+    .slice(0, 30) // 30 session gần nhất là đủ context
+    .map((s) => s.topic);
+
+  const userPayload: Record<string, unknown> = { topic, tone };
+  if (existingTopics.length > 0) {
+    userPayload["EXISTING TOPICS (avoid duplication, diversify angle)"] =
+      existingTopics;
+  }
+
   const content = await chat({
     provider,
     model,
     systemPrompt: SYSTEM_PROMPT.replace("{N}", String(count)),
-    userContent: JSON.stringify({ topic, tone }),
+    userContent: JSON.stringify(userPayload),
     temperature: 0.9,
     jsonMode: true,
   });
-  const parsed = JSON.parse(content) as { ideas?: unknown };
+  const parsed = JSON.parse(content) as {
+    ideas?: unknown;
+    categories?: unknown;
+  };
   if (!Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
     throw new Error("LLM response thiếu mảng 'ideas'");
   }
+  const categories = Array.isArray(parsed.categories)
+    ? (parsed.categories as unknown[])
+        .filter(
+          (c): c is TopicCategory =>
+            typeof c === "string" &&
+            (TOPIC_CATEGORIES as readonly string[]).includes(c),
+        )
+        .slice(0, 3)
+    : [];
   const ideas: BrainstormIdea[] = [];
   for (const raw of parsed.ideas as unknown[]) {
     const o = raw as Partial<BrainstormIdea>;
@@ -452,6 +516,7 @@ export async function generateAndSave(
     ideas,
     createdAt: now.toISOString(),
     pickedIdx: null,
+    categories,
     provider,
     model,
   };

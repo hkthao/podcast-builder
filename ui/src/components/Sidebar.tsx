@@ -8,6 +8,7 @@ import {
   Lightbulb,
   FileText,
   Workflow as WorkflowIcon,
+  Network,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -61,6 +62,11 @@ export function Sidebar() {
           to="/essay"
           icon={<FileText className="size-4" />}
           label="Essay"
+        />
+        <NavItem
+          to="/knowledge"
+          icon={<Network className="size-4" />}
+          label="Knowledge"
         />
         <NavItem
           to="/references"

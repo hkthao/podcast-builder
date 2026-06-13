@@ -165,6 +165,13 @@ KỸ THUẬT VIẾT BẮT BUỘC:
 
 OUTPUT: markdown thuần, KHÔNG lời mở đầu kiểu "Đây là bài viết:", KHÔNG meta-text, KHÔNG dấu --- ngăn cách. Section header viết trực tiếp như tiêu đề thường (1 dòng, không # prefix).
 
+DÀN Ý INPUT có thể chứa các SECTION PHỤ LỤC sau dấu "---" — TẬN DỤNG TRIỆT ĐỂ:
+- "QUAN SÁT GỐC" → dùng làm hook mở bài (1 quan sát đời thường cụ thể).
+- "PHẢN BIỆN" → BẮT BUỘC có 1 section thân bài làm steel-man phản biện + rebuttal. Essay 2 chiều mới sâu.
+- "NHÂN VẬT/SỰ KIỆN LỊCH SỬ" → dùng làm anchor cho ÍT NHẤT 1 section thân bài (1 ví dụ lịch sử đáng nhớ hơn 10 phút lý thuyết).
+- "STORY BANK" → chèn 1-2 câu chuyện cụ thể vào essay để thay vì lý thuyết suông. Đặc biệt giữ những câu "[Cá nhân]" đời thường VN làm điểm chạm cảm xúc.
+- "FUTURE/AGI ENDING" → dùng làm 1 section gần cuối hoặc gài vào kết bài. AI/AGI projection là DNA kênh, đoạn kết mạnh.
+
 Nếu user cung cấp outline, bám sát outline. Nếu không, tự lập dàn ý hợp lý theo cấu trúc trên.`;
 
 export function buildEssayUserPrompt(

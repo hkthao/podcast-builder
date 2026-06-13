@@ -19,6 +19,7 @@ import {
   type BrainstormIdea,
   type BrainstormScores,
   type LLMProvider,
+  type TopicCategory,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -321,54 +322,145 @@ export function Brainstorm() {
           )}
         </div>
 
-        {/* History sidebar */}
+        {/* History sidebar — Phase C: search + filter + categories */}
         <aside>
-          <Card className="p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b bg-secondary/30 flex items-center gap-2">
-              <History className="size-4" />
-              <span className="font-medium text-sm">Lịch sử</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {sessions.length}
-              </span>
-            </div>
-            {sessions.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground text-center">
-                Chưa có
-              </p>
-            ) : (
-              <div className="divide-y max-h-[600px] overflow-y-auto">
-                {sessions.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setActiveId(s.id)}
-                    className={cn(
-                      "w-full text-left px-4 py-3 hover:bg-secondary/40 transition-colors",
-                      activeSession?.id === s.id && "bg-secondary/60",
-                    )}
-                  >
-                    <p className="text-sm line-clamp-2 font-medium">{s.topic}</p>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{s.ideas.length} ý</span>
-                      {s.provider && (
-                        <span className="font-mono truncate">
-                          · {s.provider}
-                        </span>
-                      )}
-                      {s.pickedIdx !== null && (
-                        <Badge variant="secondary" className="ml-auto">
-                          <CheckCircle2 className="size-3" />
-                          picked
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
+          <HistorySidebar
+            sessions={sessions}
+            activeId={activeSession?.id ?? null}
+            onSelect={setActiveId}
+          />
         </aside>
       </div>
     </div>
+  );
+}
+
+function HistorySidebar({
+  sessions,
+  activeId,
+  onSelect,
+}: {
+  sessions: BrainstormSession[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [catFilter, setCatFilter] = useState<TopicCategory | null>(null);
+  const allCats = new Set<TopicCategory>();
+  for (const s of sessions) for (const c of s.categories) allCats.add(c);
+
+  const filtered = sessions.filter((s) => {
+    if (catFilter && !s.categories.includes(catFilter)) return false;
+    if (q) {
+      const needle = q.toLowerCase();
+      const haystack = [
+        s.topic,
+        s.tone,
+        ...s.ideas.map((i) => i.title),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+
+  return (
+    <Card className="p-0 overflow-hidden sticky top-4">
+      <div className="px-4 py-3 border-b bg-secondary/30 flex items-center gap-2">
+        <History className="size-4" />
+        <span className="font-medium text-sm">Lịch sử</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {filtered.length}/{sessions.length}
+        </span>
+      </div>
+      <div className="p-2 space-y-2 border-b">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Tìm topic / ý tưởng…"
+          className="w-full h-8 px-2 rounded border bg-background text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+        {allCats.size > 0 && (
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setCatFilter(null)}
+              className={cn(
+                "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                catFilter === null
+                  ? "border-accent bg-accent/20"
+                  : "border-muted-foreground/30 hover:bg-secondary",
+              )}
+            >
+              all
+            </button>
+            {Array.from(allCats)
+              .sort()
+              .map((c) => (
+                <button
+                  key={c}
+                  onClick={() =>
+                    setCatFilter(catFilter === c ? null : c)
+                  }
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                    catFilter === c
+                      ? "border-accent bg-accent/20"
+                      : "border-muted-foreground/30 hover:bg-secondary",
+                  )}
+                >
+                  {c}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+      {filtered.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground text-center">
+          {sessions.length === 0 ? "Chưa có" : "Không khớp filter"}
+        </p>
+      ) : (
+        <div className="divide-y max-h-[600px] overflow-y-auto">
+          {filtered.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onSelect(s.id)}
+              className={cn(
+                "w-full text-left px-4 py-3 hover:bg-secondary/40 transition-colors",
+                activeId === s.id && "bg-secondary/60",
+              )}
+            >
+              <p className="text-sm line-clamp-2 font-medium">{s.topic}</p>
+              {s.categories.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {s.categories.map((c) => (
+                    <Badge
+                      key={c}
+                      variant="outline"
+                      className="text-[10px] font-normal h-4 px-1"
+                    >
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{s.ideas.length} ý</span>
+                {s.provider && (
+                  <span className="font-mono truncate">· {s.provider}</span>
+                )}
+                {s.pickedIdx !== null && (
+                  <Badge variant="secondary" className="ml-auto">
+                    <CheckCircle2 className="size-3" />
+                    picked
+                  </Badge>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -403,6 +495,19 @@ function IdeasView({
             {" · "}
             {new Date(session.createdAt).toLocaleString("vi-VN")}
           </p>
+          {session.categories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {session.categories.map((c) => (
+                <Badge
+                  key={c}
+                  variant="secondary"
+                  className="text-xs font-normal"
+                >
+                  #{c}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
         <Button
           variant="outline"
@@ -620,11 +725,10 @@ function IdeaCard({
           variant="outline"
           size="sm"
           onClick={() => {
-            const fallbackOutline = `Mở: ${idea.hook}\n\n1. Góc nhìn: ${idea.angle}\n\nKết: ${idea.why}`;
             navigate("/essay", {
               state: {
                 prefillTitle: idea.title,
-                prefillOutline: idea.outline || fallbackOutline,
+                prefillOutline: composeOutlineForEssay(idea),
                 brainstormRef: { id: sessionId, ideaIdx: idx },
               },
             });
@@ -651,6 +755,44 @@ function IdeaCard({
       </div>
     </Card>
   );
+}
+
+/**
+ * Compose dàn ý đầy đủ feed vào Essay gen: 12-mục outline (Framework v1) +
+ * 4 phụ lục từ Phase A/B (Contrarian / Historical / Story bank / Future).
+ */
+function composeOutlineForEssay(idea: BrainstormIdea): string {
+  const parts: string[] = [];
+  if (idea.outline) {
+    parts.push(idea.outline);
+  } else {
+    // Fallback cho legacy idea không có outline
+    parts.push(`Mở: ${idea.hook}\n\n1. Góc nhìn: ${idea.angle}\n\nKết: ${idea.why}`);
+  }
+  if (idea.observation) {
+    parts.push(`QUAN SÁT GỐC\n${idea.observation}`);
+  }
+  if (idea.contrarianView) {
+    parts.push(
+      `PHẢN BIỆN (steel-man + rebuttal trong essay)\n${idea.contrarianView}`,
+    );
+  }
+  if (idea.historicalExamples.length > 0) {
+    parts.push(
+      `NHÂN VẬT/SỰ KIỆN LỊCH SỬ (dùng trong section thân bài)\n${idea.historicalExamples.map((h) => `- ${h}`).join("\n")}`,
+    );
+  }
+  if (idea.storyBank.length > 0) {
+    parts.push(
+      `STORY BANK (chèn 1-2 câu chuyện vào essay để cụ thể hoá)\n${idea.storyBank.map((s) => `- ${s}`).join("\n")}`,
+    );
+  }
+  if (idea.futureConnection) {
+    parts.push(
+      `FUTURE/AGI ENDING (dùng cho 1 section gần cuối hoặc kết bài)\n${idea.futureConnection}`,
+    );
+  }
+  return parts.join("\n\n---\n\n");
 }
 
 function avgScore(s: BrainstormScores): number {

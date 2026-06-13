@@ -6,6 +6,7 @@ import { ReferenceList } from "./pages/ReferenceList";
 import { Brainstorm } from "./pages/Brainstorm";
 import { EssayPage } from "./pages/Essay";
 import { WorkflowPage } from "./pages/Workflow";
+import { KnowledgePage } from "./pages/Knowledge";
 import { useEpisodesChangedSync } from "./lib/sse";
 
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
           <Route path="/brainstorm" element={<Brainstorm />} />
           <Route path="/essay" element={<EssayPage />} />
           <Route path="/workflow" element={<WorkflowPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
         </Routes>
       </AppLayout>
     </BrowserRouter>

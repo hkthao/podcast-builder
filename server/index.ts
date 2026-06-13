@@ -10,6 +10,7 @@ import { essayRoutes } from "./routes/essay";
 import { llmRoutes } from "./routes/llm";
 import { referencesRoutes } from "./routes/references";
 import { renderRoutes } from "./routes/render";
+import { knowledgeRoutes } from "./routes/knowledge";
 import { workflowRoutes } from "./routes/workflow";
 import { startFsWatcher } from "./lib/events";
 import { sseFromBus } from "./lib/sse";
@@ -69,6 +70,7 @@ app.route("/api/brainstorm", brainstormRoutes);
 app.route("/api/essay", essayRoutes);
 app.route("/api/llm", llmRoutes);
 app.route("/api/workflow", workflowRoutes);
+app.route("/api/knowledge", knowledgeRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.

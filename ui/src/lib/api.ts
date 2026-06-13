@@ -227,6 +227,24 @@ export type LLMModels = {
   ollama: LLMModel[];
 };
 
+export type TopicCategory =
+  | "Meaning"
+  | "Psychology"
+  | "Time"
+  | "AI"
+  | "Loss"
+  | "Freedom"
+  | "Self"
+  | "Death"
+  | "Memory"
+  | "Connection"
+  | "Power"
+  | "Technology"
+  | "Happiness"
+  | "Solitude"
+  | "Ethics"
+  | "Future";
+
 export type BrainstormSession = {
   id: string;
   topic: string;
@@ -234,6 +252,7 @@ export type BrainstormSession = {
   ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
+  categories: TopicCategory[];
   provider?: LLMProvider;
   model?: string;
 };
@@ -261,6 +280,18 @@ export type EssayStreamEvent =
   | { type: "delta"; text: string }
   | { type: "done"; essay: Essay }
   | { type: "error"; error: string };
+
+export type KnowledgeEntry = {
+  name: string;
+  group: string;
+  count: number;
+  sessions: Array<{ id: string; topic: string; createdAt: string }>;
+};
+
+export type KnowledgeGraph = {
+  groups: Record<string, KnowledgeEntry[]>;
+  total: number;
+};
 
 export type WorkflowChain = {
   id: string;
@@ -491,6 +522,8 @@ export const api = {
 
   listWorkflow: () =>
     jsonFetch<{ chains: WorkflowChain[] }>("/api/workflow"),
+
+  getKnowledgeGraph: () => jsonFetch<KnowledgeGraph>("/api/knowledge"),
 
   listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
   getEssay: (id: string) =>
