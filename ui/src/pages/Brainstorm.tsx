@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  ChevronDown,
 } from "lucide-react";
 import {
   api,
@@ -482,12 +483,40 @@ function IdeasView({
   onDelete: () => void;
   deleting: boolean;
 }) {
+  const [topicExpanded, setTopicExpanded] = useState(false);
+  // Collapse nếu topic dài > 200 chars (~3 dòng), short topic không show toggle
+  const isLong = session.topic.length > 200;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium text-sm">{session.topic}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "font-medium text-sm leading-relaxed whitespace-pre-wrap",
+              isLong && !topicExpanded && "line-clamp-3",
+            )}
+          >
+            {session.topic}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setTopicExpanded((v) => !v)}
+              className="mt-1 text-xs text-accent hover:underline inline-flex items-center gap-1"
+            >
+              {topicExpanded ? (
+                <>
+                  <ChevronDown className="size-3 rotate-180" />
+                  Thu gọn
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="size-3" />
+                  Xem thêm ({session.topic.length} ký tự)
+                </>
+              )}
+            </button>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
             {session.tone}
             {session.provider && session.model && (
               <>
@@ -564,6 +593,8 @@ function IdeaCard({
   loading: boolean;
 }) {
   const navigate = useNavigate();
+  // Picked → mở mặc định, others collapsed
+  const [expanded, setExpanded] = useState(picked);
   return (
     <Card
       className={cn(
@@ -571,7 +602,16 @@ function IdeaCard({
         picked && "border-accent ring-1 ring-accent/40",
       )}
     >
-      <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full px-6 py-3 border-b bg-secondary/30 flex items-center gap-2 hover:bg-secondary/50 transition-colors text-left"
+      >
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform shrink-0",
+            !expanded && "-rotate-90",
+          )}
+        />
         <Badge variant="outline" className="font-mono">
           #{String(idx + 1).padStart(2, "0")}
         </Badge>
@@ -591,7 +631,15 @@ function IdeaCard({
             Đã pick
           </Badge>
         )}
-      </div>
+      </button>
+      {!expanded && (
+        <div className="px-6 py-3 border-b">
+          <p className="italic text-sm text-muted-foreground leading-relaxed line-clamp-2">
+            {idea.hook}
+          </p>
+        </div>
+      )}
+      {expanded && (
       <div className="px-6 py-4 space-y-3">
         {idea.observation && (
           <div className="rounded border-l-2 border-accent/40 bg-secondary/40 px-3 py-2">
@@ -723,6 +771,7 @@ function IdeaCard({
           </details>
         )}
       </div>
+      )}
       <div className="px-6 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
         <CopyButton text={idea.title} label="Tiêu đề" />
         <CopyButton text={idea.hook} label="Hook" />

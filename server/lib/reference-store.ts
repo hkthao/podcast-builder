@@ -95,13 +95,20 @@ const validateInput = (
   partial = false,
 ): { ok: true; data: Partial<Reference> } | { ok: false; error: string } => {
   if (!partial) {
-    if (typeof ref.url !== "string" || !ref.url.trim()) {
-      return { ok: false, error: "url là bắt buộc" };
+    const hasUrl = typeof ref.url === "string" && ref.url.trim().length > 0;
+    const hasPdf = typeof ref.pdfUrl === "string" && ref.pdfUrl.trim().length > 0;
+    if (!hasUrl && !hasPdf) {
+      return {
+        ok: false,
+        error: "Cần ít nhất 1 trong 2: URL trang hoặc URL PDF",
+      };
     }
-    try {
-      new URL(ref.url);
-    } catch {
-      return { ok: false, error: `url không hợp lệ: ${ref.url}` };
+    if (hasUrl) {
+      try {
+        new URL(ref.url!);
+      } catch {
+        return { ok: false, error: `url không hợp lệ: ${ref.url}` };
+      }
     }
     if (typeof ref.title !== "string" || !ref.title.trim()) {
       return { ok: false, error: "title là bắt buộc" };
@@ -188,10 +195,15 @@ export async function addReference(
     (err as Error & { code: string }).code = "VALIDATION";
     throw err;
   }
+  // Fallback: nếu user chỉ paste PDF URL → dùng làm url chính để dedup
+  const pdfUrlClean = input.pdfUrl ? String(input.pdfUrl).trim() : "";
+  const urlFinal =
+    input.url && input.url.trim().length > 0 ? input.url.trim() : pdfUrlClean;
+
   const db = getDb();
   const existingRow = db
     .prepare("SELECT id FROM reference_items WHERE url = ?")
-    .get(input.url) as { id: string } | undefined;
+    .get(urlFinal) as { id: string } | undefined;
   if (existingRow) {
     const err = new Error(`URL đã có trong library: ${existingRow.id}`);
     (err as Error & { code: string; refId: string }).code = "DUPLICATE";
@@ -200,12 +212,12 @@ export async function addReference(
   }
   const ref: Reference = {
     id: newId(),
-    url: input.url,
-    pdfUrl: input.pdfUrl ? String(input.pdfUrl).trim() || null : null,
+    url: urlFinal,
+    pdfUrl: pdfUrlClean || null,
     title: input.title,
     author: input.author ?? null,
     type: input.type ?? "other",
-    source: input.source ?? guessSource(input.url),
+    source: input.source ?? guessSource(urlFinal),
     tags: input.tags ?? [],
     notes: input.notes ?? "",
     addedAt: today(),

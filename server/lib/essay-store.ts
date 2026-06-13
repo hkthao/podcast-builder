@@ -7,6 +7,7 @@
  */
 import type { LLMProvider } from "./llm-providers";
 import { getDb } from "./db";
+import type { SuggestedRef } from "./reference-store";
 
 export type EssayBrainstormRef = {
   id: string;
@@ -21,6 +22,8 @@ export type Essay = {
   /** Prompt tối ưu để paste vào NotebookLM (gen từ title+essay). Optional. */
   nlmPrompt: string | null;
   brainstormRef: EssayBrainstormRef | null;
+  /** Suggestions từ LLM refs-suggest — cache để load lại không gen tiếp. */
+  suggestedRefs: SuggestedRef[];
   provider: LLMProvider;
   model: string;
   createdAt: string;
@@ -46,6 +49,7 @@ type DbRow = {
   content: string;
   nlm_prompt: string | null;
   brainstorm_ref_json: string | null;
+  suggested_refs_json: string | null;
   provider: string;
   model: string;
   created_at: string;
@@ -61,6 +65,9 @@ const rowToEssay = (r: DbRow): Essay => ({
   brainstormRef: r.brainstorm_ref_json
     ? (JSON.parse(r.brainstorm_ref_json) as EssayBrainstormRef)
     : null,
+  suggestedRefs: r.suggested_refs_json
+    ? (JSON.parse(r.suggested_refs_json) as SuggestedRef[])
+    : [],
   provider: r.provider as LLMProvider,
   model: r.model,
   createdAt: r.created_at,
@@ -93,8 +100,8 @@ export async function saveEssay(essay: Essay): Promise<void> {
   getDb()
     .prepare(
       `INSERT OR REPLACE INTO essays
-         (id, title, outline, content, nlm_prompt, brainstorm_ref_json, provider, model, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, title, outline, content, nlm_prompt, brainstorm_ref_json, suggested_refs_json, provider, model, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       essay.id,
@@ -103,11 +110,26 @@ export async function saveEssay(essay: Essay): Promise<void> {
       essay.content,
       essay.nlmPrompt,
       essay.brainstormRef ? JSON.stringify(essay.brainstormRef) : null,
+      essay.suggestedRefs.length > 0
+        ? JSON.stringify(essay.suggestedRefs)
+        : null,
       essay.provider,
       essay.model,
       essay.createdAt,
       essay.updatedAt,
     );
+}
+
+export async function saveEssaySuggestedRefs(
+  id: string,
+  suggestedRefs: SuggestedRef[],
+): Promise<Essay | null> {
+  const e = await getEssay(id);
+  if (!e) return null;
+  e.suggestedRefs = suggestedRefs;
+  e.updatedAt = new Date().toISOString();
+  await saveEssay(e);
+  return e;
 }
 
 export async function updateEssayContent(

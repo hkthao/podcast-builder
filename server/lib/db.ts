@@ -58,11 +58,19 @@ function initSchema(db: Database.Database): void {
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      suggested_refs_json TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_essays_updated
       ON essays(updated_at DESC);
   `);
+  // Migration cho DB cũ chưa có column suggested_refs_json
+  const cols = db
+    .prepare("PRAGMA table_info(essays)")
+    .all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "suggested_refs_json")) {
+    db.exec("ALTER TABLE essays ADD COLUMN suggested_refs_json TEXT");
+  }
 
   // References library (table name `reference_items` để tránh từ khóa SQL "references")
   db.exec(`

@@ -18,6 +18,7 @@ import {
   Search,
   Upload,
   Mic2,
+  X,
 } from "lucide-react";
 import {
   api,
@@ -126,7 +127,7 @@ export function EssayPage() {
     setNlmPrompt(e.nlmPrompt ?? "");
     setStreamContent("");
     setSavedAt(e.updatedAt);
-    setSuggestions([]);
+    setSuggestions(e.suggestedRefs ?? []);
   };
 
   const newEssay = () => {
@@ -222,8 +223,13 @@ export function EssayPage() {
         essayContent: content,
         provider,
         model,
+        essayId: activeId ?? undefined,
       }),
-    onSuccess: (data) => setSuggestions(data.suggestions),
+    onSuccess: (data) => {
+      setSuggestions(data.suggestions);
+      // Refresh essay query để pick up suggestedRefs từ DB
+      if (activeId) qc.invalidateQueries({ queryKey: ["essays"] });
+    },
   });
 
   const uploadMut = useMutation({
@@ -837,8 +843,8 @@ function tierColor(tier: 1 | 2 | 3 | 4 | 5): string {
 }
 
 function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
-  const navigate = useNavigate();
-  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(suggestion.searchHint)}`;
+  const [modalOpen, setModalOpen] = useState(false);
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(suggestion.searchHint + " PDF")}`;
   return (
     <div className="px-6 py-4 space-y-2">
       <div className="flex items-start gap-3">
@@ -878,23 +884,239 @@ function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
-            navigate("/references", {
-              state: {
-                prefillRef: {
-                  title: suggestion.title,
-                  author: suggestion.author,
-                  type: suggestion.type,
-                  notes: `Search hint: ${suggestion.searchHint}\n\nWhy: ${suggestion.reason}`,
-                },
-              },
-            })
-          }
+          onClick={() => setModalOpen(true)}
         >
           <Library className="size-3.5" />
-          Thêm vào thư viện →
+          Thêm vào thư viện
         </Button>
       </div>
+      {modalOpen && (
+        <QuickAddRefModal
+          suggestion={suggestion}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function QuickAddRefModal({
+  suggestion,
+  onClose,
+}: {
+  suggestion: SuggestedRef;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [url, setUrl] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [title, setTitle] = useState(suggestion.title);
+  const [author, setAuthor] = useState(suggestion.author ?? "");
+  const [tags, setTags] = useState("");
+  const [notes, setNotes] = useState(
+    `Search hint: ${suggestion.searchHint}\n\nWhy: ${suggestion.reason}`,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const addMut = useMutation({
+    mutationFn: () =>
+      api.addReference({
+        url: url.trim(),
+        pdfUrl: pdfUrl.trim() || null,
+        title: title.trim(),
+        author: author.trim() || null,
+        type: suggestion.type,
+        source: "",
+        tags: tags
+          .split(/[,\s]+/)
+          .map((t) => t.trim())
+          .filter(Boolean),
+        notes: notes.trim(),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["references"] });
+      qc.invalidateQueries({ queryKey: ["reference-tags"] });
+      onClose();
+    },
+    onError: (e) => setError(String(e)),
+  });
+
+  const scrapeMut = useMutation({
+    mutationFn: (u: string) => api.scrapeReference(u),
+    onSuccess: (meta) => {
+      if (meta.title && meta.title !== url) setTitle(meta.title);
+      if (meta.author && !author) setAuthor(meta.author);
+      if (meta.pdfUrl) setPdfUrl(meta.pdfUrl);
+    },
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <Card
+        className="max-w-xl w-full p-0 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
+          <Library className="size-5 text-accent" />
+          <h2 className="font-medium">Thêm vào thư viện</h2>
+          <Badge variant="outline" className="font-mono text-xs uppercase ml-auto">
+            T{suggestion.tier} · {suggestion.type}
+          </Badge>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-secondary"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="px-6 py-4 space-y-3">
+          {/* Step 1: Google search */}
+          <div className="rounded-md border bg-secondary/30 p-3 space-y-2">
+            <p className="text-xs">
+              <span className="font-medium">Bước 1.</span>{" "}
+              <span className="text-muted-foreground">
+                Bấm Google để tìm <strong>{suggestion.title}</strong>.
+                Trong kết quả → click vào trang chính (Amazon / arXiv /
+                Wikipedia / Goodreads / PDF…) → copy URL ở thanh address bar.
+              </span>
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 h-9 inline-flex items-center text-xs font-mono px-3 rounded-md bg-background border truncate">
+                {suggestion.searchHint} PDF
+              </code>
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={`https://www.google.com/search?q=${encodeURIComponent(suggestion.searchHint + " PDF")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Search className="size-3.5" />
+                  Google ↗
+                </a>
+              </Button>
+            </div>
+          </div>
+
+          {/* Step 2: paste link (PDF ưu tiên, page URL fallback) */}
+          <div>
+            <Label>Bước 2. URL PDF</Label>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+              Link PDF direct nếu có. VD:{" "}
+              <code>arxiv.org/pdf/2304.12345.pdf</code>,{" "}
+              <code>example.com/paper.pdf</code>.
+            </p>
+            <Input
+              value={pdfUrl}
+              onChange={(e) => setPdfUrl(e.target.value)}
+              placeholder="https://…pdf"
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label>
+              URL trang{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional, nếu chưa có PDF)
+              </span>
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+              VD: <code>amazon.com/dp/…</code>,{" "}
+              <code>en.wikipedia.org/wiki/…</code>. KHÔNG paste link{" "}
+              <code>google.com/search</code>. Cần ÍT NHẤT 1 trong 2 (PDF hoặc
+              trang).
+            </p>
+            <div className="relative">
+              <Input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://amazon.com/… hoặc https://arxiv.org/abs/…"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => url.trim() && scrapeMut.mutate(url.trim())}
+                disabled={!url.trim() || scrapeMut.isPending}
+                title="Auto-fetch title/author từ URL"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-accent hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                {scrapeMut.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label>Tiêu đề</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="mt-1.5"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tác giả</Label>
+              <Input
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label>Tags <span className="text-muted-foreground font-normal">(cách nhau bằng phẩy)</span></Label>
+              <Input
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="triết-học, AI, hạnh-phúc"
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Ghi chú</Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="mt-1.5 text-sm"
+            />
+          </div>
+          {error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Huỷ
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setError(null);
+              if (!url.trim() && !pdfUrl.trim()) {
+                setError("Cần ít nhất 1 trong 2: URL trang hoặc URL PDF");
+                return;
+              }
+              addMut.mutate();
+            }}
+            disabled={addMut.isPending}
+          >
+            {addMut.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            Lưu
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

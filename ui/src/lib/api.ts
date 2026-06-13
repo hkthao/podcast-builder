@@ -269,6 +269,7 @@ export type Essay = {
   content: string;
   nlmPrompt: string | null;
   brainstormRef: EssayBrainstormRef | null;
+  suggestedRefs: SuggestedRef[];
   provider: LLMProvider;
   model: string;
   createdAt: string;
@@ -470,6 +471,8 @@ export const api = {
     essayContent: string;
     provider: LLMProvider;
     model: string;
+    /** Nếu có, server persist suggestions vào essay row. */
+    essayId?: string;
   }) =>
     jsonFetch<{ suggestions: SuggestedRef[] }>("/api/references/_/suggest", {
       method: "POST",

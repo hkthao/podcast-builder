@@ -16,6 +16,7 @@ import {
 } from "../lib/reference-store";
 import { chat, type LLMProvider } from "../lib/llm-providers";
 import { safeParseJson } from "../lib/safe-json";
+import { saveEssaySuggestedRefs } from "../lib/essay-store";
 
 export const referencesRoutes = new Hono();
 
@@ -51,6 +52,8 @@ referencesRoutes.post("/_/suggest", async (c) => {
     essayContent?: string;
     provider?: string;
     model?: string;
+    /** Optional — nếu có sẽ persist suggestions vào essay. */
+    essayId?: string;
   };
   if (typeof body.title !== "string" || body.title.trim().length === 0) {
     return c.json({ error: "Thiếu title" }, 400);
@@ -122,6 +125,14 @@ referencesRoutes.post("/_/suggest", async (c) => {
     suggestions.sort((a, b) => a.tier - b.tier);
     if (suggestions.length === 0) {
       return c.json({ error: "LLM trả về 0 suggestion parse được" }, 502);
+    }
+    // Persist vào essay nếu essayId cung cấp
+    if (typeof body.essayId === "string" && body.essayId.trim().length > 0) {
+      try {
+        await saveEssaySuggestedRefs(body.essayId, suggestions);
+      } catch {
+        // Best-effort — không fail request nếu save lỗi
+      }
     }
     return c.json({ suggestions });
   } catch (e) {

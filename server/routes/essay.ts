@@ -156,6 +156,7 @@ essayRoutes.post("/stream", async (c) => {
     outline,
     content: "",
     nlmPrompt: null,
+    suggestedRefs: [],
     brainstormRef,
     provider,
     model,
