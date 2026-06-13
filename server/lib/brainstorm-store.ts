@@ -8,6 +8,7 @@
  */
 import { chat, type LLMProvider } from "./llm-providers";
 import { getDb } from "./db";
+import { safeParseJson } from "./safe-json";
 const DEFAULT_PROVIDER: LLMProvider =
   (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
 const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
@@ -440,10 +441,10 @@ export async function generateAndSave(
     temperature: 0.9,
     jsonMode: true,
   });
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJson<{
     ideas?: unknown;
     categories?: unknown;
-  };
+  }>(content);
   if (!Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
     throw new Error("LLM response thiếu mảng 'ideas'");
   }

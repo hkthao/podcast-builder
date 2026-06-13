@@ -1,8 +1,8 @@
 # podcast-builder
 
-Pipeline tự động tạo video động (1080×1920 hoặc 16:9) từ file audio podcast Việt — bằng Remotion + Whisper local. Đi kèm **Studio UI** (Vite + React + Hono) để thao tác qua web local, hoặc dùng console pure.
+Pipeline tự động tạo video động (1080×1920 hoặc 16:9) từ file audio podcast Việt — bằng Remotion + Whisper local. Đi kèm **Studio UI** (Vite + React + Hono + SQLite) để thao tác qua web local, hoặc dùng console pure.
 
-Workflow đầy đủ: ý tưởng → essay → NotebookLM podcast → render video. LLM hỗ trợ 4 step pre-production (brainstorm / essay / NLM prompt / refs suggest) qua OpenAI hoặc Ollama local.
+Workflow đầy đủ: ý tưởng → bài luận → NotebookLM podcast → render video. LLM hỗ trợ 4 step pre-production (Brainstorm / Bài luận / NLM prompt / Đề xuất tài liệu) qua OpenAI hoặc Ollama local. Output essay đậm chất chiêm nghiệm theo ByteCast Topic Framework v2 (13 field per idea: observation + paradox + scores 5 chiều + knowledge map + contrarian + thumbnail hooks + future-AGI + historical + story bank + outline 12 mục).
 
 Output: video MP4 (H.264 + AAC, -16 LUFS) đủ tiêu chuẩn up Facebook + thumbnail JPEG + lock file để tái lập.
 
@@ -45,6 +45,14 @@ ollama serve            # background
 # Cả 2 đều OK — UI cho phép chọn provider mỗi lần gen
 ```
 
+**Database**: Studio dùng SQLite local (`data.db`) cho brainstorm/essays/refs/error log. Tự tạo khi run lần đầu. Nếu bạn từ version cũ (JSON files):
+
+```bash
+npm run migrate   # JSON brainstorm/essays/refs/error-log → SQLite, xoá JSON gốc sau verify
+```
+
+`data.db` gitignored vì là local data + có thể lớn.
+
 ---
 
 ## Cách dùng (chọn 1)
@@ -55,17 +63,18 @@ ollama serve            # background
 npm run studio              # mở UI tại http://localhost:3000 + server :3001
 ```
 
-Workflow trong UI:
+Workflow trong UI (sidebar nav):
 
-1. **Workflow** (`/workflow`) — overview tất cả "chain" (topic) với progress 6 step
-2. **Brainstorm** (`/brainstorm`) — gen 5 ý tưởng từ topic + tone, pick 1
-3. **Essay** (`/essay`) — gen bài luận 1500-2500 từ qua SSE stream, edit + auto-save; trong cùng trang có:
-   - NotebookLM prompt gen (paste vào NLM)
-   - Suggest references (5-7 sách/bài/video, click → Add to library)
-   - Upload audio NotebookLM → tạo episode prefill title/hook
-4. **References** (`/references`) — JSON library, scrape og:title + arXiv API + citation_pdf_url
-5. **Episodes** (`/`) — drag-drop audio, edit config form auto-save 500ms, render preview/full với SSE progress + queue
-6. Mỗi episode có 5 tab: Config / Scenes (inline edit + thumbnails) / Transcript (find/replace, edit) / References / Files (audio/video player + xoá)
+1. **Tập** (`/`) — drag-drop audio, edit config form auto-save 500ms, render preview/full SSE progress + queue. Pin episode ngôi sao lên đầu.
+2. **Quy trình** (`/workflow`) — overview tất cả "chain" (topic) với progress 6 step (Brainstorm → Bài luận → NLM prompt → Tài liệu → Audio → Render), categories chips, top score badge
+3. **Brainstorm** (`/brainstorm`) — gen 5 ý tưởng theo ByteCast Topic Framework v2 (13 field/idea: observation/scores/knowledgeMap/contrarian/thumbnail hooks/future-AGI/historical/storyBank/outline 12 mục). History sidebar bên trái, search + category filter, sort theo avgScore desc.
+4. **Bài luận** (`/essay`) — gen 1800-2500 từ qua SSE stream, edit + auto-save 1.2s. Cùng trang: NLM prompt gen template + Đề xuất 5-9 tài liệu (5 tier: Meta/Review/Classic/Paper/Blog) + Upload audio NotebookLM → tạo tập prefill title/hook.
+5. **Tri thức** (`/knowledge`) — Knowledge Graph aggregate ~50 concept (Heidegger / Hedonic Adaptation / Dopamine / Consumerism / Recommendation Algorithms…) từ tất cả sessions, group 6 lĩnh vực, expand xem session referencing.
+6. **Hình ảnh** (`/visual`) — Visual Library aggregate metaphors từ outline #12 (đồng hồ cát / hoa tàn / cánh cửa đóng…), copy clipboard cho AI gen ảnh.
+7. **Tài liệu** (`/references`) — JSON library, scrape og:title + arXiv API + citation_pdf_url. Filter tag/type + search.
+8. Mỗi tập có 5 tab: **Cấu hình** / **Cảnh** (inline edit + scene thumbnails qua renderStill) / **Transcript** (find/replace, edit per-câu) / **Tài liệu** (linked) / **File** (audio/video player + xoá).
+
+**Phím tắt**: bấm `?` xem cheat sheet. `g e/w/b/s/r/k/v` navigate vim-style. `/` focus search.
 
 ### B. Console — automation hoặc batch
 
@@ -241,15 +250,32 @@ npm run make -- input/<file>.mp3
 ## Trạng thái phase (theo PLAN.md)
 
 - **Phase 0-9** — Pipeline Remotion + Whisper + orchestrator ✓
-- **Phase 10** — Studio UI MVP (10.0-10.6) ✓ · 10.7 scene thumbnails ✓ · 10.8 polish (chưa)
+- **Phase 10** — Studio UI:
+  - 10.0-10.6 MVP backend/frontend/SSE render/transcript review ✓
+  - 10.7 Scene thumbnails qua renderStill ✓
+  - 10.8 Polish (keyboard shortcuts + pin episodes + outline button) ✓
 - **Phase 11** — Pre-production LLM:
   - 11.0-11.2 Reference Library ✓
   - 11.3 Brainstorm (OpenAI + Ollama) ✓
-  - 11.4 Essay streaming SSE ✓
+  - 11.4 Essay SSE streaming ✓
   - 11.5 NotebookLM prompt tuner ✓
-  - 11.6 Refs suggest ✓
+  - 11.6 Đề xuất tài liệu (5 tier) ✓
   - 11.7 Workflow overview ✓
   - 11.8 Watch ~/Downloads/ (chưa)
+
+**Extras (không có trong PLAN gốc):**
+- ByteCast Topic Framework v1+v2: idea schema 13 field (observation/scores/knowledgeMap/contrarian/thumbnailHooks/futureConnection/historicalExamples/storyBank/outline)
+- Phase C Topic Database: 16 category enum + dedup gen
+- Phase D Knowledge Graph (`/knowledge`) + Visual Library (`/visual`)
+- Server Monitor: `tmp` → DB error log + sticky banner + retry indicator
+- SQLite migration (`data.db` via better-sqlite3) — replace JSON file stores
+- Bridge Bài luận → Tập: upload audio NLM tự prefill title/hook
+- Auto episodeNumber max+1 mỗi upload
+- Files tab per episode (audio/video/thumb/lock inline + xoá)
+- Form persist qua localStorage (Brainstorm draft + provider/model)
+- Keyboard shortcuts (vim-style nav + `/` focus search)
+- Pin episodes (star icon localStorage)
+- Vietnamese labels chuẩn hoá
 
 ## Tham khảo
 

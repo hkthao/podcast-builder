@@ -15,6 +15,7 @@ import {
   type SuggestedRef,
 } from "../lib/reference-store";
 import { chat, type LLMProvider } from "../lib/llm-providers";
+import { safeParseJson } from "../lib/safe-json";
 
 export const referencesRoutes = new Hono();
 
@@ -81,7 +82,7 @@ referencesRoutes.post("/_/suggest", async (c) => {
       temperature: 0.4,
       jsonMode: true,
     });
-    const parsed = JSON.parse(content) as { suggestions?: unknown };
+    const parsed = safeParseJson<{ suggestions?: unknown }>(content);
     if (!Array.isArray(parsed.suggestions)) {
       return c.json({ error: "LLM response thiếu 'suggestions' array" }, 502);
     }

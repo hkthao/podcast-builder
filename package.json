@@ -30,6 +30,7 @@
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.2",
     "hono": "^4.12.25",
+    "jsonrepair": "^3.14.0",
     "openai": "^4.104.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",

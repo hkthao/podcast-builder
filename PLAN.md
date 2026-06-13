@@ -976,7 +976,7 @@ Render-runner subscribes `renderMedia({ onProgress })` từ Remotion + chia phas
 - [x] **10.5** — Preview player HTML5 + download + "Show in Finder". 0.5 ngày (Files tab thay thế)
 - [x] **10.6** — **Transcript review + edit tab** (MVP+): list sentence từ `corrected.json`, click edit inline, diff highlight với raw, find/replace all cho lỗi lặp lại, save → invalidate render cache. 1.5 ngày
 - [x] **10.7** — Scenes tab: inline sceneType + mood edit, small thumbnails qua `renderStill`. +1 ngày
-- [ ] **10.8** — Polish: dark mode, keyboard shortcuts, recent episodes pinned. +1 ngày
+- [x] **10.8** — Polish: dark mode (đã có từ trước) ✓, keyboard shortcuts (vim-style nav + / focus search + ? help modal) ✓, pin episodes sidebar (star icon localStorage) ✓, unified outline button style ✓. Refine empty states + loading skeletons partial.
 
 10.0-10.6 = **MVP** (6-7 ngày). 10.7-10.8 = bonus.
 
@@ -1151,6 +1151,41 @@ NLM không có API. Phần ta giúp được:
 - [x] **Files tab** per episode: list audio/video/thumbnail/lock/tmp, inline player + xoá.
 - [x] **Auto episodeNumber**: max(existing) + 1 khi upload, không còn dùm vào #1.
 - [x] **Provider Ollama** cho cả 4 LLM endpoint (brainstorm/essay/nlm-prompt/refs-suggest).
+
+**ByteCast Topic Framework v1+v2 (extras):**
+- [x] BrainstormIdea schema mở rộng 4 → 13 field (observation, scores 5 chiều, knowledgeMap, contrarianView, thumbnailHooks, futureConnection, historicalExamples, storyBank, outline 12 mục với CORE QUESTION/PARADOX/đời thường/tâm lý/thần kinh/triết học/xã hội học/AI/thí nghiệm tư duy/quotes/kết mở/visual metaphor).
+- [x] SYSTEM_PROMPT quy trình A→H (Observation → Paradox → 5 tầng nguyên nhân → Câu hỏi lớn → Ma trận → Scores → Visual → Sources).
+- [x] Wire prefill outline rich vào Essay khi click "Gen essay" trên brainstorm card.
+- [x] ESSAY_SYSTEM_PROMPT đọc phụ lục (Contrarian → steel-man + rebuttal section, Historical → anchor section, Story bank → chèn ví dụ).
+
+**Phase C Topic Database (extras):**
+- [x] BrainstormSession.categories: TopicCategory[] (16 tag enum: Meaning/Psychology/Time/AI/Loss/Freedom/Self/Death/Memory/Connection/Power/Technology/Happiness/Solitude/Ethics/Future).
+- [x] Gen pass "EXISTING TOPICS" (30 session gần nhất) → LLM diversify.
+- [x] UI HistorySidebar: search + category chip filter, category badges per session.
+
+**Phase D Knowledge / Visual Library (extras):**
+- [x] `/knowledge` aggregate ~50 concept (Heidegger/Hedonic Adaptation/Dopamine/Consumerism/Recommendation Algorithms/Being and Time…) qua 6 group (Philosophy/Psychology/Neuroscience/Sociology/AI/Work) với aliases đa ngữ VN-EN.
+- [x] `/visual` aggregate metaphors từ outline #12, group theo session.categories, copy clipboard cho AI gen ảnh.
+
+**SQLite migration (extras):**
+- [x] `data.db` qua better-sqlite3 (WAL mode) — replace JSON file stores cho brainstorm/essays/refs/server-errors.
+- [x] `npm run migrate` transaction-safe transition.
+- [x] Episode config vẫn giữ file (render pipeline yêu cầu).
+
+**Server Monitor (extras):**
+- [x] `tmp/server-error.log` → DB table `server_errors` (auto-rotate 100).
+- [x] Hook process.on('uncaughtException'|'unhandledRejection') + Hono onError logs API errors.
+- [x] UI `<ServerMonitor>` sticky banner: red (unreachable + retry 5s) / yellow (errors logged, expand stack). Clear + Dismiss actions.
+
+**Auto-save form (extras):**
+- [x] `usePersistedState` hook generic. Brainstorm form (topic/tone/count/provider/model/activeId) persist qua reload. Stale activeId guard.
+
+**Phím tắt (extras):**
+- [x] `useShortcuts` global hook + `<ShortcutsHelp>` modal.
+- [x] `?` help, `Esc` close, `/` focus `[data-search]`, `g + e/w/b/s/r/k/v` vim-style nav.
+
+**Vietnamese label standardization (extras):**
+- [x] Glossary canonical: Tiêu đề/Số tập/Cấu hình/Cảnh/Tài liệu/File/Tập/Tri thức/Hình ảnh/Bài luận/Quy trình + Tạo/Huỷ/Lưu/Tải/Mở. Giữ English cho technical (Brainstorm/Hook/NLM/AI/LLM/Tone/Provider/Model/Tier/BGM/Render/Audio).
 
 Total Phase 11 ≈ **4.5-5 ngày** sau khi Phase 10 MVP xong.
 
