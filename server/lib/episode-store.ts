@@ -239,5 +239,195 @@ export async function uploadAudio(
   return summary;
 }
 
+export type TranscriptSegment = {
+  startMs: number;
+  endMs: number;
+  text: string;
+};
+
+export type TranscriptPayload = {
+  source: "corrected" | "raw" | "none";
+  segments: TranscriptSegment[];
+  totalSegments: number;
+};
+
+type WhisperSegment = {
+  text: string;
+  offsets: { from: number; to: number };
+};
+
+type WhisperFile = { transcription: WhisperSegment[] };
+
+const cleanWhisperText = (s: string): string =>
+  s
+    .replace(/[�­]+/g, "")
+    .replace(/"{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export async function getTranscript(
+  name: string,
+): Promise<TranscriptPayload> {
+  const correctedPath = path.join(TMP_DIR, `${name}.corrected.json`);
+  const rawPath = path.join(TMP_DIR, `${name}.json`);
+  let source: TranscriptPayload["source"] = "none";
+  let filePath: string | null = null;
+  if (await exists(correctedPath)) {
+    source = "corrected";
+    filePath = correctedPath;
+  } else if (await exists(rawPath)) {
+    source = "raw";
+    filePath = rawPath;
+  }
+  if (!filePath) return { source, segments: [], totalSegments: 0 };
+  let data: WhisperFile;
+  try {
+    const buf = await fs.readFile(filePath, "utf-8");
+    data = JSON.parse(buf) as WhisperFile;
+  } catch {
+    return { source: "none", segments: [], totalSegments: 0 };
+  }
+  const segments = (data.transcription ?? []).map((s) => ({
+    startMs: s.offsets.from,
+    endMs: s.offsets.to,
+    text: cleanWhisperText(s.text),
+  }));
+  return { source, segments, totalSegments: segments.length };
+}
+
+export type ScenePlanItem = {
+  index: number;
+  startMs: number;
+  endMs: number;
+  mood: string;
+  sceneType: string;
+  text: string;
+};
+
+export type PlanPayload = {
+  scenes: ScenePlanItem[];
+  totalScenes: number;
+  totalDurationMs: number;
+};
+
+type PlanFile = {
+  scenes?: Array<Partial<ScenePlanItem>>;
+};
+
+const VALID_MOODS = [
+  "positive",
+  "social",
+  "healing",
+  "energetic",
+  "contemplative",
+] as const;
+
+const VALID_SCENE_TYPES = [
+  "PodcastDesk",
+  "Idea",
+  "Connection",
+  "Crowd",
+  "InnerSelf",
+  "Choice",
+  "Knowledge",
+] as const;
+
+type RawScene = Partial<ScenePlanItem>;
+
+export async function savePlan(
+  name: string,
+  scenes: RawScene[],
+): Promise<PlanPayload> {
+  const planPath = path.join(TMP_DIR, `${name}.plan.json`);
+  if (!(await exists(planPath))) {
+    const err = new Error(
+      `Plan chưa tồn tại: ${planPath}. Render lần đầu để sinh plan.`,
+    );
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  // Read existing để giữ version / generatedAt + đảm bảo schema correct.
+  const existing = JSON.parse(
+    await fs.readFile(planPath, "utf-8"),
+  ) as { version?: number; generatedAt?: string; scenes?: unknown };
+  // Validate from payload
+  const validated: ScenePlanItem[] = scenes.map((s, i) => {
+    const startMs = Number(s.startMs);
+    const endMs = Number(s.endMs);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      const err = new Error(`Scene #${i}: startMs/endMs phải là number`);
+      (err as Error & { code: string }).code = "VALIDATION";
+      throw err;
+    }
+    const mood = String(s.mood ?? "positive");
+    if (!VALID_MOODS.includes(mood as (typeof VALID_MOODS)[number])) {
+      const err = new Error(
+        `Scene #${i}: mood "${mood}" không hợp lệ. Hợp lệ: ${VALID_MOODS.join(", ")}`,
+      );
+      (err as Error & { code: string }).code = "VALIDATION";
+      throw err;
+    }
+    const sceneType = String(s.sceneType ?? "PodcastDesk");
+    if (
+      !VALID_SCENE_TYPES.includes(
+        sceneType as (typeof VALID_SCENE_TYPES)[number],
+      )
+    ) {
+      const err = new Error(
+        `Scene #${i}: sceneType "${sceneType}" không hợp lệ. Hợp lệ: ${VALID_SCENE_TYPES.join(", ")}`,
+      );
+      (err as Error & { code: string }).code = "VALIDATION";
+      throw err;
+    }
+    return {
+      index: Number.isFinite(Number(s.index)) ? Number(s.index) : i,
+      startMs,
+      endMs,
+      mood,
+      sceneType,
+      text: String(s.text ?? ""),
+    };
+  });
+
+  const payload = {
+    version: existing.version ?? 2,
+    generatedAt: existing.generatedAt ?? new Date().toISOString(),
+    scenes: validated,
+  };
+  await fs.writeFile(planPath, JSON.stringify(payload, null, 2));
+  return getPlan(name);
+}
+
+export const PLAN_OPTIONS = {
+  moods: VALID_MOODS,
+  sceneTypes: VALID_SCENE_TYPES,
+} as const;
+
+export async function getPlan(name: string): Promise<PlanPayload> {
+  const planPath = path.join(TMP_DIR, `${name}.plan.json`);
+  if (!(await exists(planPath))) {
+    return { scenes: [], totalScenes: 0, totalDurationMs: 0 };
+  }
+  let data: PlanFile;
+  try {
+    data = JSON.parse(await fs.readFile(planPath, "utf-8")) as PlanFile;
+  } catch {
+    return { scenes: [], totalScenes: 0, totalDurationMs: 0 };
+  }
+  const scenes: ScenePlanItem[] = (data.scenes ?? []).map((s, i) => ({
+    index: s.index ?? i,
+    startMs: s.startMs ?? 0,
+    endMs: s.endMs ?? 0,
+    mood: s.mood ?? "positive",
+    sceneType: s.sceneType ?? "PodcastDesk",
+    text: s.text ?? "",
+  }));
+  const totalDurationMs = scenes.reduce(
+    (sum, s) => sum + (s.endMs - s.startMs),
+    0,
+  );
+  return { scenes, totalScenes: scenes.length, totalDurationMs };
+}
+
 export const PATHS = { INPUT_DIR, OUTPUT_DIR, TMP_DIR } as const;
 export const AUDIO_EXTENSIONS = AUDIO_EXTS;

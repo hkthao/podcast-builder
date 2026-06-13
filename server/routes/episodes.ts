@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import {
   AUDIO_EXTENSIONS,
   getEpisode,
+  getPlan,
+  getTranscript,
   listEpisodes,
+  PLAN_OPTIONS,
+  savePlan,
   saveEpisode,
   uploadAudio,
 } from "../lib/episode-store";
@@ -54,6 +58,53 @@ episodesRoutes.get("/:name", async (c) => {
   }
   return c.json(ep);
 });
+
+/**
+ * Transcript đã spell-fix (fallback raw Whisper nếu chưa spell-fix).
+ * Empty array nếu chưa transcribe.
+ */
+episodesRoutes.get("/:name/transcript", async (c) => {
+  const name = c.req.param("name");
+  const data = await getTranscript(name);
+  return c.json(data);
+});
+
+/** Scene plan (tmp/<name>.plan.json). Empty array nếu chưa plan. */
+episodesRoutes.get("/:name/plan", async (c) => {
+  const name = c.req.param("name");
+  const data = await getPlan(name);
+  return c.json(data);
+});
+
+/**
+ * Save lại scene plan (sau khi user edit text/mood/sceneType inline).
+ * Body: { scenes: ScenePlanItem[] }
+ */
+episodesRoutes.put("/:name/plan", async (c) => {
+  const name = c.req.param("name");
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as { scenes?: unknown[] };
+  if (!Array.isArray(body.scenes)) {
+    return c.json({ error: "Body phải có field 'scenes' là array" }, 400);
+  }
+  try {
+    const data = await savePlan(name, body.scenes as Parameters<typeof savePlan>[1]);
+    return c.json(data);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/** Bảng option valid cho mood + sceneType, dropdown UI dùng. */
+episodesRoutes.get("/_/plan-options", (c) => c.json(PLAN_OPTIONS));
 
 /**
  * Save edit config. Body: EpisodeConfig JSON (zod-validated).

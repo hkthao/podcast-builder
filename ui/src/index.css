@@ -1,0 +1,108 @@
+@import "@fontsource/be-vietnam-pro/400.css";
+@import "@fontsource/be-vietnam-pro/500.css";
+@import "@fontsource/be-vietnam-pro/600.css";
+@import "@fontsource/be-vietnam-pro/700.css";
+@import "@fontsource/noto-serif/400.css";
+@import "@fontsource/noto-serif/600.css";
+@import "@fontsource/noto-serif/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens copy nguyên từ family-tree-v3 (Oxblood Paper). */
+@layer base {
+  :root {
+    --background: 38 60% 96%;
+    --foreground: 20 14% 14%;
+
+    --card: 38 60% 96%;
+    --card-foreground: 20 14% 14%;
+
+    --popover: 38 60% 96%;
+    --popover-foreground: 20 14% 14%;
+
+    --primary: 0 45% 33%;
+    --primary-foreground: 38 60% 96%;
+
+    --secondary: 36 30% 90%;
+    --secondary-foreground: 20 14% 14%;
+
+    --muted: 36 30% 90%;
+    --muted-foreground: 25 9% 44%;
+
+    --accent: 40 64% 45%;
+    --accent-foreground: 38 60% 96%;
+
+    --destructive: 0 70% 51%;
+    --destructive-foreground: 38 60% 96%;
+
+    --border: 36 41% 86%;
+    --input: 36 41% 86%;
+    --ring: 0 45% 33%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 24 14% 8%;
+    --foreground: 38 30% 92%;
+
+    --card: 24 14% 12%;
+    --card-foreground: 38 30% 92%;
+
+    --popover: 24 14% 12%;
+    --popover-foreground: 38 30% 92%;
+
+    --primary: 0 60% 58%;
+    --primary-foreground: 38 30% 92%;
+
+    --secondary: 24 12% 18%;
+    --secondary-foreground: 38 30% 92%;
+
+    --muted: 24 12% 18%;
+    --muted-foreground: 35 18% 70%;
+
+    --accent: 40 65% 60%;
+    --accent-foreground: 24 14% 8%;
+
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 38 30% 92%;
+
+    --border: 24 10% 20%;
+    --input: 24 10% 20%;
+    --ring: 0 60% 58%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 17px;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto,
+      sans-serif;
+    line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: "Noto Serif", Georgia, serif;
+    @apply tracking-tight;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
