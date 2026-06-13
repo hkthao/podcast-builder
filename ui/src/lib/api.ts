@@ -96,6 +96,38 @@ export type PlanPayload = {
   totalDurationMs: number;
 };
 
+export type RenderPhase =
+  | "queued"
+  | "process-audio"
+  | "transcribe"
+  | "spell-fix"
+  | "plan-episode"
+  | "bundle"
+  | "render"
+  | "thumbnail"
+  | "lock"
+  | "done"
+  | "error"
+  | "cancelled";
+
+export type RenderJob = {
+  id: string;
+  episodeName: string;
+  preview: boolean;
+  status: RenderPhase;
+  percent: number;
+  message: string;
+  startedAt: number;
+  finishedAt: number | null;
+  outputPath: string | null;
+  error: string | null;
+};
+
+export type RenderProgressEvent = RenderJob & {
+  jobId: string;
+  elapsedMs: number;
+};
+
 export const api = {
   listEpisodes: () =>
     jsonFetch<{ episodes: EpisodeSummary[] }>("/api/episodes"),
@@ -126,6 +158,18 @@ export const api = {
     jsonFetch<EpisodeSummary>(
       `/api/episodes/${encodeURIComponent(name)}/config`,
       { method: "PUT", body: JSON.stringify(config) },
+    ),
+
+  startRender: (episodeName: string, preview: boolean) =>
+    jsonFetch<RenderJob>("/api/render", {
+      method: "POST",
+      body: JSON.stringify({ episodeName, preview }),
+    }),
+
+  cancelJob: (jobId: string) =>
+    jsonFetch<{ cancelled: boolean }>(
+      `/api/render/jobs/${encodeURIComponent(jobId)}/cancel`,
+      { method: "POST" },
     ),
 
   uploadAudio: async (file: File): Promise<EpisodeSummary> => {

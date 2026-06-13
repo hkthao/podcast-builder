@@ -1,12 +1,17 @@
+import path from "node:path";
+import fs from "node:fs/promises";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 import { episodesRoutes } from "./routes/episodes";
+import { renderRoutes } from "./routes/render";
 import { startFsWatcher } from "./lib/events";
 import { sseFromBus } from "./lib/sse";
 
 dotenv.config();
+
+const OUTPUT_DIR = path.resolve("output");
 
 const PORT = Number(process.env.STUDIO_PORT ?? 3001);
 /** Origin của Vite dev server. Local-only — không expose. */
@@ -32,6 +37,33 @@ app.get("/api/health", (c) => {
 app.get("/api/events", (c) => sseFromBus(c));
 
 app.route("/api/episodes", episodesRoutes);
+app.route("/api/render", renderRoutes);
+
+/**
+ * Serve output/ static files (mp4, jpg, json).
+ * Path: /output/<filename> — UI hardcode link href tới đây.
+ */
+app.get("/output/:filename", async (c) => {
+  const filename = c.req.param("filename");
+  if (filename.includes("..") || filename.includes("/")) {
+    return c.json({ error: "invalid filename" }, 400);
+  }
+  const filePath = path.join(OUTPUT_DIR, filename);
+  try {
+    const buf = await fs.readFile(filePath);
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const contentType =
+      ext === "mp4" ? "video/mp4"
+      : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+      : ext === "json" ? "application/json"
+      : "application/octet-stream";
+    return new Response(buf as unknown as BodyInit, {
+      headers: { "Content-Type": contentType },
+    });
+  } catch {
+    return c.json({ error: "File not found" }, 404);
+  }
+});
 
 startFsWatcher();
 

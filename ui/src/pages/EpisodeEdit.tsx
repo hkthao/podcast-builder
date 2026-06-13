@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
+import { RenderModal } from "@/components/RenderModal";
 import { cn } from "@/lib/utils";
 
 type Tab = "config" | "scenes" | "transcript";
@@ -32,6 +33,10 @@ type Tab = "config" | "scenes" | "transcript";
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
   const [tab, setTab] = useState<Tab>("config");
+  const [renderModal, setRenderModal] = useState<{
+    open: boolean;
+    preview: boolean;
+  }>({ open: false, preview: false });
 
   const epQ = useQuery({
     queryKey: ["episode", name],
@@ -165,11 +170,18 @@ export function EpisodeEdit() {
       )}
 
       <div className="flex gap-3 mt-8 pt-6 border-t">
-        <Button disabled title="Phase 10.4">
+        <Button
+          disabled={!ep.audioPath}
+          onClick={() => setRenderModal({ open: true, preview: true })}
+        >
           <Play className="size-4" />
           Render preview (10s)
         </Button>
-        <Button variant="secondary" disabled title="Phase 10.4">
+        <Button
+          variant="secondary"
+          disabled={!ep.audioPath}
+          onClick={() => setRenderModal({ open: true, preview: false })}
+        >
           <Play className="size-4" />
           Render full
         </Button>
@@ -185,7 +197,19 @@ export function EpisodeEdit() {
             </a>
           </Button>
         )}
+        {!ep.audioPath && (
+          <p className="self-center text-sm text-muted-foreground">
+            Thiếu audio — drag .m4a vào trang Episodes trước.
+          </p>
+        )}
       </div>
+
+      <RenderModal
+        open={renderModal.open}
+        episodeName={ep.name}
+        preview={renderModal.preview}
+        onClose={() => setRenderModal({ open: false, preview: false })}
+      />
     </div>
   );
 }

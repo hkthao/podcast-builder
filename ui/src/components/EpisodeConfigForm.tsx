@@ -55,7 +55,11 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
       dirtyRef.current = false;
       setStatus("saved");
       setError(null);
-      qc.invalidateQueries({ queryKey: ["episode", ep.name] });
+      // Update cache DIRECTLY thay vì invalidate — tránh refetch
+      // làm parent re-render + input mất focus khi user đang gõ tiếp.
+      qc.setQueryData(["episode", ep.name], updated);
+      // Sidebar list cần biết status thay đổi (rendered → outdated):
+      // invalidate riêng, không ảnh hưởng form.
       qc.invalidateQueries({ queryKey: ["episodes"] });
       const t = setTimeout(() => setStatus("idle"), 1800);
       return () => clearTimeout(t);
@@ -112,7 +116,6 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             onChange={(e) => update({ title: e.target.value })}
             placeholder="Tên tập — vd: Vì sao chúng ta cô đơn giữa đám đông"
             maxLength={200}
-            disabled={saveMutation.isPending}
           />
         </Field>
 
@@ -122,13 +125,10 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         >
           <Textarea
             value={form.hook ?? ""}
-            onChange={(e) =>
-              update({ hook: e.target.value || null })
-            }
+            onChange={(e) => update({ hook: e.target.value || null })}
             placeholder="Câu hỏi/khẳng định gây tò mò — vd: Cho đến khi mất đi, ta mới biết quý."
             rows={2}
             maxLength={200}
-            disabled={saveMutation.isPending}
           />
         </Field>
 
@@ -144,7 +144,6 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
                   episodeNumber: Math.max(1, Number(e.target.value) || 1),
                 })
               }
-              disabled={saveMutation.isPending}
             />
           </Field>
 
@@ -156,11 +155,9 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
                   moodOverride: e.target.value === "" ? null : e.target.value,
                 })
               }
-              disabled={saveMutation.isPending}
               className={cn(
                 "flex h-12 w-full rounded-md border border-input bg-background px-3 text-base shadow-sm",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                "disabled:cursor-not-allowed disabled:opacity-50",
               )}
             >
               {MOODS.map((m) => (
@@ -180,7 +177,6 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             value={form.bgm ?? ""}
             onChange={(e) => update({ bgm: e.target.value || null })}
             placeholder="./assets/bgm/..."
-            disabled={saveMutation.isPending}
           />
         </Field>
 
@@ -197,7 +193,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             onChange={(e) =>
               update({ bgmVolumeDb: Number(e.target.value) })
             }
-            disabled={!form.bgm || saveMutation.isPending}
+            disabled={!form.bgm}
             className="w-full accent-primary disabled:opacity-40"
           />
         </Field>
@@ -208,14 +204,12 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             hint="Title hero 3 dòng + emphasis"
             checked={form.showIntro}
             onChange={(v) => update({ showIntro: v })}
-            disabled={saveMutation.isPending}
           />
           <SwitchRow
             label="Show Outro (4s CTA)"
             hint="Logo + 'Theo dõi để xem thêm'"
             checked={form.showOutro}
             onChange={(v) => update({ showOutro: v })}
-            disabled={saveMutation.isPending}
           />
         </div>
       </div>
