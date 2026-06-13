@@ -1005,3 +1005,153 @@ Render-runner subscribes `renderMedia({ onProgress })` từ Remotion + chia phas
 - Nếu video 1 tháng < 5 cái — overhead build UI > time saved
 
 Cân nhắc trước khi commit thời gian (1-2 tuần MVP). Có thể skip → giữ console nếu daily flow đã đủ smooth.
+
+---
+
+## 15. Pre-production assistant (Phase 11) — workflow ý tưởng → audio
+
+> Sau Phase 10 MVP. Tự động hoá 4/8 step "trước khi tạo video" — từ ý tưởng
+> đến file audio sẵn cho pipeline render.
+
+### 15.1 Workflow 8 step hiện tại + automation map
+
+| # | Step | Auto được không | Mục triển khai |
+|---|---|---|---|
+| 1 | Brainstorm + chọn title + slogan | ✅ Full | 15.4 |
+| 2 | Viết bài luận (1500-3000 từ) | ✅ Full | 15.4 |
+| 3 | Tối ưu NotebookLM prompt | ✅ Full | 15.4 |
+| 4 | Tìm 5-7 PDF references | 🟡 Partial | 15.3 (lib) + 15.4 (LLM suggest) |
+| 5 | Upload bài luận + PDFs lên NLM | ❌ Manual | 15.5 (helper open browser) |
+| 6 | Gen 3 podcast NLM | ❌ Manual (NLM không có API) | 15.5 (copy prompt to clipboard) |
+| 7 | Nghe + chọn 1 | ❌ Subjective | 15.5 (watch Downloads/ folder) |
+| 8 | Upload Studio | ✅ Done (Phase 10.1 drag-drop) | — |
+
+NotebookLM là bottleneck — không có public API. Phần lớn time saved nằm ở
+step 1-4.
+
+### 15.2 Storage strategy — text-only, không cache binary
+
+Đĩa hạn chế → KHÔNG download/lưu PDF, audio NotebookLM, mp3 nguồn. Chỉ
+lưu metadata: URL + title + tags + episode-mapping. User download lại
+từ URL khi cần (1 click).
+
+Disk footprint: ~1KB/ref × 1000 refs = <1MB. Commit git → version history
++ backup miễn phí.
+
+### 15.3 Reference Library
+
+**File**: `references/library.json` (root, committed).
+
+**Schema:**
+```json
+{
+  "items": [
+    {
+      "id": "ref_2026_001",
+      "url": "https://arxiv.org/abs/2401.12345",
+      "title": "Burnout Society — Byung-Chul Han",
+      "author": "Byung-Chul Han",
+      "type": "pdf",
+      "source": "arxiv",
+      "tags": ["triet-hoc", "xa-hoi", "burnout"],
+      "addedAt": "2026-06-13",
+      "lastAccessedAt": null,
+      "usedInEpisodes": ["mu-loa-truoc-gia-tri-hien-tai"],
+      "notes": ""
+    }
+  ]
+}
+```
+
+**Endpoints:**
+- `GET /api/references?tag=...&episode=...&q=...` — list filter
+- `POST /api/references` — add (auto-gen id, optional auto-fetch title)
+- `PUT /api/references/:id` — edit metadata
+- `DELETE /api/references/:id` — remove
+- `POST /api/references/:id/link` — `usedInEpisodes` push
+- `POST /api/references/:id/unlink` — pop
+- `POST /api/references/scrape` — fetch URL → parse og:title (arxiv API
+  cho arxiv URLs, generic html cho rest)
+
+**UI pages:**
+- `/references` — table + tag filter chips + search + "Add" form
+- EpisodeEdit → tab mới "References" hiện refs đã link + "Add from library" / "+ New"
+
+**Workflow tái dùng:**
+1. Tập 1: add ref URL → metadata vào library, KHÔNG cache PDF
+2. Tập 2 cần lại: search tag → click "Open in browser" hoặc "Download to ~/Downloads"
+3. Sau khi xong: xoá khỏi Downloads, library vẫn giữ URL
+
+### 15.4 LLM brainstorm/essay/prompt
+
+OpenAI key đã có trong `.env`. Mỗi step gọi LLM riêng, output ghi file
+text vào `input/`:
+
+**File outputs cho 1 tập:**
+```
+input/
+  episode-XXX.m4a                 # audio (từ NotebookLM, manual)
+  episode-XXX.json                # config (title/hook/episode#)
+  episode-XXX.brainstorm.json     # 5 idea cards + chosen
+  episode-XXX.essay.md            # bài luận dài
+  episode-XXX.nlm-prompt.txt      # prompt sẵn paste vào NotebookLM
+  episode-XXX.refs.json           # link refs từ library
+```
+
+**Endpoints:**
+- `POST /api/llm/brainstorm` — body `{topic, tone}` → 5 ideas
+- `POST /api/llm/essay` — body `{topic, title, outline?}` → SSE stream markdown
+- `POST /api/llm/nlm-prompt` — body `{title, essay?}` → text
+- `POST /api/llm/refs-suggest` — body `{topic}` → 5-7 reading suggestions (LLM gợi ý, không guarantee URL còn tồn tại — user vẫn verify)
+
+**UI flow: page mới `/episodes/:name/brainstorm` (hoặc tab thứ 4 trong EpisodeEdit):**
+
+```
+Step 1 — Ý tưởng                    [Generate 5 ideas]
+  [card] [card] [card] [card] [card]    ← click 1 → fill title/hook
+
+Step 2 — Bài luận                   [Generate essay]
+  Markdown editor (10 phút stream)        ← auto-save vào essay.md
+
+Step 3 — NotebookLM prompt          [Generate prompt]
+  [Copy] [Open NotebookLM ↗]              ← copy + open browser tab
+
+Step 4 — References                 [LLM suggest] [Browse library]
+  - Burnout Society — arxiv...   [Add to ep] [Open]
+  - ...
+
+Step 5-7 — At NotebookLM:           [Open NLM]
+  (manual: upload, paste prompt, gen 3, nghe, pick 1, download)
+
+Step 8 — Drop audio                 [drag .m4a vào đây]
+  → tự gen episode-XXX.m4a → redirect tới Render
+```
+
+### 15.5 NotebookLM handoff helpers
+
+NLM không có API. Phần ta giúp được:
+- "Open NotebookLM" button: `https://notebooklm.google.com/` mở tab mới
+- Auto copy prompt vào clipboard khi click → user chỉ cần paste
+- (Nice-to-have) Watch `~/Downloads/` qua chokidar → khi user save audio NLM về Downloads, Studio toast "Có file mới — link vào episode XXX?"
+
+### 15.6 Phases triển khai
+
+- [ ] **11.0** — Reference Library backend: JSON store + CRUD endpoints + scrape og:title. 0.5 ngày
+- [ ] **11.1** — Library page UI: table + filter chips + add form + auto-fetch title. 0.5 ngày
+- [ ] **11.2** — Episode-level link: tab References trong EpisodeEdit. 0.5 ngày
+- [ ] **11.3** — LLM brainstorm: 5 idea generator → fill title/hook. 0.5 ngày
+- [ ] **11.4** — LLM essay: SSE stream + markdown editor auto-save. 1 ngày
+- [ ] **11.5** — LLM NLM-prompt tuner + copy/open helper. 0.5 ngày
+- [ ] **11.6** — LLM refs-suggest + auto-add vào library. 0.5 ngày
+- [ ] **11.7** — Brainstorm page tổng hợp 4 step LLM + 1 step NLM handoff. 1 ngày
+- [ ] **11.8** — Watch `~/Downloads/` → toast suggest link audio. 0.5 ngày (bonus)
+
+Total Phase 11 ≈ **4.5-5 ngày** sau khi Phase 10 MVP xong.
+
+### 15.7 Khi nào nên làm
+
+- Phase 10 MVP (10.0-10.6) → workflow video render đã smooth qua UI
+- Phase 11 chỉ làm khi:
+  - User thấy 4 step LLM manual đang mất nhiều thời gian
+  - Quantity podcast ≥ 4-5 tập/tháng (ROI cho automation)
+  - Đã quen NotebookLM workflow đủ để biết "tôi cần exactly cái gì"
