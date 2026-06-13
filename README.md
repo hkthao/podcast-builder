@@ -1,6 +1,8 @@
 # podcast-builder
 
-Pipeline tự động tạo video động (1080×1920 hoặc 16:9) từ file audio podcast Việt — bằng Remotion + Whisper local. Mỗi ngày bạn chỉ cần bỏ 1 audio + sửa 1 file JSON nhỏ + chạy 1 lệnh.
+Pipeline tự động tạo video động (1080×1920 hoặc 16:9) từ file audio podcast Việt — bằng Remotion + Whisper local. Đi kèm **Studio UI** (Vite + React + Hono) để thao tác qua web local, hoặc dùng console pure.
+
+Workflow đầy đủ: ý tưởng → essay → NotebookLM podcast → render video. LLM hỗ trợ 4 step pre-production (brainstorm / essay / NLM prompt / refs suggest) qua OpenAI hoặc Ollama local.
 
 Output: video MP4 (H.264 + AAC, -16 LUFS) đủ tiêu chuẩn up Facebook + thumbnail JPEG + lock file để tái lập.
 
@@ -29,10 +31,43 @@ WHISPER_MODEL=small    npm run setup   # nhanh hơn, dấu kém hơn (tránh dù
 
 Mặc định lưu tại `whisper.cpp/`. Model lớn nặng vài trăm MB — chỉ tải 1 lần.
 
+Optional cho LLM features (brainstorm/essay/refs):
+
+```bash
+# Tùy chọn 1: OpenAI (yêu cầu API key, ~5-10s/call)
+echo "OPENAI_API_KEY=sk-..." > .env
+
+# Tùy chọn 2: Ollama local (offline, ~30s-2 phút/call tùy model)
+brew install ollama
+ollama pull qwen3:8b    # hoặc llama3:8b — Studio tự detect chat models
+ollama serve            # background
+
+# Cả 2 đều OK — UI cho phép chọn provider mỗi lần gen
+```
+
 ---
 
+## Cách dùng (chọn 1)
 
-## Quy trình hằng ngày (3 bước)
+### A. Studio UI — recommended cho daily
+
+```bash
+npm run studio              # mở UI tại http://localhost:3000 + server :3001
+```
+
+Workflow trong UI:
+
+1. **Workflow** (`/workflow`) — overview tất cả "chain" (topic) với progress 6 step
+2. **Brainstorm** (`/brainstorm`) — gen 5 ý tưởng từ topic + tone, pick 1
+3. **Essay** (`/essay`) — gen bài luận 1500-2500 từ qua SSE stream, edit + auto-save; trong cùng trang có:
+   - NotebookLM prompt gen (paste vào NLM)
+   - Suggest references (5-7 sách/bài/video, click → Add to library)
+   - Upload audio NotebookLM → tạo episode prefill title/hook
+4. **References** (`/references`) — JSON library, scrape og:title + arXiv API + citation_pdf_url
+5. **Episodes** (`/`) — drag-drop audio, edit config form auto-save 500ms, render preview/full với SSE progress + queue
+6. Mỗi episode có 5 tab: Config / Scenes (inline edit + thumbnails) / Transcript (find/replace, edit) / References / Files (audio/video player + xoá)
+
+### B. Console — automation hoặc batch
 
 ```bash
 # 1. Bỏ file audio vào input/
@@ -42,7 +77,12 @@ cp ~/Downloads/recording.mp3 ./input/episode-2026-06-12.mp3
 $EDITOR ./input/episode-2026-06-12.json
 ```
 
-Lần đầu chạy `make` mà chưa có file JSON → script tự tạo template + dừng + hướng dẫn điền:
+Lần đầu chạy `make` mà chưa có file JSON → script tự tạo template + dừng + hướng dẫn điền.
+
+---
+
+
+## Quy trình console (bypass UI)
 
 ```json
 {
@@ -54,7 +94,8 @@ Lần đầu chạy `make` mà chưa có file JSON → script tự tạo templat
   "bgmVolumeDb": -28,
   "showIntro": true,
   "showOutro": true,
-  "sceneOverrides": null
+  "sceneOverrides": null,
+  "essayId": null
 }
 ```
 
@@ -145,9 +186,10 @@ Khuyến nghị: dùng model `medium` hoặc `large-v3` để giảm sai số ba
 | Lệnh | Tác dụng |
 |---|---|
 | `npm run setup` | Cài whisper.cpp + model (1 lần) |
-| `npm run studio` | Mở Remotion Studio (preview composition + tune component) |
-| `npm run preview -- <audio>` | Render preview 480×854 / 10s |
-| `npm run make -- <audio>` | Render full + thumbnail + lock file |
+| `npm run studio` | **Mở Studio UI (Vite :3000 + Hono :3001) — daily workflow** |
+| `npm run remotion-studio` | Mở Remotion Studio gốc (tune composition/component) |
+| `npm run preview -- <audio>` | Render preview 480×854 / 10s qua console |
+| `npm run make -- <audio>` | Render full + thumbnail + lock file qua console |
 | `npm run spell-fix -- <audio>` | Sửa lỗi chính tả transcript Whisper qua OpenAI |
 | `npm run typecheck` | Type check toàn project |
 
@@ -196,14 +238,18 @@ npm run make -- input/<file>.mp3
 
 ---
 
-## Roadmap
+## Trạng thái phase (theo PLAN.md)
 
-- **PLAN Mục 14 — Studio UI** (Phase 10): wrap pipeline thành web app local
-  thay workflow console. Vite + React frontend + Hono backend, SSE progress,
-  episode CRUD form, scene/transcript inline edit. MVP 10.0-10.5 = ~1-2 tuần.
-
-Chưa làm. Cân nhắc dựa trên volume video — chỉ build nếu console workflow
-thấy gò ép.
+- **Phase 0-9** — Pipeline Remotion + Whisper + orchestrator ✓
+- **Phase 10** — Studio UI MVP (10.0-10.6) ✓ · 10.7 scene thumbnails ✓ · 10.8 polish (chưa)
+- **Phase 11** — Pre-production LLM:
+  - 11.0-11.2 Reference Library ✓
+  - 11.3 Brainstorm (OpenAI + Ollama) ✓
+  - 11.4 Essay streaming SSE ✓
+  - 11.5 NotebookLM prompt tuner ✓
+  - 11.6 Refs suggest ✓
+  - 11.7 Workflow overview ✓
+  - 11.8 Watch ~/Downloads/ (chưa)
 
 ## Tham khảo
 

@@ -166,6 +166,8 @@ export type BrainstormIdea = {
   hook: string;
   angle: string;
   why: string;
+  /** Dàn ý 5-7 section sẵn dùng cho Gen essay. "" cho legacy idea. */
+  outline: string;
 };
 
 export type LLMProvider = "openai" | "ollama";

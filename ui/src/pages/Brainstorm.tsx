@@ -483,6 +483,24 @@ function IdeaCard({
             </p>
           </div>
         </div>
+        {idea.outline && (
+          <details className="group">
+            <summary className="cursor-pointer flex items-center gap-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer">
+                Dàn ý essay
+              </Label>
+              <span className="text-xs text-muted-foreground group-open:hidden">
+                ▸ show
+              </span>
+              <span className="text-xs text-muted-foreground hidden group-open:inline">
+                ▾ hide
+              </span>
+            </summary>
+            <pre className="mt-2 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap font-sans bg-secondary/30 rounded p-3 border">
+              {idea.outline}
+            </pre>
+          </details>
+        )}
       </div>
       <div className="px-6 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
         <CopyButton text={idea.title} label="Title" />
@@ -490,15 +508,16 @@ function IdeaCard({
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
+          onClick={() => {
+            const fallbackOutline = `Mở: ${idea.hook}\n\n1. Góc nhìn: ${idea.angle}\n\nKết: ${idea.why}`;
             navigate("/essay", {
               state: {
                 prefillTitle: idea.title,
-                prefillOutline: `Hook: ${idea.hook}\n\nGóc nhìn: ${idea.angle}\n\nVì sao resonate: ${idea.why}`,
+                prefillOutline: idea.outline || fallbackOutline,
                 brainstormRef: { id: sessionId, ideaIdx: idx },
               },
-            })
-          }
+            });
+          }}
         >
           <FileText className="size-4" />
           Gen essay

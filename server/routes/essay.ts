@@ -91,7 +91,7 @@ essayRoutes.post("/:id/nlm-prompt", async (c) => {
       model: body.model.trim(),
       systemPrompt: NLM_PROMPT_SYSTEM,
       userContent: buildNlmPromptUserContent(essay.title, essay.content),
-      temperature: 0.5,
+      temperature: 0.7,
     });
     const updated = await updateEssayContent(id, {
       nlmPrompt: content.trim(),

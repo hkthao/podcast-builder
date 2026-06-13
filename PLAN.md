@@ -968,14 +968,14 @@ Render-runner subscribes `renderMedia({ onProgress })` từ Remotion + chia phas
 
 ### 14.7 Phases triển khai
 
-- [ ] **10.0** — Backend skeleton: Hono server, `/api/episodes` list+get (read-only). 0.5 ngày
-- [ ] **10.1** — Episode CRUD: PUT config, fs watcher, **POST `/upload` drag-drop** copy audio + tạo template json. 1 ngày
-- [ ] **10.2** — Frontend skeleton: Vite + React + **shadcn/ui setup từ family-tree-v3 theme** (Tailwind + CSS vars + fonts), EpisodeList với fetch + **drag-drop file**. 1 ngày
-- [ ] **10.3** — EpisodeEdit Config tab: form Zod-validated + auto-save debounce 500ms. 1 ngày
-- [ ] **10.4** — Render trigger + **modal SSE progress** + **queue 2-3 parallel** + cancel. 1.5 ngày
-- [ ] **10.5** — Preview player HTML5 + download + "Show in Finder". 0.5 ngày
-- [ ] **10.6** — **Transcript review + edit tab** (MVP+): list sentence từ `corrected.json`, click edit inline, diff highlight với raw, find/replace all cho lỗi lặp lại, save → invalidate render cache. 1.5 ngày
-- [ ] **10.7** — Scenes tab: inline sceneType + mood edit, small thumbnails qua `renderStill`. +1 ngày
+- [x] **10.0** — Backend skeleton: Hono server, `/api/episodes` list+get (read-only). 0.5 ngày
+- [x] **10.1** — Episode CRUD: PUT config, fs watcher, **POST `/upload` drag-drop** copy audio + tạo template json. 1 ngày
+- [x] **10.2** — Frontend skeleton: Vite + React + **shadcn/ui setup từ family-tree-v3 theme** (Tailwind + CSS vars + fonts), EpisodeList với fetch + **drag-drop file**. 1 ngày
+- [x] **10.3** — EpisodeEdit Config tab: form Zod-validated + auto-save debounce 500ms. 1 ngày
+- [x] **10.4** — Render trigger + **modal SSE progress** + **queue 2-3 parallel** + cancel. 1.5 ngày
+- [x] **10.5** — Preview player HTML5 + download + "Show in Finder". 0.5 ngày (Files tab thay thế)
+- [x] **10.6** — **Transcript review + edit tab** (MVP+): list sentence từ `corrected.json`, click edit inline, diff highlight với raw, find/replace all cho lỗi lặp lại, save → invalidate render cache. 1.5 ngày
+- [x] **10.7** — Scenes tab: inline sceneType + mood edit, small thumbnails qua `renderStill`. +1 ngày
 - [ ] **10.8** — Polish: dark mode, keyboard shortcuts, recent episodes pinned. +1 ngày
 
 10.0-10.6 = **MVP** (6-7 ngày). 10.7-10.8 = bonus.
@@ -1136,15 +1136,21 @@ NLM không có API. Phần ta giúp được:
 
 ### 15.6 Phases triển khai
 
-- [ ] **11.0** — Reference Library backend: JSON store + CRUD endpoints + scrape og:title. 0.5 ngày
-- [ ] **11.1** — Library page UI: table + filter chips + add form + auto-fetch title. 0.5 ngày
-- [ ] **11.2** — Episode-level link: tab References trong EpisodeEdit. 0.5 ngày
-- [ ] **11.3** — LLM brainstorm: 5 idea generator → fill title/hook. 0.5 ngày
-- [ ] **11.4** — LLM essay: SSE stream + markdown editor auto-save. 1 ngày
-- [ ] **11.5** — LLM NLM-prompt tuner + copy/open helper. 0.5 ngày
-- [ ] **11.6** — LLM refs-suggest + auto-add vào library. 0.5 ngày
-- [ ] **11.7** — Brainstorm page tổng hợp 4 step LLM + 1 step NLM handoff. 1 ngày
+- [x] **11.0** — Reference Library backend: JSON store + CRUD endpoints + scrape og:title. 0.5 ngày
+- [x] **11.1** — Library page UI: table + filter chips + add form + auto-fetch title. 0.5 ngày
+- [x] **11.2** — Episode-level link: tab References trong EpisodeEdit. 0.5 ngày
+- [x] **11.3** — LLM brainstorm: 5 idea generator → fill title/hook. 0.5 ngày (+ Ollama local support)
+- [x] **11.4** — LLM essay: SSE stream + markdown editor auto-save. 1 ngày
+- [x] **11.5** — LLM NLM-prompt tuner + copy/open helper. 0.5 ngày
+- [x] **11.6** — LLM refs-suggest + auto-add vào library. 0.5 ngày
+- [x] **11.7** — Workflow page (`/workflow`) overview brainstorm/essay/nlm/refs/audio/render. 1 ngày
 - [ ] **11.8** — Watch `~/Downloads/` → toast suggest link audio. 0.5 ngày (bonus)
+
+**Extras đã thêm (không có trong PLAN gốc):**
+- [x] **Bridge Essay → Episode**: upload audio NLM trực tiếp từ Essay page, auto prefill title/hook + essayId trace.
+- [x] **Files tab** per episode: list audio/video/thumbnail/lock/tmp, inline player + xoá.
+- [x] **Auto episodeNumber**: max(existing) + 1 khi upload, không còn dùm vào #1.
+- [x] **Provider Ollama** cho cả 4 LLM endpoint (brainstorm/essay/nlm-prompt/refs-suggest).
 
 Total Phase 11 ≈ **4.5-5 ngày** sau khi Phase 10 MVP xong.
 
