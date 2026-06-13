@@ -274,6 +274,13 @@ export async function uploadAudio(
   // Tạo template JSON nếu chưa có. Khi có essay → prefill title/hook/essayId.
   if (!(await exists(configPath))) {
     const template = buildTemplate(slug);
+    // Auto next episodeNumber = max(existing) + 1
+    const all = await listEpisodes();
+    const maxNum = all.reduce(
+      (m, e) => Math.max(m, e.config.episodeNumber),
+      0,
+    );
+    template.episodeNumber = maxNum + 1;
     if (derived && options.essayId) {
       template.title = derived.title;
       template.hook = derived.hook;

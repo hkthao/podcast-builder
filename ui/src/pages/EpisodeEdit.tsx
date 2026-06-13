@@ -319,6 +319,18 @@ function ScenesPanel({
     staleTime: Infinity,
   });
 
+  const thumbsQ = useQuery({
+    queryKey: ["scene-thumbs", episodeName],
+    queryFn: () => api.listSceneThumbnails(episodeName),
+    enabled: scenes.length > 0,
+  });
+
+  const genThumbsMut = useMutation({
+    mutationFn: () => api.genSceneThumbnails(episodeName),
+    onSuccess: (data) =>
+      qc.setQueryData(["scene-thumbs", episodeName], data),
+  });
+
   const saveMutation = useMutation({
     mutationFn: (next: ScenePlanItem[]) => api.savePlan(episodeName, next),
     onSuccess: () => {
@@ -351,15 +363,51 @@ function ScenesPanel({
       </Card>
     );
   }
+
+  const thumbUrls = thumbsQ.data?.urls ?? [];
+  // Map idx → url qua filename pattern .scene-NN.jpg
+  const thumbByIdx = new Map<number, string>();
+  for (const url of thumbUrls) {
+    const m = url.match(/\.scene-(\d{2})\.jpg$/);
+    if (m) thumbByIdx.set(parseInt(m[1], 10), url);
+  }
+
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-6 py-3 border-b bg-secondary/30 text-sm text-muted-foreground flex items-center justify-between">
-        <span>{scenes.length} cảnh — click row để sửa</span>
-        <span className="font-mono">{formatDuration(totalDurationMs)}</span>
+      <div className="px-6 py-3 border-b bg-secondary/30 text-sm flex items-center gap-3">
+        <span className="text-muted-foreground">
+          {scenes.length} cảnh — click row để sửa
+        </span>
+        <span className="font-mono text-muted-foreground">
+          {formatDuration(totalDurationMs)}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {thumbUrls.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {thumbUrls.length}/{scenes.length} thumb
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => genThumbsMut.mutate()}
+            disabled={genThumbsMut.isPending}
+            title="Render thumbnail .jpg cho mỗi cảnh (~10-60s, cần đã render preview/full trước)"
+          >
+            {genThumbsMut.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Film className="size-3.5" />
+            )}
+            {thumbUrls.length > 0 ? "Render lại thumbs" : "Render thumbs"}
+          </Button>
+        </div>
       </div>
-      {saveMutation.isError && (
+      {(saveMutation.isError || genThumbsMut.isError) && (
         <div className="px-6 py-2 bg-destructive/10 text-destructive text-sm border-b">
-          Save thất bại: {String(saveMutation.error)}
+          {saveMutation.isError
+            ? `Save thất bại: ${String(saveMutation.error)}`
+            : `Render thumbs thất bại: ${String(genThumbsMut.error)}`}
         </div>
       )}
       <div className="divide-y">
@@ -378,6 +426,7 @@ function ScenesPanel({
             <SceneViewRow
               key={s.index}
               scene={s}
+              thumbUrl={thumbByIdx.get(s.index) ?? null}
               onEdit={() => setEditingIdx(s.index)}
             />
           ),
@@ -406,9 +455,11 @@ const FALLBACK_SCENE_TYPES = [
 
 function SceneViewRow({
   scene,
+  thumbUrl,
   onEdit,
 }: {
   scene: ScenePlanItem;
+  thumbUrl: string | null;
   onEdit: () => void;
 }) {
   return (
@@ -420,6 +471,18 @@ function SceneViewRow({
         <div className="font-mono text-xs text-muted-foreground w-12 shrink-0 pt-1">
           #{String(scene.index).padStart(2, "0")}
         </div>
+        {thumbUrl ? (
+          <img
+            src={thumbUrl}
+            alt={`Scene ${scene.index} thumbnail`}
+            className="w-20 h-36 object-cover rounded border shrink-0 bg-secondary"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-20 h-36 rounded border border-dashed flex items-center justify-center shrink-0 bg-secondary/30">
+            <Film className="size-5 text-muted-foreground/40" />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 text-xs">
             <Badge variant="outline" className="font-mono">
@@ -428,7 +491,7 @@ function SceneViewRow({
             <Badge variant="secondary">{scene.mood}</Badge>
             <Badge variant="default">{scene.sceneType}</Badge>
           </div>
-          <p className="text-sm text-foreground line-clamp-2">
+          <p className="text-sm text-foreground line-clamp-3">
             {scene.text || (
               <span className="text-muted-foreground italic">
                 — (không có text)

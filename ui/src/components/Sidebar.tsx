@@ -7,6 +7,7 @@ import {
   Library,
   Lightbulb,
   FileText,
+  Workflow as WorkflowIcon,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -46,6 +47,11 @@ export function Sidebar() {
 
       <nav className="p-3 space-y-0.5">
         <NavItem to="/" icon={<Home className="size-4" />} label="Episodes" />
+        <NavItem
+          to="/workflow"
+          icon={<WorkflowIcon className="size-4" />}
+          label="Workflow"
+        />
         <NavItem
           to="/brainstorm"
           icon={<Lightbulb className="size-4" />}

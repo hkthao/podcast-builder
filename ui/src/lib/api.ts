@@ -216,6 +216,36 @@ export type EssayStreamEvent =
   | { type: "done"; essay: Essay }
   | { type: "error"; error: string };
 
+export type WorkflowChain = {
+  id: string;
+  source: "brainstorm" | "essay" | "episode";
+  topic: string;
+  brainstorm: {
+    id: string;
+    topic: string;
+    pickedIdx: number | null;
+    ideaCount: number;
+    tone: string;
+    createdAt: string;
+  } | null;
+  essay: {
+    id: string;
+    title: string;
+    wordCount: number;
+    hasNlmPrompt: boolean;
+    updatedAt: string;
+  } | null;
+  episode: {
+    name: string;
+    title: string;
+    hasAudio: boolean;
+    hasOutput: boolean;
+    status: EpisodeStatus;
+  } | null;
+  refsCount: number;
+  updatedAt: string;
+};
+
 export type RenderPhase =
   | "queued"
   | "process-audio"
@@ -292,6 +322,17 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ scenes }),
     }),
+
+  listSceneThumbnails: (name: string) =>
+    jsonFetch<{ urls: string[] }>(
+      `/api/episodes/${encodeURIComponent(name)}/scene-thumbnails`,
+    ),
+
+  genSceneThumbnails: (name: string) =>
+    jsonFetch<{ urls: string[] }>(
+      `/api/episodes/${encodeURIComponent(name)}/scene-thumbnails`,
+      { method: "POST" },
+    ),
 
   getPlanOptions: () =>
     jsonFetch<{ moods: string[]; sceneTypes: string[] }>(
@@ -396,6 +437,9 @@ export const api = {
     }),
 
   listLLMModels: () => jsonFetch<LLMModels>("/api/llm/models"),
+
+  listWorkflow: () =>
+    jsonFetch<{ chains: WorkflowChain[] }>("/api/workflow"),
 
   listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
   getEssay: (id: string) =>

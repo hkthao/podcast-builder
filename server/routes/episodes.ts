@@ -13,6 +13,10 @@ import {
   saveTranscript,
   uploadAudio,
 } from "../lib/episode-store";
+import {
+  genSceneThumbnails,
+  listSceneThumbnails,
+} from "../lib/scene-thumbnails";
 
 export const episodesRoutes = new Hono();
 
@@ -143,6 +147,31 @@ episodesRoutes.delete("/:name/files", async (c) => {
   try {
     const data = await deleteEpisodeFile(name, body.bucket, body.filename);
     return c.json(data);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * List scene thumbnail URLs (filesystem). Empty array nếu chưa gen.
+ */
+episodesRoutes.get("/:name/scene-thumbnails", async (c) => {
+  const name = c.req.param("name");
+  const urls = await listSceneThumbnails(name);
+  return c.json({ urls });
+});
+
+/**
+ * Gen scene thumbnails. Sync (10-60s). Throws nếu thiếu prereq
+ * (plan/transcript/normalized.wav).
+ */
+episodesRoutes.post("/:name/scene-thumbnails", async (c) => {
+  const name = c.req.param("name");
+  try {
+    const result = await genSceneThumbnails(name);
+    return c.json(result);
   } catch (e) {
     const err = e as Error & { code?: string };
     const status = err.code === "VALIDATION" ? 400 : 500;
