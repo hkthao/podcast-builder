@@ -159,6 +159,19 @@ export type BrainstormIdea = {
   why: string;
 };
 
+export type LLMProvider = "openai" | "ollama";
+
+export type LLMModel = {
+  id: string;
+  label: string;
+  sizeBytes: number | null;
+};
+
+export type LLMModels = {
+  openai: LLMModel[];
+  ollama: LLMModel[];
+};
+
 export type BrainstormSession = {
   id: string;
   topic: string;
@@ -166,6 +179,8 @@ export type BrainstormSession = {
   ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
+  provider?: LLMProvider;
+  model?: string;
 };
 
 export type RenderPhase =
@@ -324,11 +339,19 @@ export const api = {
       `/api/brainstorm/${encodeURIComponent(id)}`,
     ),
 
-  createBrainstorm: (input: { topic: string; tone: string; count?: number }) =>
+  createBrainstorm: (input: {
+    topic: string;
+    tone: string;
+    count?: number;
+    provider?: LLMProvider;
+    model?: string;
+  }) =>
     jsonFetch<BrainstormSession>("/api/brainstorm", {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  listLLMModels: () => jsonFetch<LLMModels>("/api/llm/models"),
 
   pickBrainstormIdea: (id: string, pickedIdx: number | null) =>
     jsonFetch<BrainstormSession>(

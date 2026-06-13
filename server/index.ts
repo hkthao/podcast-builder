@@ -6,6 +6,7 @@ import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 import { brainstormRoutes } from "./routes/brainstorm";
 import { episodesRoutes } from "./routes/episodes";
+import { llmRoutes } from "./routes/llm";
 import { referencesRoutes } from "./routes/references";
 import { renderRoutes } from "./routes/render";
 import { startFsWatcher } from "./lib/events";
@@ -44,6 +45,7 @@ app.route("/api/episodes", episodesRoutes);
 app.route("/api/references", referencesRoutes);
 app.route("/api/render", renderRoutes);
 app.route("/api/brainstorm", brainstormRoutes);
+app.route("/api/llm", llmRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.

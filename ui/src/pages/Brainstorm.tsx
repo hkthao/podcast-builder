@@ -11,7 +11,12 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { api, type BrainstormSession, type BrainstormIdea } from "@/lib/api";
+import {
+  api,
+  type BrainstormSession,
+  type BrainstormIdea,
+  type LLMProvider,
+} from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,12 +38,41 @@ export function Brainstorm() {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState(TONES[0]);
   const [count, setCount] = useState(5);
+  const [provider, setProvider] = useState<LLMProvider>("openai");
+  const [model, setModel] = useState<string>("gpt-4o-mini");
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sessionsQ = useQuery({
     queryKey: ["brainstorm-sessions"],
     queryFn: () => api.listBrainstorm(),
   });
+
+  const modelsQ = useQuery({
+    queryKey: ["llm-models"],
+    queryFn: () => api.listLLMModels(),
+    staleTime: 60_000,
+  });
+
+  // Auto-fix model khi đổi provider: pick model đầu tiên của provider mới
+  useEffect(() => {
+    const list = modelsQ.data?.[provider] ?? [];
+    if (list.length === 0) return;
+    if (!list.some((m) => m.id === model)) {
+      setModel(list[0].id);
+    }
+  }, [provider, modelsQ.data, model]);
+
+  // Auto-switch provider nếu OpenAI không có key
+  useEffect(() => {
+    if (
+      modelsQ.data &&
+      modelsQ.data.openai.length === 0 &&
+      modelsQ.data.ollama.length > 0 &&
+      provider === "openai"
+    ) {
+      setProvider("ollama");
+    }
+  }, [modelsQ.data, provider]);
 
   const sessions = sessionsQ.data?.sessions ?? [];
   const activeSession =
@@ -54,7 +88,8 @@ export function Brainstorm() {
   }, [sessions, activeId]);
 
   const genMut = useMutation({
-    mutationFn: () => api.createBrainstorm({ topic, tone, count }),
+    mutationFn: () =>
+      api.createBrainstorm({ topic, tone, count, provider, model }),
     onSuccess: (newSession) => {
       qc.invalidateQueries({ queryKey: ["brainstorm-sessions"] });
       setActiveId(newSession.id);
@@ -105,6 +140,15 @@ export function Brainstorm() {
           {/* Generate form */}
           <Card className="p-6">
             <div className="space-y-4">
+              {modelsQ.isError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive flex items-start gap-2">
+                  <AlertCircle className="size-4 mt-0.5 shrink-0" />
+                  <span>
+                    Không fetch được danh sách model. Server studio chưa chạy?
+                    Mở terminal mới chạy <code className="font-mono">npm run studio</code>.
+                  </span>
+                </div>
+              )}
               <div>
                 <Label htmlFor="topic">Chủ đề</Label>
                 <Textarea
@@ -116,8 +160,8 @@ export function Brainstorm() {
                   className="mt-1.5"
                 />
               </div>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[200px]">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
                   <Label htmlFor="tone">Tone</Label>
                   <select
                     id="tone"
@@ -132,7 +176,63 @@ export function Brainstorm() {
                     ))}
                   </select>
                 </div>
-                <div className="w-32">
+                <div>
+                  <Label htmlFor="provider">Provider</Label>
+                  <select
+                    id="provider"
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value as LLMProvider)}
+                    disabled={modelsQ.isLoading || modelsQ.isError}
+                    className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    <option
+                      value="openai"
+                      disabled={
+                        !!modelsQ.data &&
+                        (modelsQ.data?.openai.length ?? 0) === 0
+                      }
+                    >
+                      OpenAI
+                      {modelsQ.data &&
+                        (modelsQ.data.openai.length ?? 0) === 0 &&
+                        " (no key)"}
+                    </option>
+                    <option
+                      value="ollama"
+                      disabled={
+                        !!modelsQ.data &&
+                        (modelsQ.data?.ollama.length ?? 0) === 0
+                      }
+                    >
+                      Ollama (local)
+                      {modelsQ.data &&
+                        (modelsQ.data.ollama.length ?? 0) === 0 &&
+                        " (offline)"}
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="model">Model</Label>
+                  <select
+                    id="model"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={(modelsQ.data?.[provider]?.length ?? 0) === 0}
+                    className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    {(modelsQ.data?.[provider] ?? []).length === 0 ? (
+                      <option value="">— không có model —</option>
+                    ) : (
+                      (modelsQ.data?.[provider] ?? []).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                          {m.sizeBytes ? ` · ${humanGB(m.sizeBytes)}` : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div>
                   <Label htmlFor="count">Số ý tưởng</Label>
                   <select
                     id="count"
@@ -150,11 +250,13 @@ export function Brainstorm() {
               </div>
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Dùng OpenAI gpt-4o-mini · ~5-10s
+                  {provider === "openai"
+                    ? `OpenAI ${model} · ~5-10s`
+                    : `Ollama ${model} · local (có thể 30s-2 phút)`}
                 </p>
                 <Button
                   onClick={() => genMut.mutate()}
-                  disabled={!topic.trim() || genMut.isPending}
+                  disabled={!topic.trim() || !model || genMut.isPending}
                 >
                   {genMut.isPending ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -230,9 +332,12 @@ export function Brainstorm() {
                   >
                     <p className="text-sm line-clamp-2 font-medium">{s.topic}</p>
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{s.tone}</span>
-                      <span>·</span>
                       <span>{s.ideas.length} ý</span>
+                      {s.provider && (
+                        <span className="font-mono truncate">
+                          · {s.provider}
+                        </span>
+                      )}
                       {s.pickedIdx !== null && (
                         <Badge variant="secondary" className="ml-auto">
                           <CheckCircle2 className="size-3" />
@@ -270,7 +375,17 @@ function IdeasView({
         <div className="min-w-0">
           <p className="font-medium text-sm">{session.topic}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {session.tone} · {new Date(session.createdAt).toLocaleString("vi-VN")}
+            {session.tone}
+            {session.provider && session.model && (
+              <>
+                {" · "}
+                <code className="font-mono">
+                  {session.provider}:{session.model}
+                </code>
+              </>
+            )}
+            {" · "}
+            {new Date(session.createdAt).toLocaleString("vi-VN")}
           </p>
         </div>
         <Button
@@ -388,6 +503,10 @@ function IdeaCard({
       </div>
     </Card>
   );
+}
+
+function humanGB(bytes: number): string {
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {

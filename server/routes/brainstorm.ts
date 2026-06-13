@@ -28,15 +28,26 @@ brainstormRoutes.post("/", async (c) => {
   } catch {
     return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
   }
-  const body = raw as { topic?: string; tone?: string; count?: number };
+  const body = raw as {
+    topic?: string;
+    tone?: string;
+    count?: number;
+    provider?: string;
+    model?: string;
+  };
   if (typeof body.topic !== "string" || typeof body.tone !== "string") {
     return c.json({ error: "Cần field 'topic' và 'tone' (string)" }, 400);
+  }
+  if (body.provider && body.provider !== "openai" && body.provider !== "ollama") {
+    return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
   }
   try {
     const session = await generateAndSave({
       topic: body.topic,
       tone: body.tone,
       count: typeof body.count === "number" ? body.count : undefined,
+      provider: body.provider as "openai" | "ollama" | undefined,
+      model: typeof body.model === "string" ? body.model : undefined,
     });
     return c.json(session, 201);
   } catch (e) {

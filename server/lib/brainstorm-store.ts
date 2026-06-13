@@ -8,10 +8,12 @@
  */
 import path from "node:path";
 import fs from "node:fs/promises";
-import OpenAI from "openai";
+import { chat, type LLMProvider } from "./llm-providers";
 
 const BRAINSTORM_DIR = path.resolve("brainstorm");
-const MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
+const DEFAULT_PROVIDER: LLMProvider =
+  (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
+const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
 
 export type BrainstormIdea = {
   title: string;
@@ -27,6 +29,9 @@ export type BrainstormSession = {
   ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
+  /** Provider+model dùng để gen. Optional cho session cũ. */
+  provider?: LLMProvider;
+  model?: string;
 };
 
 const slugify = (s: string): string =>
@@ -128,23 +133,22 @@ export type GenerateInput = {
   topic: string;
   tone: string;
   count?: number;
+  provider?: LLMProvider;
+  model?: string;
 };
 
 /**
- * Gen ideas qua OpenAI + save vào `brainstorm/<id>.json`.
- * Throws nếu OPENAI_API_KEY missing hoặc LLM trả response không parse được.
+ * Gen ideas qua LLM provider (OpenAI hoặc Ollama) + save `brainstorm/<id>.json`.
+ * Throws nếu provider không sẵn sàng hoặc LLM trả response không parse được.
  */
 export async function generateAndSave(
   input: GenerateInput,
 ): Promise<BrainstormSession> {
-  if (!process.env.OPENAI_API_KEY) {
-    const err = new Error("Thiếu OPENAI_API_KEY trong .env") as Error & { code: string };
-    err.code = "VALIDATION";
-    throw err;
-  }
   const topic = input.topic.trim();
   const tone = input.tone.trim();
   const count = input.count ?? 5;
+  const provider = input.provider ?? DEFAULT_PROVIDER;
+  const model = input.model ?? DEFAULT_MODEL;
   if (!topic) {
     const err = new Error("Thiếu topic") as Error & { code: string };
     err.code = "VALIDATION";
@@ -156,18 +160,14 @@ export async function generateAndSave(
     throw err;
   }
 
-  const openai = new OpenAI();
-  const response = await openai.chat.completions.create({
-    model: MODEL,
+  const content = await chat({
+    provider,
+    model,
+    systemPrompt: SYSTEM_PROMPT.replace("{N}", String(count)),
+    userContent: JSON.stringify({ topic, tone }),
     temperature: 0.9,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT.replace("{N}", String(count)) },
-      { role: "user", content: JSON.stringify({ topic, tone }) },
-    ],
-    response_format: { type: "json_object" },
+    jsonMode: true,
   });
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error("LLM trả về empty response");
   const parsed = JSON.parse(content) as { ideas?: unknown };
   if (!Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
     throw new Error("LLM response thiếu mảng 'ideas'");
@@ -213,6 +213,8 @@ export async function generateAndSave(
     ideas,
     createdAt: now.toISOString(),
     pickedIdx: null,
+    provider,
+    model,
   };
   await ensureDir();
   await fs.writeFile(filePath(id), JSON.stringify(session, null, 2));
