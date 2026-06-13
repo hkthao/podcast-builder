@@ -11,13 +11,25 @@ import {
   FileText,
   Settings,
   Film,
+  Library,
   Pencil,
   Save,
   X as XIcon,
   Loader2,
+  ExternalLink,
+  Trash2,
+  Plus,
+  FileDown,
+  Files,
+  Volume2,
+  Lock,
+  Database,
 } from "lucide-react";
 import {
   api,
+  type EpisodeFile,
+  type EpisodeFileKind,
+  type Reference,
   type ScenePlanItem,
   type TranscriptSegment,
 } from "@/lib/api";
@@ -28,7 +40,7 @@ import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
 import { RenderModal } from "@/components/RenderModal";
 import { cn } from "@/lib/utils";
 
-type Tab = "config" | "scenes" | "transcript";
+type Tab = "config" | "scenes" | "transcript" | "references" | "files";
 
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
@@ -51,6 +63,18 @@ export function EpisodeEdit() {
   const transcriptQ = useQuery({
     queryKey: ["transcript", name],
     queryFn: () => api.getTranscript(name),
+    enabled: !!name,
+  });
+
+  const refsQ = useQuery({
+    queryKey: ["episode-refs", name],
+    queryFn: () => api.listReferences({ episode: name }),
+    enabled: !!name,
+  });
+
+  const filesQ = useQuery({
+    queryKey: ["episode-files", name],
+    queryFn: () => api.getFiles(name),
     enabled: !!name,
   });
 
@@ -88,6 +112,11 @@ export function EpisodeEdit() {
   const ep = epQ.data;
   const planCount = planQ.data?.totalScenes ?? 0;
   const transcriptCount = transcriptQ.data?.totalSegments ?? 0;
+  const refsCount = refsQ.data?.items.length ?? 0;
+  const filesCount =
+    (filesQ.data?.input.length ?? 0) +
+    (filesQ.data?.output.length ?? 0) +
+    (filesQ.data?.tmp.length ?? 0);
 
   return (
     <div className="container max-w-4xl py-10">
@@ -150,6 +179,18 @@ export function EpisodeEdit() {
           icon={<FileText className="size-4" />}
           label={`Transcript${transcriptCount > 0 ? ` (${transcriptCount})` : ""}`}
         />
+        <TabButton
+          active={tab === "references"}
+          onClick={() => setTab("references")}
+          icon={<Library className="size-4" />}
+          label={`References${refsCount > 0 ? ` (${refsCount})` : ""}`}
+        />
+        <TabButton
+          active={tab === "files"}
+          onClick={() => setTab("files")}
+          icon={<Files className="size-4" />}
+          label={`Files${filesCount > 0 ? ` (${filesCount})` : ""}`}
+        />
       </div>
 
       {tab === "config" && <EpisodeConfigForm ep={ep} />}
@@ -169,6 +210,22 @@ export function EpisodeEdit() {
           loading={transcriptQ.isLoading}
         />
       )}
+      {tab === "references" && (
+        <ReferencesPanel
+          episodeName={name}
+          linked={refsQ.data?.items ?? []}
+          loading={refsQ.isLoading}
+        />
+      )}
+      {tab === "files" && (
+        <FilesPanel
+          episodeName={name}
+          input={filesQ.data?.input ?? []}
+          output={filesQ.data?.output ?? []}
+          tmp={filesQ.data?.tmp ?? []}
+          loading={filesQ.isLoading}
+        />
+      )}
 
       <div className="flex gap-3 mt-8 pt-6 border-t">
         <Button
@@ -186,18 +243,6 @@ export function EpisodeEdit() {
           <Play className="size-4" />
           Render full
         </Button>
-        {ep.hasOutput && (
-          <Button variant="outline" asChild>
-            <a
-              href={`/output/${encodeURIComponent(ep.name)}.mp4`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Download className="size-4" />
-              Download mp4
-            </a>
-          </Button>
-        )}
         {!ep.audioPath && (
           <p className="self-center text-sm text-muted-foreground">
             Thiếu audio — drag .m4a vào trang Episodes trước.
@@ -763,6 +808,530 @@ function highlightMatches(text: string, query: string): string {
     new RegExp(pattern, "gi"),
     (m) => `<mark class="bg-accent/40 text-foreground rounded px-0.5">${m}</mark>`,
   );
+}
+
+function ReferencesPanel({
+  episodeName,
+  linked,
+  loading,
+}: {
+  episodeName: string;
+  linked: Reference[];
+  loading: boolean;
+}) {
+  const qc = useQueryClient();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const allRefsQ = useQuery({
+    queryKey: ["references-all"],
+    queryFn: () => api.listReferences({}),
+    enabled: showPicker,
+  });
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["episode-refs", episodeName] });
+    qc.invalidateQueries({ queryKey: ["references"] });
+    qc.invalidateQueries({ queryKey: ["references-all"] });
+  };
+
+  const linkMutation = useMutation({
+    mutationFn: (refId: string) => api.linkReference(refId, episodeName),
+    onSuccess: invalidateAll,
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (refId: string) => api.unlinkReference(refId, episodeName),
+    onSuccess: invalidateAll,
+  });
+
+  if (loading) {
+    return <Card className="h-64 animate-pulse bg-muted/30" />;
+  }
+
+  const linkedIds = new Set(linked.map((r) => r.id));
+  const candidates =
+    allRefsQ.data?.items.filter((r) => !linkedIds.has(r.id)) ?? [];
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-0 overflow-hidden">
+        <div className="px-6 py-3 border-b bg-secondary/30 flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            {linked.length} tài liệu link vào tập này
+          </span>
+          <Button
+            size="sm"
+            onClick={() => setShowPicker((v) => !v)}
+            variant={showPicker ? "secondary" : "default"}
+          >
+            <Plus className="size-4" />
+            {showPicker ? "Đóng" : "Add from library"}
+          </Button>
+        </div>
+
+        {linked.length === 0 && !showPicker && (
+          <div className="p-12 text-center border-dashed">
+            <Library className="mx-auto mb-3 size-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Chưa link reference nào. Add từ library hoặc thêm mới ở{" "}
+              <Link to="/references" className="text-primary hover:underline">
+                References page
+              </Link>
+              .
+            </p>
+          </div>
+        )}
+
+        <div className="divide-y">
+          {linked.map((r) => (
+            <div
+              key={r.id}
+              className="px-6 py-3 hover:bg-secondary/20 flex items-start gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <Badge variant="outline" className="text-xs uppercase">
+                    {r.type}
+                  </Badge>
+                  {r.source !== "web" && (
+                    <Badge variant="secondary" className="text-xs">
+                      {r.source}
+                    </Badge>
+                  )}
+                  {r.tags.slice(0, 4).map((t) => (
+                    <Badge key={t} variant="default" className="text-xs">
+                      {t}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="font-medium leading-tight">{r.title}</p>
+                {r.author && (
+                  <p className="text-sm text-muted-foreground">{r.author}</p>
+                )}
+                <p className="text-xs text-muted-foreground font-mono truncate mt-1">
+                  {r.url}
+                </p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="outline" size="sm" asChild title="Open page">
+                  <a href={r.url} target="_blank" rel="noreferrer noopener">
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                </Button>
+                {r.pdfUrl && (
+                  <Button variant="outline" size="sm" asChild title="Open PDF">
+                    <a
+                      href={r.pdfUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      download
+                    >
+                      <FileDown className="size-3.5" />
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => unlinkMutation.mutate(r.id)}
+                  disabled={unlinkMutation.isPending}
+                  className="text-destructive hover:bg-destructive/10"
+                  title="Bỏ link khỏi tập này (không xoá khỏi library)"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {showPicker && (
+        <Card className="p-4 border-primary/40">
+          <h3 className="font-medium mb-3">Add từ library</h3>
+          {allRefsQ.isLoading && (
+            <div className="text-sm text-muted-foreground">Đang tải…</div>
+          )}
+          {candidates.length === 0 && !allRefsQ.isLoading && (
+            <p className="text-sm text-muted-foreground">
+              Không còn reference nào chưa link. Thêm reference mới ở{" "}
+              <Link to="/references" className="text-primary hover:underline">
+                References page
+              </Link>
+              .
+            </p>
+          )}
+          <div className="space-y-1 max-h-96 overflow-y-auto">
+            {candidates.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => linkMutation.mutate(r.id)}
+                disabled={linkMutation.isPending}
+                className={cn(
+                  "w-full text-left px-3 py-2 rounded-md hover:bg-secondary transition-colors",
+                  "flex items-start gap-3",
+                )}
+              >
+                <Plus className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <Badge variant="outline" className="text-xs uppercase">
+                      {r.type}
+                    </Badge>
+                    {r.tags.slice(0, 3).map((t) => (
+                      <Badge key={t} variant="default" className="text-xs">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-sm font-medium leading-tight truncate">
+                    {r.title}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function FilesPanel({
+  episodeName,
+  input,
+  output,
+  tmp,
+  loading,
+}: {
+  episodeName: string;
+  input: EpisodeFile[];
+  output: EpisodeFile[];
+  tmp: EpisodeFile[];
+  loading: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [deletingUrl, setDeletingUrl] = useState<string | null>(null);
+
+  const deleteMut = useMutation({
+    mutationFn: (vars: {
+      bucket: "input" | "output" | "tmp";
+      filename: string;
+    }) => api.deleteFile(episodeName, vars.bucket, vars.filename),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["episode-files", episodeName], data);
+      // Audio bị xoá → status episode đổi
+      queryClient.invalidateQueries({
+        queryKey: ["episode", episodeName],
+      });
+      queryClient.invalidateQueries({ queryKey: ["episodes"] });
+    },
+    onSettled: () => setDeletingUrl(null),
+  });
+
+  const confirmAndDelete = (f: EpisodeFile) => {
+    const bucket: "input" | "output" | "tmp" = f.url.startsWith("/input")
+      ? "input"
+      : f.url.startsWith("/output")
+        ? "output"
+        : "tmp";
+    const warn =
+      f.kind === "audio-original"
+        ? `XOÁ audio gốc "${f.filename}"?\n\nEpisode sẽ chuyển sang trạng thái no-audio. Phải upload lại để render.`
+        : f.kind === "video-full"
+          ? `XOÁ video full "${f.filename}" (${humanSize(f.size)})?\n\nPhải render lại để tái tạo.`
+          : `XOÁ "${f.filename}"?`;
+    if (!window.confirm(warn)) return;
+    setDeletingUrl(f.url);
+    deleteMut.mutate({ bucket, filename: f.filename });
+  };
+
+  if (loading) {
+    return <Card className="h-64 animate-pulse bg-muted/30" />;
+  }
+  if (input.length === 0 && output.length === 0 && tmp.length === 0) {
+    return (
+      <Card className="p-12 text-center border-dashed">
+        <Files className="mx-auto mb-3 size-10 text-muted-foreground" />
+        <p className="font-medium">Chưa có file</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Drag audio vào trang Episodes hoặc render full để có outputs.
+        </p>
+      </Card>
+    );
+  }
+
+  const fullVideo = output.find((f) => f.kind === "video-full");
+  const previewVideo = output.find((f) => f.kind === "video-preview");
+
+  return (
+    <div className="space-y-6">
+      {/* Video showcase nếu có */}
+      {fullVideo && (
+        <Card className="p-0 overflow-hidden">
+          <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
+            <Play className="size-4 text-accent" />
+            <span className="font-medium">Video full</span>
+            <code className="text-xs text-muted-foreground font-mono truncate">
+              · {fullVideo.filename}
+            </code>
+            <span className="text-xs text-muted-foreground ml-auto font-mono shrink-0">
+              {humanSize(fullVideo.size)} · {timeAgo(fullVideo.mtime)}
+            </span>
+          </div>
+          <div className="bg-black">
+            <video
+              controls
+              src={fullVideo.url}
+              className="w-full max-h-[480px] object-contain mx-auto"
+              preload="metadata"
+              poster={
+                output.find((f) => f.kind === "thumbnail")?.url
+              }
+            />
+          </div>
+          <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <a href={fullVideo.url} download>
+                <Download className="size-4" />
+                Download
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => confirmAndDelete(fullVideo)}
+              disabled={deletingUrl === fullVideo.url}
+            >
+              {deletingUrl === fullVideo.url ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              Xoá
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {previewVideo && (
+        <Card className="p-0 overflow-hidden">
+          <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
+            <Play className="size-4 text-muted-foreground" />
+            <span className="font-medium">Preview 10s</span>
+            <code className="text-xs text-muted-foreground font-mono truncate">
+              · {previewVideo.filename}
+            </code>
+            <span className="text-xs text-muted-foreground ml-auto font-mono shrink-0">
+              {humanSize(previewVideo.size)} · {timeAgo(previewVideo.mtime)}
+            </span>
+          </div>
+          <div className="bg-black">
+            <video
+              controls
+              src={previewVideo.url}
+              className="w-full max-h-[320px] object-contain mx-auto"
+              preload="metadata"
+            />
+          </div>
+          <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <a href={previewVideo.url} download>
+                <Download className="size-4" />
+                Download
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => confirmAndDelete(previewVideo)}
+              disabled={deletingUrl === previewVideo.url}
+            >
+              {deletingUrl === previewVideo.url ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              Xoá
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Audio originals */}
+      {input.length > 0 && (
+        <FileSection
+          title="Audio đã upload"
+          icon={<Volume2 className="size-4" />}
+          files={input}
+          deletingUrl={deletingUrl}
+          onDelete={confirmAndDelete}
+          renderInline={(f) =>
+            f.kind === "audio-original" ? (
+              <audio
+                controls
+                src={f.url}
+                className="w-full mt-2"
+                preload="metadata"
+              />
+            ) : null
+          }
+        />
+      )}
+
+      {/* Other outputs (thumbnail + lock) */}
+      {output.filter(
+        (f) => f.kind !== "video-full" && f.kind !== "video-preview",
+      ).length > 0 && (
+        <FileSection
+          title="Outputs khác"
+          icon={<Database className="size-4" />}
+          files={output.filter(
+            (f) => f.kind !== "video-full" && f.kind !== "video-preview",
+          )}
+          deletingUrl={deletingUrl}
+          onDelete={confirmAndDelete}
+          renderInline={(f) =>
+            f.kind === "thumbnail" ? (
+              <img
+                src={f.url}
+                alt="thumbnail"
+                className="mt-2 max-h-40 rounded border"
+              />
+            ) : null
+          }
+        />
+      )}
+
+      {/* Tmp artifacts */}
+      {tmp.length > 0 && (
+        <FileSection
+          title={`Tmp artifacts (${tmp.length})`}
+          icon={<Lock className="size-4" />}
+          files={tmp}
+          deletingUrl={deletingUrl}
+          onDelete={confirmAndDelete}
+          collapsed
+        />
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Episode: <code className="font-mono">{episodeName}</code>
+      </p>
+    </div>
+  );
+}
+
+function FileSection({
+  title,
+  icon,
+  files,
+  renderInline,
+  onDelete,
+  deletingUrl,
+  collapsed = false,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  files: EpisodeFile[];
+  renderInline?: (f: EpisodeFile) => React.ReactNode;
+  onDelete: (f: EpisodeFile) => void;
+  deletingUrl: string | null;
+  collapsed?: boolean;
+}) {
+  const [open, setOpen] = useState(!collapsed);
+  return (
+    <Card className="p-0 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-6 py-3 border-b bg-secondary/30 flex items-center gap-2 hover:bg-secondary/50 transition-colors text-left"
+      >
+        {icon}
+        <span className="font-medium">{title}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {files.length} file{collapsed ? (open ? " ▾" : " ▸") : ""}
+        </span>
+      </button>
+      {open && (
+        <div className="divide-y">
+          {files.map((f) => (
+            <div key={f.url} className="px-6 py-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="font-mono text-xs uppercase shrink-0">
+                  {kindLabel(f.kind)}
+                </Badge>
+                <code className="text-sm font-mono flex-1 truncate">
+                  {f.filename}
+                </code>
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {humanSize(f.size)}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {timeAgo(f.mtime)}
+                </span>
+              </div>
+              {renderInline?.(f)}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" size="sm" asChild>
+                  <a href={f.url} download={f.filename}>
+                    <Download className="size-3.5" />
+                    Download
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => onDelete(f)}
+                  disabled={deletingUrl === f.url}
+                >
+                  {deletingUrl === f.url ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
+                  Xoá
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const kindLabel = (k: EpisodeFileKind): string =>
+  ({
+    "audio-original": "audio",
+    "audio-normalized": "wav",
+    "video-full": "mp4",
+    "video-preview": "preview",
+    thumbnail: "thumb",
+    lock: "lock",
+    "transcript-raw": "raw",
+    "transcript-corrected": "fixed",
+    plan: "plan",
+  })[k];
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return "vừa xong";
+  if (minutes < 60) return `${minutes}p trước`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h trước`;
+  const days = Math.floor(hours / 24);
+  return `${days}d trước`;
 }
 
 function Meta({

@@ -16,6 +16,11 @@ export default defineConfig({
         target: "http://127.0.0.1:3001",
         changeOrigin: false,
       },
+      // Static file proxies — serve audio/video/image qua Hono.
+      // Cần cho <audio>/<video> tag trong FilesPanel + Range request seeking.
+      "/input": { target: "http://127.0.0.1:3001", changeOrigin: false },
+      "/output": { target: "http://127.0.0.1:3001", changeOrigin: false },
+      "/tmp": { target: "http://127.0.0.1:3001", changeOrigin: false },
       // SSE qua proxy. Hono đã set Connection: keep-alive.
       "/api/events": {
         target: "http://127.0.0.1:3001",

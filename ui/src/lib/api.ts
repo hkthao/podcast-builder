@@ -96,6 +96,62 @@ export type PlanPayload = {
   totalDurationMs: number;
 };
 
+export type EpisodeFileKind =
+  | "audio-original"
+  | "audio-normalized"
+  | "video-full"
+  | "video-preview"
+  | "thumbnail"
+  | "lock"
+  | "transcript-raw"
+  | "transcript-corrected"
+  | "plan";
+
+export type EpisodeFile = {
+  filename: string;
+  url: string;
+  size: number;
+  mtime: string;
+  kind: EpisodeFileKind;
+};
+
+export type EpisodeFiles = {
+  input: EpisodeFile[];
+  output: EpisodeFile[];
+  tmp: EpisodeFile[];
+};
+
+export type ReferenceType =
+  | "pdf"
+  | "article"
+  | "video"
+  | "book"
+  | "podcast"
+  | "other";
+
+export type Reference = {
+  id: string;
+  url: string;
+  /** Link PDF direct (tách khỏi url trang). Optional. */
+  pdfUrl: string | null;
+  title: string;
+  author: string | null;
+  type: ReferenceType;
+  source: string;
+  tags: string[];
+  notes: string;
+  addedAt: string;
+  lastAccessedAt: string | null;
+  usedInEpisodes: string[];
+};
+
+export type ScrapeResult = {
+  title: string;
+  author: string | null;
+  source: string;
+  pdfUrl: string | null;
+};
+
 export type RenderPhase =
   | "queued"
   | "process-audio"
@@ -149,6 +205,24 @@ export const api = {
   getPlan: (name: string) =>
     jsonFetch<PlanPayload>(`/api/episodes/${encodeURIComponent(name)}/plan`),
 
+  getFiles: (name: string) =>
+    jsonFetch<EpisodeFiles>(
+      `/api/episodes/${encodeURIComponent(name)}/files`,
+    ),
+
+  deleteFile: (
+    name: string,
+    bucket: "input" | "output" | "tmp",
+    filename: string,
+  ) =>
+    jsonFetch<EpisodeFiles>(
+      `/api/episodes/${encodeURIComponent(name)}/files`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ bucket, filename }),
+      },
+    ),
+
   savePlan: (name: string, scenes: ScenePlanItem[]) =>
     jsonFetch<PlanPayload>(`/api/episodes/${encodeURIComponent(name)}/plan`, {
       method: "PUT",
@@ -164,6 +238,66 @@ export const api = {
     jsonFetch<EpisodeSummary>(
       `/api/episodes/${encodeURIComponent(name)}/config`,
       { method: "PUT", body: JSON.stringify(config) },
+    ),
+
+  listReferences: (filters: {
+    tag?: string;
+    episode?: string;
+    q?: string;
+    type?: string;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.tag) params.set("tag", filters.tag);
+    if (filters.episode) params.set("episode", filters.episode);
+    if (filters.q) params.set("q", filters.q);
+    if (filters.type) params.set("type", filters.type);
+    const qs = params.toString();
+    return jsonFetch<{ items: Reference[] }>(
+      `/api/references${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  listTags: () =>
+    jsonFetch<{ tags: Array<{ tag: string; count: number }> }>(
+      "/api/references/_/tags",
+    ),
+
+  scrapeReference: (url: string) =>
+    jsonFetch<ScrapeResult>("/api/references/_/scrape", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
+
+  addReference: (
+    input: Pick<Reference, "url" | "title"> & Partial<Reference>,
+  ) =>
+    jsonFetch<Reference>("/api/references", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  updateReference: (id: string, patch: Partial<Reference>) =>
+    jsonFetch<Reference>(`/api/references/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+
+  deleteReference: (id: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/references/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+
+  linkReference: (id: string, episodeName: string) =>
+    jsonFetch<Reference>(
+      `/api/references/${encodeURIComponent(id)}/link`,
+      { method: "POST", body: JSON.stringify({ episodeName }) },
+    ),
+
+  unlinkReference: (id: string, episodeName: string) =>
+    jsonFetch<Reference>(
+      `/api/references/${encodeURIComponent(id)}/unlink`,
+      { method: "POST", body: JSON.stringify({ episodeName }) },
     ),
 
   startRender: (episodeName: string, preview: boolean) =>

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Mic2,
   Home,
+  Library,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -41,8 +42,13 @@ export function Sidebar() {
         </NavLink>
       </div>
 
-      <nav className="p-3">
+      <nav className="p-3 space-y-0.5">
         <NavItem to="/" icon={<Home className="size-4" />} label="Episodes" />
+        <NavItem
+          to="/references"
+          icon={<Library className="size-4" />}
+          label="References"
+        />
       </nav>
 
       <div className="px-5 py-2 text-xs uppercase tracking-wider text-muted-foreground">

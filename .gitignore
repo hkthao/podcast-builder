@@ -9,6 +9,8 @@ input/*
 !input/.gitkeep
 output/
 tmp/
+references/*
+!references/.gitkeep
 public/*
 !public/.gitkeep
 !public/brand/

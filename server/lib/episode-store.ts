@@ -471,3 +471,197 @@ export async function getPlan(name: string): Promise<PlanPayload> {
 
 export const PATHS = { INPUT_DIR, OUTPUT_DIR, TMP_DIR } as const;
 export const AUDIO_EXTENSIONS = AUDIO_EXTS;
+
+export type EpisodeFile = {
+  /** Relative filename, vd "mu-loa….m4a" hoặc "mu-loa….mp4" */
+  filename: string;
+  /** Đường serve qua HTTP: /input/<name> hoặc /output/<name> */
+  url: string;
+  /** Bytes */
+  size: number;
+  /** mtime ISO */
+  mtime: string;
+  /** Loại file: audio (input), video, thumbnail, lock, transcript, plan */
+  kind:
+    | "audio-original"
+    | "audio-normalized"
+    | "video-full"
+    | "video-preview"
+    | "thumbnail"
+    | "lock"
+    | "transcript-raw"
+    | "transcript-corrected"
+    | "plan";
+};
+
+export type EpisodeFiles = {
+  input: EpisodeFile[];
+  output: EpisodeFile[];
+  tmp: EpisodeFile[];
+};
+
+const fileInfo = async (
+  filePath: string,
+  filename: string,
+  kind: EpisodeFile["kind"],
+  urlPrefix: string,
+): Promise<EpisodeFile | null> => {
+  try {
+    const stat = await fs.stat(filePath);
+    return {
+      filename,
+      url: `${urlPrefix}/${encodeURIComponent(filename)}`,
+      size: stat.size,
+      mtime: new Date(stat.mtimeMs).toISOString(),
+      kind,
+    };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * List tất cả file liên quan tới 1 episode (input audio, outputs, tmp).
+ * Trả về null entries đã filter.
+ */
+export async function listEpisodeFiles(
+  name: string,
+): Promise<EpisodeFiles> {
+  const input: EpisodeFile[] = [];
+  const output: EpisodeFile[] = [];
+  const tmp: EpisodeFile[] = [];
+
+  // Audio originals trong input/
+  for (const ext of AUDIO_EXTS) {
+    const fn = `${name}.${ext}`;
+    const f = await fileInfo(
+      path.join(INPUT_DIR, fn),
+      fn,
+      "audio-original",
+      "/input",
+    );
+    if (f) input.push(f);
+  }
+
+  // Outputs
+  const fullMp4 = await fileInfo(
+    path.join(OUTPUT_DIR, `${name}.mp4`),
+    `${name}.mp4`,
+    "video-full",
+    "/output",
+  );
+  if (fullMp4) output.push(fullMp4);
+
+  const previewMp4 = await fileInfo(
+    path.join(OUTPUT_DIR, `${name}.preview.mp4`),
+    `${name}.preview.mp4`,
+    "video-preview",
+    "/output",
+  );
+  if (previewMp4) output.push(previewMp4);
+
+  const thumb = await fileInfo(
+    path.join(OUTPUT_DIR, `${name}.thumb.jpg`),
+    `${name}.thumb.jpg`,
+    "thumbnail",
+    "/output",
+  );
+  if (thumb) output.push(thumb);
+
+  const lock = await fileInfo(
+    path.join(OUTPUT_DIR, `${name}.lock.json`),
+    `${name}.lock.json`,
+    "lock",
+    "/output",
+  );
+  if (lock) output.push(lock);
+
+  // Tmp artifacts (transcript / plan / normalized audio)
+  const normalized48 = await fileInfo(
+    path.join(TMP_DIR, `${name}.normalized.48k.wav`),
+    `${name}.normalized.48k.wav`,
+    "audio-normalized",
+    "/tmp",
+  );
+  if (normalized48) tmp.push(normalized48);
+
+  const normalized16 = await fileInfo(
+    path.join(TMP_DIR, `${name}.normalized.16k.wav`),
+    `${name}.normalized.16k.wav`,
+    "audio-normalized",
+    "/tmp",
+  );
+  if (normalized16) tmp.push(normalized16);
+
+  const rawTranscript = await fileInfo(
+    path.join(TMP_DIR, `${name}.json`),
+    `${name}.json`,
+    "transcript-raw",
+    "/tmp",
+  );
+  if (rawTranscript) tmp.push(rawTranscript);
+
+  const corrected = await fileInfo(
+    path.join(TMP_DIR, `${name}.corrected.json`),
+    `${name}.corrected.json`,
+    "transcript-corrected",
+    "/tmp",
+  );
+  if (corrected) tmp.push(corrected);
+
+  const plan = await fileInfo(
+    path.join(TMP_DIR, `${name}.plan.json`),
+    `${name}.plan.json`,
+    "plan",
+    "/tmp",
+  );
+  if (plan) tmp.push(plan);
+
+  return { input, output, tmp };
+}
+
+/**
+ * Xoá 1 file thuộc episode. bucket = nơi file ở (input/output/tmp).
+ * Whitelist toàn bộ filename hợp lệ → đảm bảo:
+ *   - không path traversal
+ *   - không xoá nhầm file episode khác
+ *   - không xoá config (`input/<name>.json`) — config khác audio
+ * Trả về snapshot mới sau khi xoá.
+ */
+export async function deleteEpisodeFile(
+  name: string,
+  bucket: "input" | "output" | "tmp",
+  filename: string,
+): Promise<EpisodeFiles> {
+  const valid: Record<"input" | "output" | "tmp", string[]> = {
+    input: AUDIO_EXTS.map((ext) => `${name}.${ext}`),
+    output: [
+      `${name}.mp4`,
+      `${name}.preview.mp4`,
+      `${name}.thumb.jpg`,
+      `${name}.lock.json`,
+    ],
+    tmp: [
+      `${name}.normalized.48k.wav`,
+      `${name}.normalized.16k.wav`,
+      `${name}.json`,
+      `${name}.corrected.json`,
+      `${name}.plan.json`,
+    ],
+  };
+  if (!valid[bucket].includes(filename)) {
+    const err = new Error(`Filename không hợp lệ cho episode ${name}: ${filename}`) as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+  const rootDir =
+    bucket === "input" ? INPUT_DIR : bucket === "output" ? OUTPUT_DIR : TMP_DIR;
+  const filePath = path.join(rootDir, filename);
+  try {
+    await fs.unlink(filePath);
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code !== "ENOENT") throw err;
+  }
+  return listEpisodeFiles(name);
+}

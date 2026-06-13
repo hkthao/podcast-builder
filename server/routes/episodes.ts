@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import {
   AUDIO_EXTENSIONS,
+  deleteEpisodeFile,
   getEpisode,
   getPlan,
   getTranscript,
+  listEpisodeFiles,
   listEpisodes,
   PLAN_OPTIONS,
   savePlan,
@@ -95,6 +97,50 @@ episodesRoutes.put("/:name/transcript", async (c) => {
     const err = e as Error & { code?: string };
     const status =
       err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * List tất cả file liên quan tới episode (audio input, outputs, tmp artifacts).
+ * Mỗi entry có url để play/download qua /input/ /output/ /tmp/ static.
+ */
+episodesRoutes.get("/:name/files", async (c) => {
+  const name = c.req.param("name");
+  const data = await listEpisodeFiles(name);
+  return c.json(data);
+});
+
+/**
+ * Xoá 1 file của episode. Body: { bucket: "input"|"output"|"tmp", filename }.
+ * Filename phải nằm trong whitelist của episode đó (ngăn path traversal +
+ * xoá nhầm file episode khác).
+ */
+episodesRoutes.delete("/:name/files", async (c) => {
+  const name = c.req.param("name");
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as { bucket?: string; filename?: string };
+  if (
+    body.bucket !== "input" &&
+    body.bucket !== "output" &&
+    body.bucket !== "tmp"
+  ) {
+    return c.json({ error: "bucket phải là input/output/tmp" }, 400);
+  }
+  if (typeof body.filename !== "string" || body.filename.length === 0) {
+    return c.json({ error: "Thiếu filename" }, 400);
+  }
+  try {
+    const data = await deleteEpisodeFile(name, body.bucket, body.filename);
+    return c.json(data);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
     return c.json({ error: err.message }, status);
   }
 });

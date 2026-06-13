@@ -1,0 +1,392 @@
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const LIBRARY_DIR = path.resolve("references");
+const LIBRARY_PATH = path.join(LIBRARY_DIR, "library.json");
+
+export type ReferenceType =
+  | "pdf"
+  | "article"
+  | "video"
+  | "book"
+  | "podcast"
+  | "other";
+
+export type Reference = {
+  id: string;
+  url: string;
+  /** Link PDF direct (tách khỏi url trang). Optional. */
+  pdfUrl: string | null;
+  title: string;
+  author: string | null;
+  type: ReferenceType;
+  source: string;
+  tags: string[];
+  notes: string;
+  addedAt: string;
+  lastAccessedAt: string | null;
+  usedInEpisodes: string[];
+};
+
+type LibraryFile = { items: Reference[] };
+
+const VALID_TYPES: ReferenceType[] = [
+  "pdf",
+  "article",
+  "video",
+  "book",
+  "podcast",
+  "other",
+];
+
+const ensureDir = async () => {
+  await fs.mkdir(LIBRARY_DIR, { recursive: true });
+};
+
+const readLibrary = async (): Promise<LibraryFile> => {
+  try {
+    const buf = await fs.readFile(LIBRARY_PATH, "utf-8");
+    const data = JSON.parse(buf) as LibraryFile;
+    if (!Array.isArray(data.items)) return { items: [] };
+    return data;
+  } catch {
+    return { items: [] };
+  }
+};
+
+const writeLibrary = async (data: LibraryFile): Promise<void> => {
+  await ensureDir();
+  await fs.writeFile(LIBRARY_PATH, JSON.stringify(data, null, 2));
+};
+
+const newId = (): string =>
+  `ref_${crypto.randomBytes(4).toString("hex")}`;
+
+const today = (): string => new Date().toISOString().slice(0, 10);
+
+const validateInput = (
+  ref: Partial<Reference>,
+  partial = false,
+): { ok: true; data: Partial<Reference> } | { ok: false; error: string } => {
+  if (!partial) {
+    if (typeof ref.url !== "string" || !ref.url.trim()) {
+      return { ok: false, error: "url là bắt buộc" };
+    }
+    try {
+      new URL(ref.url);
+    } catch {
+      return { ok: false, error: `url không hợp lệ: ${ref.url}` };
+    }
+    if (typeof ref.title !== "string" || !ref.title.trim()) {
+      return { ok: false, error: "title là bắt buộc" };
+    }
+  }
+  if (ref.pdfUrl != null && ref.pdfUrl !== "") {
+    try {
+      new URL(ref.pdfUrl);
+    } catch {
+      return { ok: false, error: `pdfUrl không hợp lệ: ${ref.pdfUrl}` };
+    }
+  }
+  if (ref.type && !VALID_TYPES.includes(ref.type)) {
+    return {
+      ok: false,
+      error: `type không hợp lệ: ${ref.type}. Hợp lệ: ${VALID_TYPES.join(", ")}`,
+    };
+  }
+  if (ref.tags && !Array.isArray(ref.tags)) {
+    return { ok: false, error: "tags phải là array" };
+  }
+  if (
+    ref.usedInEpisodes &&
+    !Array.isArray(ref.usedInEpisodes)
+  ) {
+    return { ok: false, error: "usedInEpisodes phải là array" };
+  }
+  return { ok: true, data: ref };
+};
+
+export async function listReferences(filters: {
+  tag?: string;
+  episode?: string;
+  q?: string;
+  type?: string;
+}): Promise<Reference[]> {
+  const { items } = await readLibrary();
+  let result = items;
+  if (filters.tag) {
+    result = result.filter((r) => r.tags.includes(filters.tag!));
+  }
+  if (filters.episode) {
+    result = result.filter((r) =>
+      r.usedInEpisodes.includes(filters.episode!),
+    );
+  }
+  if (filters.type) {
+    result = result.filter((r) => r.type === filters.type);
+  }
+  if (filters.q) {
+    const q = filters.q.toLowerCase();
+    result = result.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        (r.author?.toLowerCase().includes(q) ?? false) ||
+        r.url.toLowerCase().includes(q) ||
+        r.notes.toLowerCase().includes(q),
+    );
+  }
+  // Sort by addedAt descending
+  result = [...result].sort((a, b) =>
+    b.addedAt.localeCompare(a.addedAt),
+  );
+  return result;
+}
+
+export async function getReference(id: string): Promise<Reference | null> {
+  const { items } = await readLibrary();
+  return items.find((r) => r.id === id) ?? null;
+}
+
+export async function addReference(
+  input: Omit<
+    Reference,
+    "id" | "addedAt" | "lastAccessedAt" | "usedInEpisodes"
+  > &
+    Partial<Pick<Reference, "usedInEpisodes">>,
+): Promise<Reference> {
+  const v = validateInput(input);
+  if (!v.ok) {
+    const err = new Error(v.error);
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+  const library = await readLibrary();
+  // Dedup by URL
+  const existing = library.items.find((r) => r.url === input.url);
+  if (existing) {
+    const err = new Error(`URL đã có trong library: ${existing.id}`);
+    (err as Error & { code: string; refId: string }).code = "DUPLICATE";
+    (err as Error & { code: string; refId: string }).refId = existing.id;
+    throw err;
+  }
+  const ref: Reference = {
+    id: newId(),
+    url: input.url,
+    pdfUrl: input.pdfUrl ? String(input.pdfUrl).trim() || null : null,
+    title: input.title,
+    author: input.author ?? null,
+    type: input.type ?? "other",
+    source: input.source ?? guessSource(input.url),
+    tags: input.tags ?? [],
+    notes: input.notes ?? "",
+    addedAt: today(),
+    lastAccessedAt: null,
+    usedInEpisodes: input.usedInEpisodes ?? [],
+  };
+  library.items.push(ref);
+  await writeLibrary(library);
+  return ref;
+}
+
+export async function updateReference(
+  id: string,
+  patch: Partial<Reference>,
+): Promise<Reference> {
+  const v = validateInput(patch, true);
+  if (!v.ok) {
+    const err = new Error(v.error);
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+  const library = await readLibrary();
+  const idx = library.items.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    const err = new Error(`Reference không tồn tại: ${id}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const allowed: (keyof Reference)[] = [
+    "url",
+    "pdfUrl",
+    "title",
+    "author",
+    "type",
+    "source",
+    "tags",
+    "notes",
+    "lastAccessedAt",
+  ];
+  const next: Reference = { ...library.items[idx]! };
+  for (const k of allowed) {
+    if (k in patch) (next[k] as unknown) = patch[k];
+  }
+  library.items[idx] = next;
+  await writeLibrary(library);
+  return next;
+}
+
+export async function deleteReference(id: string): Promise<boolean> {
+  const library = await readLibrary();
+  const idx = library.items.findIndex((r) => r.id === id);
+  if (idx === -1) return false;
+  library.items.splice(idx, 1);
+  await writeLibrary(library);
+  return true;
+}
+
+export async function linkReference(
+  id: string,
+  episodeName: string,
+): Promise<Reference> {
+  const library = await readLibrary();
+  const idx = library.items.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    const err = new Error(`Reference không tồn tại: ${id}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const ref = library.items[idx]!;
+  if (!ref.usedInEpisodes.includes(episodeName)) {
+    ref.usedInEpisodes.push(episodeName);
+    await writeLibrary(library);
+  }
+  return ref;
+}
+
+export async function unlinkReference(
+  id: string,
+  episodeName: string,
+): Promise<Reference> {
+  const library = await readLibrary();
+  const idx = library.items.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    const err = new Error(`Reference không tồn tại: ${id}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const ref = library.items[idx]!;
+  ref.usedInEpisodes = ref.usedInEpisodes.filter((n) => n !== episodeName);
+  await writeLibrary(library);
+  return ref;
+}
+
+export async function listAllTags(): Promise<Array<{ tag: string; count: number }>> {
+  const { items } = await readLibrary();
+  const counts = new Map<string, number>();
+  for (const r of items) {
+    for (const t of r.tags) {
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+const guessSource = (url: string): string => {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("arxiv.org")) return "arxiv";
+    if (host.includes("scholar.google")) return "scholar";
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube";
+    if (host.includes("medium.com")) return "medium";
+    if (host.includes("substack.com")) return "substack";
+    if (host.includes("nytimes.com")) return "nytimes";
+    if (host.includes("github.com")) return "github";
+    return host.split(".").slice(-2, -1)[0] ?? "web";
+  } catch {
+    return "web";
+  }
+};
+
+/**
+ * Scrape URL → fetch HTML → parse <meta property="og:title"> hoặc <title>.
+ * arxiv.org/abs/XXXX → dùng arXiv API trực tiếp (chính xác hơn HTML scrape).
+ */
+export async function scrapeTitle(url: string): Promise<{
+  title: string;
+  author: string | null;
+  source: string;
+  pdfUrl: string | null;
+}> {
+  const u = new URL(url); // validate trước
+  const source = guessSource(url);
+
+  // arXiv: auto-derive pdfUrl từ /abs/XXXX → /pdf/XXXX.pdf
+  const arxivMatch = u.pathname.match(/\/abs\/([\d.]+)/);
+  if (source === "arxiv" && arxivMatch) {
+    const id = arxivMatch[1];
+    const pdfUrl = `https://arxiv.org/pdf/${id}.pdf`;
+    const apiUrl = `http://export.arxiv.org/api/query?id_list=${id}`;
+    try {
+      const res = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const xml = await res.text();
+      const title =
+        xml.match(/<entry[\s\S]*?<title>([\s\S]+?)<\/title>/)?.[1]?.trim() ??
+        null;
+      const author =
+        xml.match(/<author>\s*<name>([\s\S]+?)<\/name>/)?.[1]?.trim() ?? null;
+      if (title) {
+        return {
+          title: title.replace(/\s+/g, " "),
+          author,
+          source: "arxiv",
+          pdfUrl,
+        };
+      }
+    } catch {
+      /* fallback to generic */
+    }
+  }
+
+  // Nếu URL đã là direct PDF → dùng nó làm pdfUrl luôn
+  const isPdfUrl = u.pathname.toLowerCase().endsWith(".pdf");
+
+  // Generic: fetch + parse meta tags
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": "podcast-builder-studio/0.1" },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const html = await res.text();
+    const ogTitle = html.match(
+      /<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i,
+    )?.[1];
+    const title = (
+      ogTitle ?? html.match(/<title[^>]*>([\s\S]+?)<\/title>/i)?.[1] ?? ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    const ogAuthor =
+      html.match(
+        /<meta\s+(?:name|property)=["']article:author["']\s+content=["']([^"']+)["']/i,
+      )?.[1] ??
+      html.match(
+        /<meta\s+name=["']author["']\s+content=["']([^"']+)["']/i,
+      )?.[1] ??
+      null;
+    // Tìm link PDF trong meta citation_pdf_url (Google Scholar convention)
+    const citationPdf = html.match(
+      /<meta\s+name=["']citation_pdf_url["']\s+content=["']([^"']+)["']/i,
+    )?.[1];
+    return {
+      title: title || url,
+      author: ogAuthor,
+      source,
+      pdfUrl: isPdfUrl ? url : (citationPdf ?? null),
+    };
+  } catch {
+    return {
+      title: url,
+      author: null,
+      source,
+      pdfUrl: isPdfUrl ? url : null,
+    };
+  }
+}

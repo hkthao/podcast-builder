@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 import { episodesRoutes } from "./routes/episodes";
+import { referencesRoutes } from "./routes/references";
 import { renderRoutes } from "./routes/render";
 import { startFsWatcher } from "./lib/events";
 import { sseFromBus } from "./lib/sse";
@@ -12,6 +13,8 @@ import { sseFromBus } from "./lib/sse";
 dotenv.config();
 
 const OUTPUT_DIR = path.resolve("output");
+const INPUT_DIR = path.resolve("input");
+const TMP_DIR = path.resolve("tmp");
 
 const PORT = Number(process.env.STUDIO_PORT ?? 3001);
 /** Origin của Vite dev server. Local-only — không expose. */
@@ -37,33 +40,75 @@ app.get("/api/health", (c) => {
 app.get("/api/events", (c) => sseFromBus(c));
 
 app.route("/api/episodes", episodesRoutes);
+app.route("/api/references", referencesRoutes);
 app.route("/api/render", renderRoutes);
 
 /**
- * Serve output/ static files (mp4, jpg, json).
- * Path: /output/<filename> — UI hardcode link href tới đây.
+ * Serve static files cho 3 dir: input/, output/, tmp/.
+ * Range header support → video <video> streaming + audio seeking trong UI.
+ * Security: chỉ allow filename không có path traversal.
  */
-app.get("/output/:filename", async (c) => {
-  const filename = c.req.param("filename");
-  if (filename.includes("..") || filename.includes("/")) {
-    return c.json({ error: "invalid filename" }, 400);
-  }
-  const filePath = path.join(OUTPUT_DIR, filename);
-  try {
-    const buf = await fs.readFile(filePath);
+const serveStatic = (rootDir: string) =>
+  async (c: import("hono").Context) => {
+    const filename = c.req.param("filename");
+    if (!filename || filename.includes("..") || filename.includes("/") || filename.startsWith(".")) {
+      return c.json({ error: "invalid filename" }, 400);
+    }
+    const filePath = path.join(rootDir, filename);
+    let stat;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      return c.json({ error: "File not found" }, 404);
+    }
     const ext = filename.split(".").pop()?.toLowerCase();
     const contentType =
       ext === "mp4" ? "video/mp4"
+      : ext === "m4a" ? "audio/mp4"
+      : ext === "mp3" ? "audio/mpeg"
+      : ext === "wav" ? "audio/wav"
       : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+      : ext === "png" ? "image/png"
       : ext === "json" ? "application/json"
       : "application/octet-stream";
+
+    // Range request → 206 partial (cho video/audio seeking)
+    const range = c.req.header("range");
+    if (range) {
+      const m = range.match(/bytes=(\d+)-(\d+)?/);
+      if (m) {
+        const start = Number(m[1]);
+        const end = m[2] ? Number(m[2]) : stat.size - 1;
+        const chunkSize = end - start + 1;
+        const fh = await fs.open(filePath, "r");
+        const buf = Buffer.alloc(chunkSize);
+        await fh.read(buf, 0, chunkSize, start);
+        await fh.close();
+        return new Response(buf as unknown as BodyInit, {
+          status: 206,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": String(chunkSize),
+          },
+        });
+      }
+    }
+
+    const buf = await fs.readFile(filePath);
     return new Response(buf as unknown as BodyInit, {
-      headers: { "Content-Type": contentType },
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(stat.size),
+        "Accept-Ranges": "bytes",
+      },
     });
-  } catch {
-    return c.json({ error: "File not found" }, 404);
-  }
-});
+  };
+
+app.get("/output/:filename", serveStatic(OUTPUT_DIR));
+app.get("/input/:filename", serveStatic(INPUT_DIR));
+app.get("/tmp/:filename", serveStatic(TMP_DIR));
 
 startFsWatcher();
 
