@@ -8,6 +8,7 @@ import {
   PLAN_OPTIONS,
   savePlan,
   saveEpisode,
+  saveTranscript,
   uploadAudio,
 } from "../lib/episode-store";
 
@@ -67,6 +68,35 @@ episodesRoutes.get("/:name/transcript", async (c) => {
   const name = c.req.param("name");
   const data = await getTranscript(name);
   return c.json(data);
+});
+
+/**
+ * Save transcript đã sửa text. Body: { segments: TranscriptSegment[] }
+ * Count phải khớp với existing (chỉ edit text, không add/remove).
+ */
+episodesRoutes.put("/:name/transcript", async (c) => {
+  const name = c.req.param("name");
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as {
+    segments?: Array<{ startMs: number; endMs: number; text: string }>;
+  };
+  if (!Array.isArray(body.segments)) {
+    return c.json({ error: "Body phải có field 'segments' là array" }, 400);
+  }
+  try {
+    const data = await saveTranscript(name, body.segments);
+    return c.json(data);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
 });
 
 /** Scene plan (tmp/<name>.plan.json). Empty array nếu chưa plan. */

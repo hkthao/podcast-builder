@@ -403,6 +403,46 @@ export const PLAN_OPTIONS = {
   sceneTypes: VALID_SCENE_TYPES,
 } as const;
 
+/**
+ * Save lại transcript đã sửa chính tả. Phải khớp count với corrected.json
+ * hiện tại — không cho add/remove segment, chỉ edit text.
+ *
+ * Sau khi save, lock hash sẽ mismatch → ep status = "outdated" → user
+ * biết cần re-render.
+ */
+export async function saveTranscript(
+  name: string,
+  segments: Array<{ startMs: number; endMs: number; text: string }>,
+): Promise<TranscriptPayload> {
+  const correctedPath = path.join(TMP_DIR, `${name}.corrected.json`);
+  const rawPath = path.join(TMP_DIR, `${name}.json`);
+  const target = (await exists(correctedPath)) ? correctedPath : rawPath;
+  if (!(await exists(target))) {
+    const err = new Error(`Transcript không tồn tại: ${target}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const data = JSON.parse(await fs.readFile(target, "utf-8")) as WhisperFile & {
+    transcription: WhisperSegment[];
+  };
+  const existing = data.transcription;
+  if (existing.length !== segments.length) {
+    const err = new Error(
+      `Count mismatch: existing ${existing.length}, payload ${segments.length}. ` +
+        `Hiện chưa hỗ trợ add/remove segment, chỉ edit text.`,
+    );
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+  for (let i = 0; i < existing.length; i++) {
+    const newText = String(segments[i]?.text ?? "").trim();
+    // Giữ leading space convention của Whisper (` text` để concat trong scenes.ts).
+    existing[i].text = newText.length > 0 ? ` ${newText}` : "";
+  }
+  await fs.writeFile(target, JSON.stringify(data, null, 2));
+  return getTranscript(name);
+}
+
 export async function getPlan(name: string): Promise<PlanPayload> {
   const planPath = path.join(TMP_DIR, `${name}.plan.json`);
   if (!(await exists(planPath))) {

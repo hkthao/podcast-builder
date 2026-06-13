@@ -140,6 +140,12 @@ export const api = {
       `/api/episodes/${encodeURIComponent(name)}/transcript`,
     ),
 
+  saveTranscript: (name: string, segments: TranscriptSegment[]) =>
+    jsonFetch<TranscriptPayload>(
+      `/api/episodes/${encodeURIComponent(name)}/transcript`,
+      { method: "PUT", body: JSON.stringify({ segments }) },
+    ),
+
   getPlan: (name: string) =>
     jsonFetch<PlanPayload>(`/api/episodes/${encodeURIComponent(name)}/plan`),
 

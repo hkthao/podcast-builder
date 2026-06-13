@@ -163,6 +163,7 @@ export function EpisodeEdit() {
       )}
       {tab === "transcript" && (
         <TranscriptPanel
+          episodeName={name}
           segments={transcriptQ.data?.segments ?? []}
           source={transcriptQ.data?.source ?? "none"}
           loading={transcriptQ.isLoading}
@@ -501,14 +502,67 @@ function SceneEditRow({
 }
 
 function TranscriptPanel({
+  episodeName,
   segments,
   source,
   loading,
 }: {
+  episodeName: string;
   segments: TranscriptSegment[];
   source: "corrected" | "raw" | "none";
   loading: boolean;
 }) {
+  const qc = useQueryClient();
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [findQuery, setFindQuery] = useState("");
+  const [replaceWith, setReplaceWith] = useState("");
+  const [showFindBar, setShowFindBar] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: (newSegments: TranscriptSegment[]) =>
+      api.saveTranscript(episodeName, newSegments),
+    onSuccess: (data) => {
+      qc.setQueryData(["transcript", episodeName], data);
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+      qc.invalidateQueries({ queryKey: ["episode", episodeName] });
+      setEditingIdx(null);
+    },
+  });
+
+  const saveSingle = (idx: number, newText: string) => {
+    const next = segments.map((s, i) =>
+      i === idx ? { ...s, text: newText } : s,
+    );
+    saveMutation.mutate(next);
+  };
+
+  const replaceAll = () => {
+    if (!findQuery) return;
+    const next = segments.map((s) => ({
+      ...s,
+      text: s.text.split(findQuery).join(replaceWith),
+    }));
+    const changedCount = next.filter(
+      (s, i) => s.text !== segments[i]!.text,
+    ).length;
+    if (changedCount === 0) {
+      alert(`Không tìm thấy "${findQuery}"`);
+      return;
+    }
+    if (
+      !confirm(
+        `Thay "${findQuery}" → "${replaceWith}" trên ${changedCount} câu?`,
+      )
+    )
+      return;
+    saveMutation.mutate(next);
+    setShowFindBar(false);
+    setFindQuery("");
+    setReplaceWith("");
+  };
+
   if (loading) {
     return <Card className="h-64 animate-pulse bg-muted/30" />;
   }
@@ -518,42 +572,196 @@ function TranscriptPanel({
         <FileText className="mx-auto mb-3 size-10 text-muted-foreground" />
         <p className="font-medium">Chưa có transcript</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Transcript sinh ra sau khi chạy <code className="rounded bg-muted px-1.5">npm run make</code> (Whisper transcribe).
+          Transcript sinh ra sau khi chạy{" "}
+          <code className="rounded bg-muted px-1.5">npm run make</code>{" "}
+          (Whisper transcribe).
         </p>
       </Card>
     );
   }
-  // Hiển thị tối đa 200 segment đầu để tránh DOM quá lớn — Phase 10.6 sẽ virtualize.
+
   const LIMIT = 200;
-  const shown = segments.slice(0, LIMIT);
-  const truncated = segments.length > LIMIT;
+  const matchCount = findQuery
+    ? segments.filter((s) => s.text.includes(findQuery)).length
+    : 0;
+  const shown = showAll ? segments : segments.slice(0, LIMIT);
+  const truncated = !showAll && segments.length > LIMIT;
+
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-6 py-3 border-b bg-secondary/30 text-sm text-muted-foreground flex items-center justify-between">
-        <span>
+      <div className="px-6 py-3 border-b bg-secondary/30 flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-sm text-muted-foreground">
           {segments.length} câu
           {" · "}
-          <Badge variant={source === "corrected" ? "accent" : "outline"} className="ml-1">
-            {source === "corrected" ? "đã sửa chính tả" : source === "raw" ? "chưa sửa" : "—"}
+          <Badge
+            variant={source === "corrected" ? "accent" : "outline"}
+            className="ml-1"
+          >
+            {source === "corrected"
+              ? "đã sửa chính tả"
+              : source === "raw"
+                ? "chưa sửa"
+                : "—"}
           </Badge>
         </span>
-        {truncated && (
-          <span className="text-xs">
-            Hiển thị {LIMIT}/{segments.length} (Phase 10.6 sẽ virtualize)
+        <div className="flex items-center gap-2">
+          {truncated && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAll(true)}
+              className="text-xs"
+            >
+              Hiện tất cả {segments.length}
+            </Button>
+          )}
+          <Button
+            variant={showFindBar ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setShowFindBar((v) => !v)}
+            title="Find & Replace"
+          >
+            <Pencil className="size-4" />
+            Find & Replace
+          </Button>
+        </div>
+      </div>
+
+      {showFindBar && (
+        <div className="px-6 py-3 border-b bg-secondary/10 flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Tìm…"
+            value={findQuery}
+            onChange={(e) => setFindQuery(e.target.value)}
+            className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            autoFocus
+          />
+          <span className="text-xs text-muted-foreground tabular-nums w-16">
+            {findQuery ? `${matchCount} câu` : ""}
           </span>
+          <input
+            type="text"
+            placeholder="Thay bằng…"
+            value={replaceWith}
+            onChange={(e) => setReplaceWith(e.target.value)}
+            className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <Button
+            size="sm"
+            onClick={replaceAll}
+            disabled={!findQuery || matchCount === 0 || saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
+            Replace all
+          </Button>
+        </div>
+      )}
+
+      {saveMutation.isError && (
+        <div className="px-6 py-2 bg-destructive/10 text-destructive text-sm border-b">
+          Save fail: {String(saveMutation.error)}
+        </div>
+      )}
+
+      <div className="divide-y max-h-[600px] overflow-y-auto">
+        {shown.map((s, i) =>
+          editingIdx === i ? (
+            <div key={i} className="px-6 py-3 bg-secondary/20">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                  {formatTime(s.startMs)} – {formatTime(s.endMs)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  #{String(i).padStart(3, "0")}
+                </span>
+              </div>
+              <textarea
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setEditingIdx(null);
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    saveSingle(i, editValue);
+                  }
+                }}
+                rows={Math.min(6, Math.max(2, editValue.split("\n").length + 1))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                autoFocus
+              />
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-muted-foreground">
+                  <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">⌘↵</kbd>{" "}
+                  save · <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">Esc</kbd>{" "}
+                  cancel
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingIdx(null)}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => saveSingle(i, editValue)}
+                    disabled={
+                      editValue === s.text || saveMutation.isPending
+                    }
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : null}
+                    Lưu
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              key={i}
+              className="px-6 py-2.5 hover:bg-secondary/20 flex items-start gap-3 cursor-pointer group"
+              onClick={() => {
+                setEditingIdx(i);
+                setEditValue(s.text);
+              }}
+            >
+              <span className="font-mono text-xs text-muted-foreground shrink-0 mt-0.5 tabular-nums">
+                {formatTime(s.startMs)}
+              </span>
+              <p
+                className="text-sm text-foreground flex-1"
+                dangerouslySetInnerHTML={{
+                  __html: highlightMatches(s.text, findQuery),
+                }}
+              />
+              <Pencil className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
+            </div>
+          ),
         )}
       </div>
-      <div className="divide-y max-h-[600px] overflow-y-auto">
-        {shown.map((s, i) => (
-          <div key={i} className="px-6 py-2.5 hover:bg-secondary/20 flex items-start gap-3">
-            <span className="font-mono text-xs text-muted-foreground shrink-0 mt-0.5 tabular-nums">
-              {formatTime(s.startMs)}
-            </span>
-            <p className="text-sm text-foreground flex-1">{s.text}</p>
-          </div>
-        ))}
-      </div>
     </Card>
+  );
+}
+
+/** Bôi vàng các đoạn match với query. Escape HTML để tránh XSS. */
+function highlightMatches(text: string, query: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  if (!query) return escaped;
+  const escQuery = query
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const pattern = escQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return escaped.replace(
+    new RegExp(pattern, "gi"),
+    (m) => `<mark class="bg-accent/40 text-foreground rounded px-0.5">${m}</mark>`,
   );
 }
 
