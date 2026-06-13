@@ -15,17 +15,76 @@ const DEFAULT_PROVIDER: LLMProvider =
   (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
 const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
 
+export type BrainstormScores = {
+  /** Bao nhiêu người từng trải qua? (1-10) */
+  universal: number;
+  /** Đánh vào cảm xúc không? (1-10) */
+  emotional: number;
+  /** Dẫn tới câu hỏi lớn về con người không? (1-10) */
+  philosophical: number;
+  /** Liên hệ được với AI hiện đại? (1-10) */
+  aiRelevance: number;
+  /** Đã có quá nhiều người làm chưa? (1-10, 10 = rất original) */
+  originality: number;
+};
+
 export type BrainstormIdea = {
   title: string;
   hook: string;
   angle: string;
   why: string;
   /**
-   * Dàn ý đầy đủ cho bài essay nếu user pick idea này — 5-7 section.
-   * Mỗi section 1 header + 1-2 câu mô tả + framework/thinker cụ thể.
-   * Format markdown plain, không ## prefix.
+   * Step A v2: quan sát đời thường nền tảng của idea (1 câu, không phải ý tưởng).
+   * VD: "Người ta chỉ tiếc khi mất đi.", "Người thành công vẫn trống rỗng."
+   */
+  observation: string;
+  /**
+   * Step F v2: chấm điểm 5 chiều 1-10. Tổng / 5 = avg.
+   */
+  scores: BrainstormScores;
+  /**
+   * Step I v2 (Knowledge Map): các lĩnh vực liên quan để tra cứu nguồn.
+   * VD: ["Tâm lý học", "Triết học hiện sinh", "Khoa học thần kinh", "AI"]
+   */
+  knowledgeMap: string[];
+  /**
+   * Phase A mục 3: Contrarian View — luận điểm phản biện chính.
+   * 1-2 câu nghi vấn lại idea chính → essay sâu hơn.
+   */
+  contrarianView: string;
+  /**
+   * Phase A mục 7: Thumbnail hooks — 3-5 alt hook ngắn (10-20 từ)
+   * tách khỏi title, dùng làm overlay text thumbnail Reels.
+   */
+  thumbnailHooks: string[];
+  /**
+   * Phase A mục 9: Future Connection — projection AI/AGI ending.
+   * 1-2 câu: "Nếu AI biết..., điều gì xảy ra?"
+   */
+  futureConnection: string;
+  /**
+   * Phase B mục 4: Historical Layer — 3-5 nhân vật lịch sử + 1 dòng context.
+   * VD: "Caesar — bị ám sát bởi chính tay người tin cẩn nhất."
+   */
+  historicalExamples: string[];
+  /**
+   * Phase B mục 5: Story Bank — 3-4 câu chuyện cụ thể (mix lịch sử/hiện
+   * đại/cá nhân). Prefix loại: "[Hiện đại] …", "[Lịch sử] …", "[Cá nhân] …"
+   * VD: "[Hiện đại] Steve Jobs ung thư tuyến tuỵ + bài diễn văn Stanford 2005."
+   */
+  storyBank: string[];
+  /**
+   * Dàn ý đầy đủ theo ByteCast Topic Framework v1 — 12 mục.
    */
   outline: string;
+};
+
+const DEFAULT_SCORES: BrainstormScores = {
+  universal: 5,
+  emotional: 5,
+  philosophical: 5,
+  aiRelevance: 5,
+  originality: 5,
 };
 
 export type BrainstormSession = {
@@ -83,10 +142,38 @@ export async function listSessions(): Promise<BrainstormSession[]> {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+const clampScore = (v: unknown): number => {
+  if (typeof v !== "number" || !Number.isFinite(v)) return 5;
+  return Math.max(1, Math.min(10, Math.round(v)));
+};
+
+const normalizeScores = (raw: unknown): BrainstormScores => {
+  const o = (raw ?? {}) as Partial<Record<keyof BrainstormScores, unknown>>;
+  return {
+    universal: clampScore(o.universal),
+    emotional: clampScore(o.emotional),
+    philosophical: clampScore(o.philosophical),
+    aiRelevance: clampScore(o.aiRelevance),
+    originality: clampScore(o.originality),
+  };
+};
+
 const normalizeSession = (s: BrainstormSession): BrainstormSession => {
-  // Legacy idea trước khi thêm field outline
+  // Backfill cho idea legacy (trước v2)
   for (const idea of s.ideas) {
     if (typeof idea.outline !== "string") idea.outline = "";
+    if (typeof idea.observation !== "string") idea.observation = "";
+    if (!idea.scores || typeof idea.scores !== "object") {
+      idea.scores = { ...DEFAULT_SCORES };
+    } else {
+      idea.scores = normalizeScores(idea.scores);
+    }
+    if (!Array.isArray(idea.knowledgeMap)) idea.knowledgeMap = [];
+    if (typeof idea.contrarianView !== "string") idea.contrarianView = "";
+    if (!Array.isArray(idea.thumbnailHooks)) idea.thumbnailHooks = [];
+    if (typeof idea.futureConnection !== "string") idea.futureConnection = "";
+    if (!Array.isArray(idea.historicalExamples)) idea.historicalExamples = [];
+    if (!Array.isArray(idea.storyBank)) idea.storyBank = [];
   }
   return s;
 };
@@ -144,7 +231,39 @@ YÊU CẦU CHỦ ĐỀ (BẮT BUỘC mỗi idea PHẢI thỏa):
 - Mỗi chủ đề phải có CHIỀU SÂU đủ phát triển thành bài luận 3000-5000 từ. Test nhanh: nếu chủ đề có thể trả lời gọn trong 5 phút → REJECT, chưa đủ depth.
 - Trong các trục chủ đề cốt lõi của kênh: bản ngã, thời gian, hạnh phúc, mất mát, tự do, công nghệ định hình con người, ý nghĩa cuộc sống, tương lai nhân loại, đạo đức AI, sự cô đơn, sự đồng nhất hoá, ký ức, cái chết.
 
-Cho 1 chủ đề (topic) + 1 tone, hãy đề xuất {N} ý tưởng tập podcast KHÁC NHAU. Mỗi ý tưởng phải có ĐỦ 5 field:
+QUY TRÌNH SINH Ý TƯỞNG (ByteCast Topic Framework v2 — thực hiện INTERNAL trước khi viết output):
+
+A. **Quan sát đời thường**: bắt đầu mỗi idea từ 1 quan sát thường ngày, KHÔNG phải ý tưởng. VD: "Người ta chỉ tiếc khi mất đi.", "Người thành công vẫn trống rỗng.", "Người ta luôn muốn thứ mình không có.".
+
+B. **Tìm nghịch lý**: hỏi "Điều gì mâu thuẫn ở đây?" — phải có format X ↓ Y (bề mặt ai cũng biết → mâu thuẫn thực tế).
+
+C. **Truy tìm nguyên nhân qua 5 tầng** — phải xét đủ:
+   - Sinh học/thần kinh (Tiến hoá / Dopamine / Bản năng sinh tồn)
+   - Tâm lý học (Loss Aversion / Hedonic Adaptation / Cognitive Dissonance / Self Determination / Terror Management)
+   - Xã hội học (Consumerism / Social Comparison / Status Competition / Attention Economy)
+   - Triết học (Heidegger / Nietzsche / Camus / Sartre / Schopenhauer / Marcus Aurelius / Byung-Chul Han)
+   - AI/Công nghệ (Recommendation System / Predictive AI / AI Companion / Digital Immortality / Surveillance Capitalism)
+
+D. **Tạo câu hỏi lớn**: chuyển quan sát → 1-3 câu hỏi triết học/hiện sinh. Chọn câu nhức nhối nhất làm CORE QUESTION.
+
+E. **Ma trận sinh chủ đề** (nếu user cho topic mơ hồ): combine 2 trục — Trục 1 (Hạnh phúc / Tự do / Tình yêu / Cái chết / Bản ngã / Ý nghĩa) × Trục 2 (AI / Thời gian / Tiền bạc / Quyền lực / Ký ức / Công nghệ). VD: Hạnh phúc + AI → "Điều gì xảy ra khi AI biết chính xác điều khiến bạn hạnh phúc?".
+
+F. **Chấm điểm 5 chiều** (BẮT BUỘC mỗi idea, 1-10 integer, output trong field "scores"):
+   - universal: bao nhiêu người từng trải qua? (Mất người thân → 10, Du hành thời gian → 1)
+   - emotional: có đánh vào cảm xúc không?
+   - philosophical: có dẫn tới câu hỏi lớn về con người không?
+   - aiRelevance: liên hệ được với AI hiện đại không?
+   - originality: đã có quá nhiều người làm chưa? (10 = rất hiếm, 1 = đầy rồi)
+
+G. **Visual Potential** (đưa vào outline mục 12): biểu tượng/ẩn dụ/hình ảnh cụ thể.
+
+H. **Nguồn nghiên cứu** (đưa vào outline mục 4/6/7/8): ≥2 psychology paper/theory, ≥1 triết gia, ≥1 lý thuyết xã hội học, ≥1 nghiên cứu AI hiện đại.
+
+⚠️ QUAN TRỌNG: đa dạng hoá 5 idea — không trùng quan sát/nghịch lý/triết gia. Mỗi idea xuất phát từ quan sát KHÁC NHAU.
+
+---
+
+Cho 1 chủ đề (topic) + 1 tone, hãy đề xuất {N} ý tưởng tập podcast KHÁC NHAU. Mỗi ý tưởng phải có ĐỦ 13 field:
 
 1. "title" (5-12 từ): tiêu đề tiếng Việt cụ thể, gợi tò mò. Ưu tiên câu hỏi hoặc khẳng định có chất nghịch lý. KHÔNG dùng clickbait sáo rỗng ("BẠN SẼ KHÔNG TIN…", "Sự thật BẤT NGỜ").
 
@@ -154,7 +273,40 @@ Cho 1 chủ đề (topic) + 1 tone, hãy đề xuất {N} ý tưởng tập podc
 
 4. "why" (1 câu): lý do chủ đề resonate với khán giả Việt Nam cụ thể.
 
-5. "outline" (multi-line string ~1000-1800 chars): DÀN Ý ESSAY ĐẦY ĐỦ theo "ByteCast Topic Framework v1" — 12 mục bắt buộc. User pick + click "Gen essay" sẽ dùng outline này làm input.
+5. "observation" (1 câu ~10-20 từ): quan sát đời thường ở Step A của quy trình v2 — gốc của idea. KHÔNG phải tiêu đề/hook, KHÔNG đặt câu hỏi. Là 1 quan sát hiển nhiên. VD: "Người thành công vẫn trống rỗng.", "Ai cũng nghĩ mình hiểu cha mẹ, nhưng hiếm khi hỏi họ thực sự nghĩ gì.".
+
+6. "scores" (object 5 integer 1-10): chấm theo Step F của quy trình v2.
+   {"universal": <int>, "emotional": <int>, "philosophical": <int>, "aiRelevance": <int>, "originality": <int>}
+
+7. "knowledgeMap" (string[]): các LĨNH VỰC liên quan để tra cứu nguồn nghiên cứu (Step I v2). 3-6 lĩnh vực. Chọn từ:
+   - "Tâm lý học" / "Tâm lý học hành vi" / "Tâm lý học nhận thức"
+   - "Triết học hiện sinh" / "Triết học đạo đức" / "Triết học chính trị"
+   - "Xã hội học" / "Văn hoá học"
+   - "Khoa học thần kinh" / "Khoa học nhận thức"
+   - "Khoa học dữ liệu" / "AI / Học máy"
+   - "Kinh tế hành vi" / "Lý thuyết trò chơi"
+   - "Nhân học" / "Lịch sử tư tưởng"
+   Mỗi idea PHẢI có ít nhất "AI / Học máy" hoặc "Khoa học dữ liệu" vì signature ByteCast Tech.
+
+8. "contrarianView" (1-2 câu, 20-40 từ): luận điểm PHẢN BIỆN chính idea. Nghi vấn lại quan sát/nghịch lý. VD nếu idea là "chỉ trân trọng khi mất" → contrarian: "Có người vẫn trân trọng hiện tại. Lòng biết ơn có thể được rèn luyện qua thiền chánh niệm, không cần qua mất mát.". Essay sẽ dùng để cân bằng 2 phía.
+
+9. "thumbnailHooks" (string[3-5], mỗi câu 8-18 từ): các câu hook NGẮN tách khỏi title — dùng overlay text thumbnail Reels. KHÔNG trùng với "hook" field. KHÔNG clickbait. VD: "Điều quý giá nhất thường là điều bạn sắp mất.", "Bạn đang đánh mất gì mà chưa nhận ra?".
+
+10. "futureConnection" (1-2 câu, 20-40 từ): kết AI/AGI projection cho video. Câu hỏi tương lai: "Nếu AI mạnh hơn 100 lần thì...?", "Nếu AGI xuất hiện...?", "Nếu ký ức số hoá được...?". VD: "Liệu AI tương lai có thể dự đoán điều ta sẽ hối tiếc trước khi ta nhận ra? Điều đó có làm cuộc sống tốt hơn, hay tệ hơn?". Đây là DNA của kênh — đoạn kết mạnh.
+
+11. "historicalExamples" (string[3-5]): các NHÂN VẬT/SỰ KIỆN lịch sử minh hoạ chủ đề. Format: "Tên — 1 câu context cụ thể". VD chủ đề "Quyền lực tha hoá":
+    - "Caesar — bị ám sát bởi chính tay Brutus, người được ông coi là con."
+    - "Napoleon — chinh phục châu Âu rồi chết cô đơn trên đảo St. Helena."
+    - "Tần Thuỷ Hoàng — thống nhất Trung Hoa, tìm thuốc trường sinh, chết trẻ trên đường đi."
+   1 ví dụ lịch sử đáng nhớ hơn 10 phút lý thuyết.
+
+12. "storyBank" (string[3-4]): các CÂU CHUYỆN cụ thể minh hoạ. Mix 3 loại, prefix "[Loại]":
+    - "[Hiện đại]" — case sau 2000 (Steve Jobs ung thư, người mất việc 20 năm…)
+    - "[Lịch sử]" — anecdote lịch sử
+    - "[Cá nhân]" — câu chuyện đời thường nhỏ resonate (người con bỏ lỡ cuộc gọi cuối mẹ, đứa trẻ về quê thấy bà ngoại đã không nhận ra mình…)
+   Phải có ÍT NHẤT 1 "[Cá nhân]" đời thường VN.
+
+13. "outline" (multi-line string ~1000-1800 chars): DÀN Ý ESSAY ĐẦY ĐỦ theo "ByteCast Topic Framework v1" — 12 mục bắt buộc. User pick + click "Gen essay" sẽ dùng outline này làm input.
 
    ĐỊNH DẠNG (dùng \\n xuống dòng, \\n\\n giữa các mục):
 
@@ -174,7 +326,10 @@ Cho 1 chủ đề (topic) + 1 tone, hãy đề xuất {N} ý tưởng tập podc
    - Mục 11: KHÔNG bao giờ kết bằng lời khuyên ("hãy trân trọng…"). Phải là câu hỏi mở để người xem mang theo.
    - Mục 12: 3-5 hình ảnh ẩn dụ CỤ THỂ (đồng hồ cát chảy / chiếc lá vàng rơi / cửa khép / ánh sáng cuối ngày / sợi chỉ đứt) — sẽ dùng cho AI gen ảnh sau này.
 
-Output JSON CHẶT theo schema: {"ideas": [{"title":"...","hook":"...","angle":"...","why":"...","outline":"..."}, ...]}. Không thêm field, không markdown wrap toàn JSON, không lời mở đầu.`;
+Output JSON CHẶT theo schema:
+{"ideas": [{"title":"...","hook":"...","angle":"...","why":"...","observation":"...","scores":{"universal":<int>,"emotional":<int>,"philosophical":<int>,"aiRelevance":<int>,"originality":<int>},"knowledgeMap":["...","..."],"contrarianView":"...","thumbnailHooks":["...","...","..."],"futureConnection":"...","historicalExamples":["...","..."],"storyBank":["[Hiện đại] ...","[Cá nhân] ..."],"outline":"..."}, ...]}
+
+Không thêm field, không markdown wrap toàn JSON, không lời mở đầu.`;
 
 export type GenerateInput = {
   topic: string;
@@ -240,6 +395,37 @@ export async function generateAndSave(
         .trim(),
       angle: o.angle.trim(),
       why: o.why.trim(),
+      observation:
+        typeof o.observation === "string" ? o.observation.trim() : "",
+      scores: normalizeScores(o.scores),
+      knowledgeMap: Array.isArray(o.knowledgeMap)
+        ? o.knowledgeMap
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => x.trim())
+        : [],
+      contrarianView:
+        typeof o.contrarianView === "string"
+          ? o.contrarianView.trim()
+          : "",
+      thumbnailHooks: Array.isArray(o.thumbnailHooks)
+        ? o.thumbnailHooks
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => x.trim())
+        : [],
+      futureConnection:
+        typeof o.futureConnection === "string"
+          ? o.futureConnection.trim()
+          : "",
+      historicalExamples: Array.isArray(o.historicalExamples)
+        ? o.historicalExamples
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => x.trim())
+        : [],
+      storyBank: Array.isArray(o.storyBank)
+        ? o.storyBank
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => x.trim())
+        : [],
       outline: typeof o.outline === "string" ? o.outline.trim() : "",
     });
   }

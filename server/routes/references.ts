@@ -99,6 +99,8 @@ referencesRoutes.post("/_/suggest", async (c) => {
         typeof o.type === "string" && VALID_TYPES.includes(o.type)
           ? (o.type as SuggestedRef["type"])
           : "other";
+      const tierRaw = typeof o.tier === "number" ? Math.round(o.tier) : 4;
+      const tier = (Math.max(1, Math.min(5, tierRaw)) as 1 | 2 | 3 | 4 | 5);
       suggestions.push({
         title: o.title.trim(),
         author:
@@ -108,8 +110,15 @@ referencesRoutes.post("/_/suggest", async (c) => {
         type,
         reason: o.reason.trim(),
         searchHint: o.searchHint.trim(),
+        tier,
+        field:
+          typeof o.field === "string" && o.field.trim()
+            ? o.field.trim()
+            : "Other",
       });
     }
+    // Sort theo tier asc — meta-analysis lên đầu
+    suggestions.sort((a, b) => a.tier - b.tier);
     if (suggestions.length === 0) {
       return c.json({ error: "LLM trả về 0 suggestion parse được" }, 502);
     }

@@ -13,8 +13,15 @@ import { renderRoutes } from "./routes/render";
 import { workflowRoutes } from "./routes/workflow";
 import { startFsWatcher } from "./lib/events";
 import { sseFromBus } from "./lib/sse";
+import {
+  clearErrors,
+  listErrors,
+  logError,
+  registerGlobalHandlers,
+} from "./lib/error-log";
 
 dotenv.config();
+registerGlobalHandlers();
 
 const OUTPUT_DIR = path.resolve("output");
 const INPUT_DIR = path.resolve("input");
@@ -37,7 +44,19 @@ app.use(
 );
 
 app.get("/api/health", (c) => {
-  return c.json({ ok: true, uptime: process.uptime() });
+  const errors = listErrors();
+  return c.json({
+    ok: true,
+    uptime: process.uptime(),
+    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    errorCount: errors.length,
+    errors: errors.slice(0, 20),
+  });
+});
+
+app.delete("/api/health/errors", (c) => {
+  clearErrors();
+  return c.json({ ok: true });
 });
 
 /** SSE event stream — broadcast fs changes + render progress. */
@@ -122,7 +141,11 @@ startFsWatcher();
 
 app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
 app.onError((e, c) => {
-  console.error("[studio-server] error:", e);
+  logError({
+    source: "api",
+    error: e,
+    context: { method: c.req.method, path: c.req.path },
+  });
   return c.json({ error: e.message }, 500);
 });
 

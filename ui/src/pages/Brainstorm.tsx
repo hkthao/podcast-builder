@@ -17,6 +17,7 @@ import {
   api,
   type BrainstormSession,
   type BrainstormIdea,
+  type BrainstormScores,
   type LLMProvider,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { usePersistedState } from "@/lib/persist";
 
 const TONES = [
   "Triết học suy ngẫm",
@@ -37,12 +39,22 @@ const TONES = [
 
 export function Brainstorm() {
   const qc = useQueryClient();
-  const [topic, setTopic] = useState("");
-  const [tone, setTone] = useState(TONES[0]);
-  const [count, setCount] = useState(5);
-  const [provider, setProvider] = useState<LLMProvider>("openai");
-  const [model, setModel] = useState<string>("gpt-4o-mini");
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Persist form state qua localStorage để reload không mất draft
+  const [topic, setTopic] = usePersistedState("brainstorm.topic", "");
+  const [tone, setTone] = usePersistedState("brainstorm.tone", TONES[0]);
+  const [count, setCount] = usePersistedState("brainstorm.count", 5);
+  const [provider, setProvider] = usePersistedState<LLMProvider>(
+    "brainstorm.provider",
+    "openai",
+  );
+  const [model, setModel] = usePersistedState<string>(
+    "brainstorm.model",
+    "gpt-4o-mini",
+  );
+  const [activeId, setActiveId] = usePersistedState<string | null>(
+    "brainstorm.activeId",
+    null,
+  );
 
   const sessionsQ = useQuery({
     queryKey: ["brainstorm-sessions"],
@@ -82,12 +94,14 @@ export function Brainstorm() {
       ? (sessions.find((s) => s.id === activeId) ?? null)
       : (sessions[0] ?? null);
 
-  // Auto-select latest session khi load lần đầu
+  // Auto-select latest session khi load lần đầu HOẶC activeId stale
+  // (vd session đã bị xoá, hoặc localStorage persist id từ máy khác)
   useEffect(() => {
-    if (!activeId && sessions.length > 0) {
+    if (sessions.length === 0) return;
+    if (!activeId || !sessions.some((s) => s.id === activeId)) {
       setActiveId(sessions[0].id);
     }
-  }, [sessions, activeId]);
+  }, [sessions, activeId, setActiveId]);
 
   const genMut = useMutation({
     mutationFn: () =>
@@ -406,17 +420,20 @@ function IdeasView({
         </Button>
       </div>
 
-      {session.ideas.map((idea, idx) => (
-        <IdeaCard
-          key={idx}
-          idea={idea}
-          idx={idx}
-          sessionId={session.id}
-          picked={session.pickedIdx === idx}
-          onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
-          loading={pickingIdx === idx}
-        />
-      ))}
+      {session.ideas
+        .map((idea, idx) => ({ idea, idx }))
+        .sort((a, b) => avgScore(b.idea.scores) - avgScore(a.idea.scores))
+        .map(({ idea, idx }) => (
+          <IdeaCard
+            key={idx}
+            idea={idea}
+            idx={idx}
+            sessionId={session.id}
+            picked={session.pickedIdx === idx}
+            onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
+            loading={pickingIdx === idx}
+          />
+        ))}
     </div>
   );
 }
@@ -451,6 +468,13 @@ function IdeaCard({
         <h3 className="font-serif text-lg flex-1 leading-tight">
           {idea.title}
         </h3>
+        <Badge
+          variant="outline"
+          className="font-mono shrink-0"
+          title={`avg score (universal+emotional+philosophical+aiRelevance+originality) / 5`}
+        >
+          {avgScore(idea.scores).toFixed(1)}
+        </Badge>
         {picked && (
           <Badge variant="secondary" className="shrink-0">
             <CheckCircle2 className="size-3" />
@@ -459,6 +483,14 @@ function IdeaCard({
         )}
       </div>
       <div className="px-6 py-4 space-y-3">
+        {idea.observation && (
+          <div className="rounded border-l-2 border-accent/40 bg-secondary/40 px-3 py-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Quan sát gốc
+            </Label>
+            <p className="mt-0.5 text-sm leading-relaxed">{idea.observation}</p>
+          </div>
+        )}
         <div>
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">
             Hook
@@ -483,6 +515,85 @@ function IdeaCard({
             </p>
           </div>
         </div>
+        <ScoresStrip scores={idea.scores} />
+        {idea.knowledgeMap.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground self-center">
+              Knowledge map:
+            </span>
+            {idea.knowledgeMap.map((field) => (
+              <Badge
+                key={field}
+                variant="outline"
+                className="text-xs font-normal"
+              >
+                {field}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {idea.contrarianView && (
+          <div className="rounded border-l-2 border-amber-500/50 bg-amber-500/5 px-3 py-2">
+            <Label className="text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              ⚖ Phản biện
+            </Label>
+            <p className="mt-0.5 text-sm leading-relaxed italic">
+              {idea.contrarianView}
+            </p>
+          </div>
+        )}
+        {idea.thumbnailHooks.length > 0 && (
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Thumbnail hooks
+            </Label>
+            <ul className="mt-1 space-y-0.5 text-sm">
+              {idea.thumbnailHooks.map((h, i) => (
+                <li key={i} className="text-muted-foreground">
+                  • {h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {idea.futureConnection && (
+          <div className="rounded border-l-2 border-accent bg-accent/5 px-3 py-2">
+            <Label className="text-xs uppercase tracking-wider text-accent">
+              🔮 Future / AGI ending
+            </Label>
+            <p className="mt-0.5 text-sm leading-relaxed">
+              {idea.futureConnection}
+            </p>
+          </div>
+        )}
+        {idea.historicalExamples.length > 0 && (
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              📜 Historical examples
+            </Label>
+            <ul className="mt-1 space-y-0.5 text-sm">
+              {idea.historicalExamples.map((h, i) => (
+                <li key={i} className="text-muted-foreground">
+                  • {h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {idea.storyBank.length > 0 && (
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              📖 Story bank
+            </Label>
+            <ul className="mt-1 space-y-1 text-sm">
+              {idea.storyBank.map((s, i) => (
+                <li key={i} className="text-muted-foreground leading-relaxed">
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {idea.outline && (
           <details className="group">
             <summary className="cursor-pointer flex items-center gap-2">
@@ -539,6 +650,52 @@ function IdeaCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function avgScore(s: BrainstormScores): number {
+  return (
+    (s.universal + s.emotional + s.philosophical + s.aiRelevance + s.originality) /
+    5
+  );
+}
+
+const SCORE_LABELS: Array<[keyof BrainstormScores, string]> = [
+  ["universal", "Phổ quát"],
+  ["emotional", "Cảm xúc"],
+  ["philosophical", "Triết học"],
+  ["aiRelevance", "AI"],
+  ["originality", "Nguyên bản"],
+];
+
+function ScoresStrip({ scores }: { scores: BrainstormScores }) {
+  return (
+    <div className="grid grid-cols-5 gap-2 pt-1">
+      {SCORE_LABELS.map(([key, label]) => {
+        const v = scores[key];
+        return (
+          <div key={key} className="flex flex-col items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              {label}
+            </span>
+            <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  v >= 8
+                    ? "bg-accent"
+                    : v >= 5
+                      ? "bg-primary/70"
+                      : "bg-muted-foreground/40",
+                )}
+                style={{ width: `${v * 10}%` }}
+              />
+            </div>
+            <span className="text-xs font-mono tabular-nums">{v}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

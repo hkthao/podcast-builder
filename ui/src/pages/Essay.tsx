@@ -820,22 +820,46 @@ export function EssayPage() {
   );
 }
 
+const TIER_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: "T1 · Meta",
+  2: "T2 · Review",
+  3: "T3 · Classic",
+  4: "T4 · Paper",
+  5: "T5 · Blog",
+};
+
+function tierColor(tier: 1 | 2 | 3 | 4 | 5): string {
+  if (tier === 1) return "border-accent bg-accent/15 text-foreground";
+  if (tier === 2) return "border-primary/60 bg-primary/10 text-foreground";
+  if (tier === 3) return "border-amber-500/60 bg-amber-500/10";
+  if (tier === 4) return "border-muted-foreground/40";
+  return "border-muted-foreground/30 text-muted-foreground";
+}
+
 function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
   const navigate = useNavigate();
   const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(suggestion.searchHint)}`;
   return (
     <div className="px-6 py-4 space-y-2">
       <div className="flex items-start gap-3">
-        <Badge variant="outline" className="font-mono text-xs uppercase shrink-0 mt-0.5">
-          {suggestion.type}
-        </Badge>
+        <div className="flex flex-col gap-1 shrink-0 mt-0.5 w-20">
+          <Badge
+            variant="outline"
+            className={cn("font-mono text-[10px]", tierColor(suggestion.tier))}
+            title="Research Priority Tier (1=Meta-analysis, 5=Blog)"
+          >
+            {TIER_LABELS[suggestion.tier]}
+          </Badge>
+          <Badge variant="outline" className="font-mono text-[10px] uppercase">
+            {suggestion.type}
+          </Badge>
+        </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium leading-tight">{suggestion.title}</p>
-          {suggestion.author && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {suggestion.author}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {suggestion.author && <span>{suggestion.author} · </span>}
+            <span className="italic">{suggestion.field}</span>
+          </p>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
             {suggestion.reason}
           </p>

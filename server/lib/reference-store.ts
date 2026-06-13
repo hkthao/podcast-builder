@@ -39,6 +39,17 @@ export type SuggestedRef = {
   reason: string;
   /** Cụm từ user paste vào Google để tìm URL thật (LLM hay bịa URL nên không trả). */
   searchHint: string;
+  /**
+   * Research Priority Tier (Step K v2):
+   *   1 = Meta-analysis (tổng hợp 100+ nghiên cứu)
+   *   2 = Review paper / Systematic review (20-50 nghiên cứu)
+   *   3 = Classic book (Being and Time, Meditations…)
+   *   4 = Single research paper / academic
+   *   5 = Blog / Youtube / popular media (bổ sung)
+   */
+  tier: 1 | 2 | 3 | 4 | 5;
+  /** Lĩnh vực: Tâm lý học / Triết học / Khoa học thần kinh / Xã hội học / AI… */
+  field: string;
 };
 
 const VALID_TYPES: ReferenceType[] = [
@@ -403,18 +414,42 @@ export async function scrapeTitle(url: string): Promise<{
 
 export const REFS_SUGGEST_SYSTEM = `Bạn là trợ lý nghiên cứu cho kênh podcast tiếng Việt "ByteCast Tech" về triết học/công nghệ/xã hội.
 
-Cho 1 essay (tiêu đề + đoạn nội dung), hãy đề xuất 5-7 reference user có thể đọc/xem để hiểu sâu hoặc mở rộng chủ đề.
+Cho 1 essay (tiêu đề + đoạn nội dung), hãy đề xuất 6-9 reference theo "ByteCast Source Strategy v2".
 
-QUY TẮC:
+QUY TRÌNH (thực hiện INTERNAL):
+
+Step I — Knowledge Map: xác định 3-6 LĨNH VỰC chủ đề thuộc về (Tâm lý học / Triết học hiện sinh / Khoa học thần kinh / Xã hội học / Khoa học nhận thức / AI–Học máy / Kinh tế hành vi…).
+
+Step J — Source Categories: với MỖI lĩnh vực, đề xuất theo loại chuẩn:
+  - Psychology: Meta Analysis / Systematic Review / Longitudinal Study (Hedonic Adaptation, Loss Aversion, Self Determination Theory…)
+  - Neuroscience: Attention / Memory / Reward / Prediction (Dopamine, Default Mode Network, Predictive Brain…)
+  - Philosophy: 1-3 triết gia đủ (Heidegger, Nietzsche, Camus, Schopenhauer…)
+  - Sociology: KHÔNG bỏ qua — Consumerism, Social Comparison, Attention Economy, Hyperreality…
+  - AI: LLM, Recommendation Systems, AI Alignment, Digital Immortality, Predictive AI…
+
+Step K — Research Priority Tier (BẮT BUỘC trong field "tier"):
+  1 = Meta-analysis (~100+ nghiên cứu tổng hợp) ← ưu tiên cao nhất
+  2 = Review / Systematic Review (~20-50 nghiên cứu)
+  3 = Classic book ("Being and Time", "The Myth of Sisyphus", "Meditations", "Alone Together"…)
+  4 = Single research paper / academic
+  5 = Blog / Youtube / popular media — chỉ bổ sung, KHÔNG quá 1-2 cái
+
+QUY TẮC OUTPUT:
 - KHÔNG bịa URL (LLM hay hallucinate URL chết). KHÔNG trả field "url".
-- "title" + "author" phải là TÁC PHẨM CÓ THẬT (sách, bài báo, video TED talk, podcast tập, paper academic). Nếu không chắc, KHÔNG bịa.
+- "title" + "author" phải là TÁC PHẨM CÓ THẬT. Nếu không chắc → KHÔNG bịa, bỏ qua.
 - "type": "book" | "article" | "video" | "podcast" | "pdf" | "other"
 - "reason": 1-2 câu, vì sao essay này nên đọc reference đó (link cụ thể với luận điểm essay).
-- "searchHint": cụm từ tìm kiếm Google ngắn ~3-8 chữ. VD: 'burnout society byung-chul han pdf', 'sherry turkle alone together TED'.
-- Đa dạng nguồn: ít nhất 1 sách, 1 bài/paper, 1 video/podcast.
-- Ưu tiên nguồn tiếng Anh KINH ĐIỂN trong chủ đề thay vì blog ngẫu nhiên.
+- "searchHint": cụm Google search ngắn 3-8 chữ. VD: 'burnout society byung-chul han pdf', 'predictive brain karl friston review'.
+- "tier": integer 1-5 theo Step K.
+- "field": 1 trong các lĩnh vực ở Step I (Psychology / Neuroscience / Philosophy / Sociology / AI…).
 
-Output JSON CHẶT: {"suggestions": [{"title":"...","author":"...","type":"book","reason":"...","searchHint":"..."}, ...]}
+Đa dạng nguồn 6-9 suggestion:
+- ÍT NHẤT 2 ở Tier 1-2 (meta/review)
+- ÍT NHẤT 1 ở Tier 3 (classic book)
+- ÍT NHẤT 4/5 lĩnh vực Knowledge Map được cover
+- ÍT NHẤT 1 suggestion field "AI" (signature kênh)
+
+Output JSON CHẶT: {"suggestions": [{"title":"...","author":"...","type":"book","reason":"...","searchHint":"...","tier":2,"field":"Psychology"}, ...]}
 Không thêm field, không markdown, không lời mở đầu.`;
 
 export function buildRefsSuggestUserContent(

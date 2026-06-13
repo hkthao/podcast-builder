@@ -5,6 +5,22 @@
  * gọi relative path. Sau khi build, FE host độc lập + Hono cần CORS đúng.
  */
 
+export type ServerErrorEntry = {
+  timestamp: string;
+  source: "uncaught" | "rejection" | "api" | "manual";
+  message: string;
+  stack: string | null;
+  context: { method?: string; path?: string } | null;
+};
+
+export type ServerHealth = {
+  ok: true;
+  uptime: number;
+  startedAt: string;
+  errorCount: number;
+  errors: ServerErrorEntry[];
+};
+
 export type EpisodeStatus =
   | "no-audio"
   | "draft"
@@ -159,6 +175,18 @@ export type SuggestedRef = {
   type: ReferenceType;
   reason: string;
   searchHint: string;
+  /** Research Priority Tier 1-5 (1=meta, 5=blog). */
+  tier: 1 | 2 | 3 | 4 | 5;
+  /** Lĩnh vực: Psychology / Neuroscience / Philosophy / Sociology / AI… */
+  field: string;
+};
+
+export type BrainstormScores = {
+  universal: number;
+  emotional: number;
+  philosophical: number;
+  aiRelevance: number;
+  originality: number;
 };
 
 export type BrainstormIdea = {
@@ -166,7 +194,23 @@ export type BrainstormIdea = {
   hook: string;
   angle: string;
   why: string;
-  /** Dàn ý 5-7 section sẵn dùng cho Gen essay. "" cho legacy idea. */
+  /** Step A v2: quan sát đời thường — gốc của idea, KHÔNG phải hook. */
+  observation: string;
+  /** Step F v2: 5 chiều 1-10. */
+  scores: BrainstormScores;
+  /** Step I v2: lĩnh vực liên quan. [] cho legacy. */
+  knowledgeMap: string[];
+  /** Phase A mục 3: luận điểm phản biện. "" cho legacy. */
+  contrarianView: string;
+  /** Phase A mục 7: 3-5 alt hook ngắn cho thumbnail. [] cho legacy. */
+  thumbnailHooks: string[];
+  /** Phase A mục 9: AI/AGI projection ending. "" cho legacy. */
+  futureConnection: string;
+  /** Phase B mục 4: 3-5 nhân vật/sự kiện lịch sử + context 1 dòng. */
+  historicalExamples: string[];
+  /** Phase B mục 5: 3-4 câu chuyện cụ thể với prefix [Hiện đại]/[Lịch sử]/[Cá nhân]. */
+  storyBank: string[];
+  /** Dàn ý 12 mục theo Framework v1. "" cho legacy. */
   outline: string;
 };
 
@@ -439,6 +483,11 @@ export const api = {
     }),
 
   listLLMModels: () => jsonFetch<LLMModels>("/api/llm/models"),
+
+  getHealth: () => jsonFetch<ServerHealth>("/api/health"),
+
+  clearServerErrors: () =>
+    jsonFetch<{ ok: boolean }>("/api/health/errors", { method: "DELETE" }),
 
   listWorkflow: () =>
     jsonFetch<{ chains: WorkflowChain[] }>("/api/workflow"),
