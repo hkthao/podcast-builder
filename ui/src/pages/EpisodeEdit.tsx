@@ -24,6 +24,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
 import { cn } from "@/lib/utils";
 
 type Tab = "config" | "scenes" | "transcript";
@@ -146,7 +147,7 @@ export function EpisodeEdit() {
         />
       </div>
 
-      {tab === "config" && <ConfigPanel ep={ep} />}
+      {tab === "config" && <EpisodeConfigForm ep={ep} />}
       {tab === "scenes" && (
         <ScenesPanel
           episodeName={name}
@@ -213,30 +214,6 @@ function TabButton({
       {icon}
       {label}
     </button>
-  );
-}
-
-function ConfigPanel({
-  ep,
-}: {
-  ep: ReturnType<typeof api.getEpisode> extends Promise<infer T> ? T : never;
-}) {
-  return (
-    <Card className="p-6">
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm">
-        <Row label="Title">{ep.config.title}</Row>
-        <Row label="Hook">{ep.config.hook ?? "—"}</Row>
-        <Row label="Episode number">{ep.config.episodeNumber}</Row>
-        <Row label="Mood override">{ep.config.moodOverride ?? "auto"}</Row>
-        <Row label="BGM">{ep.config.bgm ?? "—"}</Row>
-        <Row label="BGM volume">{ep.config.bgmVolumeDb} dB</Row>
-        <Row label="Intro">{ep.config.showIntro ? "có" : "không"}</Row>
-        <Row label="Outro">{ep.config.showOutro ? "có" : "không"}</Row>
-      </dl>
-      <p className="mt-6 text-xs text-muted-foreground">
-        Form edit auto-save sẽ có ở Phase 10.3.
-      </p>
-    </Card>
   );
 }
 
@@ -573,15 +550,6 @@ function Meta({
       </div>
       <div className="font-mono text-lg">{children}</div>
     </Card>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium break-words">{children}</dd>
-    </>
   );
 }
 
