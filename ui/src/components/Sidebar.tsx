@@ -6,6 +6,7 @@ import {
   Home,
   Library,
   Lightbulb,
+  FileText,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -49,6 +50,11 @@ export function Sidebar() {
           to="/brainstorm"
           icon={<Lightbulb className="size-4" />}
           label="Brainstorm"
+        />
+        <NavItem
+          to="/essay"
+          icon={<FileText className="size-4" />}
+          label="Essay"
         />
         <NavItem
           to="/references"

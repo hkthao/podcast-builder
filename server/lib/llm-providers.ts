@@ -74,6 +74,110 @@ export type LLMChatRequest = {
   jsonMode?: boolean;
 };
 
+/**
+ * Stream chat. Callback `onChunk` được gọi mỗi token mới.
+ * Trả về full content khi xong.
+ * Throws nếu abort signal trigger giữa chừng.
+ */
+export async function chatStream(
+  req: LLMChatRequest,
+  onChunk: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (req.provider === "openai") {
+    if (!process.env.OPENAI_API_KEY) {
+      const err = new Error("Thiếu OPENAI_API_KEY trong .env") as Error & {
+        code: string;
+      };
+      err.code = "VALIDATION";
+      throw err;
+    }
+    const openai = new OpenAI();
+    const stream = await openai.chat.completions.create(
+      {
+        model: req.model,
+        temperature: req.temperature ?? 0.7,
+        messages: [
+          { role: "system", content: req.systemPrompt },
+          { role: "user", content: req.userContent },
+        ],
+        stream: true,
+        ...(req.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+      },
+      { signal },
+    );
+    let full = "";
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        full += delta;
+        onChunk(delta);
+      }
+    }
+    return full;
+  }
+
+  if (req.provider === "ollama") {
+    const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: req.model,
+        messages: [
+          { role: "system", content: req.systemPrompt },
+          { role: "user", content: req.userContent },
+        ],
+        stream: true,
+        ...(req.jsonMode ? { format: "json" as const } : {}),
+        options: { temperature: req.temperature ?? 0.7 },
+      }),
+      signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Ollama lỗi ${res.status}: ${body.slice(0, 200) || res.statusText}`,
+      );
+    }
+    if (!res.body) throw new Error("Ollama không trả về body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = "";
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // ndjson: tách theo \n
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line) as {
+            message?: { content?: string };
+            done?: boolean;
+          };
+          const delta = obj.message?.content;
+          if (delta) {
+            full += delta;
+            onChunk(delta);
+          }
+        } catch {
+          /* line không phải JSON hợp lệ — bỏ qua */
+        }
+      }
+    }
+    return full;
+  }
+
+  const err = new Error(`Provider không hỗ trợ: ${req.provider}`) as Error & {
+    code: string;
+  };
+  err.code = "VALIDATION";
+  throw err;
+}
+
 export async function chat(req: LLMChatRequest): Promise<string> {
   if (req.provider === "openai") {
     if (!process.env.OPENAI_API_KEY) {

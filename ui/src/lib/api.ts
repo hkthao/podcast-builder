@@ -183,6 +183,30 @@ export type BrainstormSession = {
   model?: string;
 };
 
+export type EssayBrainstormRef = {
+  id: string;
+  ideaIdx: number;
+};
+
+export type Essay = {
+  id: string;
+  title: string;
+  outline: string | null;
+  content: string;
+  nlmPrompt: string | null;
+  brainstormRef: EssayBrainstormRef | null;
+  provider: LLMProvider;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EssayStreamEvent =
+  | { type: "start"; essay: Essay }
+  | { type: "delta"; text: string }
+  | { type: "done"; essay: Essay }
+  | { type: "error"; error: string };
+
 export type RenderPhase =
   | "queued"
   | "process-audio"
@@ -352,6 +376,98 @@ export const api = {
     }),
 
   listLLMModels: () => jsonFetch<LLMModels>("/api/llm/models"),
+
+  listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
+  getEssay: (id: string) =>
+    jsonFetch<Essay>(`/api/essay/${encodeURIComponent(id)}`),
+  saveEssay: (
+    id: string,
+    patch: {
+      title?: string;
+      content?: string;
+      outline?: string | null;
+      nlmPrompt?: string | null;
+    },
+  ) =>
+    jsonFetch<Essay>(`/api/essay/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+
+  genNlmPrompt: (
+    id: string,
+    input: { provider: LLMProvider; model: string },
+  ) =>
+    jsonFetch<Essay>(`/api/essay/${encodeURIComponent(id)}/nlm-prompt`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteEssay: (id: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/essay/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+
+  /**
+   * Stream essay generation. Caller cung cấp `onEvent` để xử lý từng event SSE.
+   * Trả về abort function để hủy nửa chừng.
+   */
+  streamEssay: (
+    input: {
+      title: string;
+      outline?: string;
+      brainstormRef?: EssayBrainstormRef;
+      provider: LLMProvider;
+      model: string;
+    },
+    onEvent: (ev: EssayStreamEvent) => void,
+  ): (() => void) => {
+    const ctl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch("/api/essay/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+          signal: ctl.signal,
+        });
+        if (!res.ok || !res.body) {
+          const errMsg = await res.text().catch(() => res.statusText);
+          onEvent({ type: "error", error: errMsg });
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          // SSE event boundary là \n\n
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const evRaw of events) {
+            // Parse "data: …" lines
+            const dataLine = evRaw
+              .split("\n")
+              .find((l) => l.startsWith("data:"));
+            if (!dataLine) continue;
+            const payload = dataLine.slice(5).trim();
+            if (!payload) continue;
+            try {
+              onEvent(JSON.parse(payload) as EssayStreamEvent);
+            } catch {
+              /* không parse được — bỏ qua */
+            }
+          }
+        }
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        onEvent({ type: "error", error: String(e) });
+      }
+    })();
+    return () => ctl.abort();
+  },
 
   pickBrainstormIdea: (id: string, pickedIdx: number | null) =>
     jsonFetch<BrainstormSession>(

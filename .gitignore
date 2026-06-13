@@ -13,6 +13,8 @@ references/*
 !references/.gitkeep
 brainstorm/*
 !brainstorm/.gitkeep
+essays/*
+!essays/.gitkeep
 public/*
 !public/.gitkeep
 !public/brand/

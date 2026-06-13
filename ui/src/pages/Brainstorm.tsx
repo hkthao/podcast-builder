@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   Lightbulb,
   Sparkles,
@@ -10,6 +11,7 @@ import {
   History,
   CheckCircle2,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 import {
   api,
@@ -409,6 +411,7 @@ function IdeasView({
           key={idx}
           idea={idea}
           idx={idx}
+          sessionId={session.id}
           picked={session.pickedIdx === idx}
           onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
           loading={pickingIdx === idx}
@@ -421,16 +424,19 @@ function IdeasView({
 function IdeaCard({
   idea,
   idx,
+  sessionId,
   picked,
   onPick,
   loading,
 }: {
   idea: BrainstormIdea;
   idx: number;
+  sessionId: string;
   picked: boolean;
   onPick: () => void;
   loading: boolean;
 }) {
+  const navigate = useNavigate();
   return (
     <Card
       className={cn(
@@ -478,13 +484,25 @@ function IdeaCard({
           </div>
         </div>
       </div>
-      <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+      <div className="px-6 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
         <CopyButton text={idea.title} label="Title" />
         <CopyButton text={idea.hook} label="Hook" />
-        <CopyButton
-          text={`${idea.title}\n\n${idea.hook}`}
-          label="Cả 2"
-        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            navigate("/essay", {
+              state: {
+                prefillTitle: idea.title,
+                prefillOutline: `Hook: ${idea.hook}\n\nGóc nhìn: ${idea.angle}\n\nVì sao resonate: ${idea.why}`,
+                brainstormRef: { id: sessionId, ideaIdx: idx },
+              },
+            })
+          }
+        >
+          <FileText className="size-4" />
+          Gen essay
+        </Button>
         <Button
           variant={picked ? "secondary" : "outline"}
           size="sm"
