@@ -3,8 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#7A2E2E" />
     <meta name="color-scheme" content="light dark" />
-    <title>Podcast Builder Studio</title>
+
+    <link rel="icon" type="image/svg+xml" href="/icons/app-icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Podcast Studio" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <meta
+      name="description"
+      content="Studio dựng video podcast tự động từ audio. Quản lý episode, edit transcript + scene plan, render qua Remotion local. Output 1080×1920 chuẩn Facebook Reels."
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Podcast Studio" />
+    <meta property="og:title" content="Podcast Studio — Dựng video podcast tự động" />
+    <meta
+      property="og:description"
+      content="Audio → transcribe → spell-fix → plan scene → render 1080×1920 H.264 sẵn cho FB Reels. Pipeline local, không cần cloud."
+    />
+    <meta property="og:image" content="/icons/app-icon.svg" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <title>Podcast Studio — Dựng video podcast tự động</title>
+
+    <script>
+      // Apply theme class BEFORE first paint — tránh flash light mode khi user
+      // chọn dark. Mirrors lib/theme.ts (keep these in sync if either changes).
+      (function () {
+        try {
+          var v = localStorage.getItem("podcast-builder:theme");
+          var dark =
+            v === "dark" ||
+            ((v === "system" || !v) &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {
+          /* private mode — leave default light */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,0 +1,49 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Podcast Studio</title>
+  <desc>Microphone biểu tượng podcast với 3 cánh sóng âm đồng tâm.</desc>
+
+  <!-- Oxblood rounded square background (iOS app-icon style) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="#7A2E2E"/>
+
+  <!-- Sound wave arcs — 3 levels each side, concentric quanh mic -->
+  <g fill="none" stroke="#C19A5B" stroke-linecap="round">
+    <!-- Left side -->
+    <path d="M 396 384 Q 348 460 348 532 Q 348 604 396 680"
+          stroke-width="24"/>
+    <path d="M 332 348 Q 268 444 268 532 Q 268 620 332 716"
+          stroke-width="20" opacity="0.65"/>
+    <path d="M 268 308 Q 188 420 188 532 Q 188 644 268 756"
+          stroke-width="16" opacity="0.35"/>
+
+    <!-- Right side -->
+    <path d="M 628 384 Q 676 460 676 532 Q 676 604 628 680"
+          stroke-width="24"/>
+    <path d="M 692 348 Q 756 444 756 532 Q 756 620 692 716"
+          stroke-width="20" opacity="0.65"/>
+    <path d="M 756 308 Q 836 420 836 532 Q 836 644 756 756"
+          stroke-width="16" opacity="0.35"/>
+  </g>
+
+  <!-- Mic capsule — cream pill, dominant center -->
+  <rect x="424" y="280" width="176" height="336" rx="88" ry="88" fill="#FBF7F0"/>
+
+  <!-- Capsule highlight (chiều sâu nhẹ) -->
+  <rect x="448" y="304" width="48" height="288" rx="24" ry="24" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- Mic grille hatches — chiều dọc bên trong capsule -->
+  <g stroke="#7A2E2E" stroke-width="6" stroke-linecap="round" opacity="0.55">
+    <line x1="476" y1="340" x2="476" y2="560"/>
+    <line x1="512" y1="320" x2="512" y2="580"/>
+    <line x1="548" y1="340" x2="548" y2="560"/>
+  </g>
+
+  <!-- Mic stand stem -->
+  <rect x="494" y="616" width="36" height="92" rx="6" fill="#FBF7F0"/>
+
+  <!-- Mic base — half circle bowl -->
+  <path d="M 384 740 Q 384 824 512 824 Q 640 824 640 740 Z" fill="#FBF7F0"/>
+  <rect x="412" y="824" width="200" height="24" rx="12" fill="#FBF7F0"/>
+
+  <!-- Đốm sáng đỉnh capsule -->
+  <ellipse cx="488" cy="312" rx="44" ry="14" fill="#FFFFFF" opacity="0.5"/>
+</svg>
