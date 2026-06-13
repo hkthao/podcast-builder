@@ -42,9 +42,14 @@ episodesRoutes.post("/upload", async (c) => {
       400,
     );
   }
+  // Optional: essayId form field để prefill title/hook từ Essay
+  const essayId =
+    typeof body["essayId"] === "string" && body["essayId"]
+      ? (body["essayId"] as string)
+      : undefined;
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
-    const summary = await uploadAudio(file.name, buf);
+    const summary = await uploadAudio(file.name, buf, { essayId });
     return c.json(summary, 201);
   } catch (e) {
     const err = e as Error & { code?: string };

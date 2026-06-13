@@ -1,16 +1,20 @@
 import { Hono } from "hono";
 import {
   addReference,
+  buildRefsSuggestUserContent,
   deleteReference,
   getReference,
   linkReference,
   listAllTags,
   listReferences,
+  REFS_SUGGEST_SYSTEM,
   scrapeTitle,
   unlinkReference,
   updateReference,
   type Reference,
+  type SuggestedRef,
 } from "../lib/reference-store";
+import { chat, type LLMProvider } from "../lib/llm-providers";
 
 export const referencesRoutes = new Hono();
 
@@ -26,6 +30,95 @@ referencesRoutes.get("/", async (c) => {
 referencesRoutes.get("/_/tags", async (c) => {
   const tags = await listAllTags();
   return c.json({ tags });
+});
+
+/**
+ * LLM gợi ý 5-7 reference cho essay (title + content snippet).
+ * Body: {title, essayContent, provider, model}
+ * KHÔNG save vào library — chỉ trả suggestions ephemeral. User pick + add tay.
+ * Lý do: LLM hay bịa URL → không trả URL, user paste vào Google tìm bản thật.
+ */
+referencesRoutes.post("/_/suggest", async (c) => {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON" }, 400);
+  }
+  const body = raw as {
+    title?: string;
+    essayContent?: string;
+    provider?: string;
+    model?: string;
+  };
+  if (typeof body.title !== "string" || body.title.trim().length === 0) {
+    return c.json({ error: "Thiếu title" }, 400);
+  }
+  if (
+    typeof body.essayContent !== "string" ||
+    body.essayContent.trim().length < 100
+  ) {
+    return c.json(
+      { error: "Cần essayContent ≥ 100 chars để LLM bắt chủ đề" },
+      400,
+    );
+  }
+  if (body.provider !== "openai" && body.provider !== "ollama") {
+    return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
+  }
+  if (typeof body.model !== "string" || body.model.trim().length === 0) {
+    return c.json({ error: "Thiếu model" }, 400);
+  }
+  try {
+    const content = await chat({
+      provider: body.provider as LLMProvider,
+      model: body.model.trim(),
+      systemPrompt: REFS_SUGGEST_SYSTEM,
+      userContent: buildRefsSuggestUserContent(
+        body.title.trim(),
+        body.essayContent,
+      ),
+      temperature: 0.4,
+      jsonMode: true,
+    });
+    const parsed = JSON.parse(content) as { suggestions?: unknown };
+    if (!Array.isArray(parsed.suggestions)) {
+      return c.json({ error: "LLM response thiếu 'suggestions' array" }, 502);
+    }
+    const VALID_TYPES = ["pdf", "article", "video", "book", "podcast", "other"];
+    const suggestions: SuggestedRef[] = [];
+    for (const r of parsed.suggestions as unknown[]) {
+      const o = r as Partial<SuggestedRef>;
+      if (
+        typeof o.title !== "string" ||
+        typeof o.reason !== "string" ||
+        typeof o.searchHint !== "string"
+      )
+        continue;
+      const type =
+        typeof o.type === "string" && VALID_TYPES.includes(o.type)
+          ? (o.type as SuggestedRef["type"])
+          : "other";
+      suggestions.push({
+        title: o.title.trim(),
+        author:
+          typeof o.author === "string" && o.author.trim()
+            ? o.author.trim()
+            : null,
+        type,
+        reason: o.reason.trim(),
+        searchHint: o.searchHint.trim(),
+      });
+    }
+    if (suggestions.length === 0) {
+      return c.json({ error: "LLM trả về 0 suggestion parse được" }, 502);
+    }
+    return c.json({ suggestions });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
 });
 
 /**

@@ -31,6 +31,16 @@ export type Reference = {
 
 type LibraryFile = { items: Reference[] };
 
+export type SuggestedRef = {
+  title: string;
+  author: string | null;
+  type: ReferenceType;
+  /** Lý do tại sao essay này nên đọc reference đó */
+  reason: string;
+  /** Cụm từ user paste vào Google để tìm URL thật (LLM hay bịa URL nên không trả). */
+  searchHint: string;
+};
+
 const VALID_TYPES: ReferenceType[] = [
   "pdf",
   "article",
@@ -389,4 +399,32 @@ export async function scrapeTitle(url: string): Promise<{
       pdfUrl: isPdfUrl ? url : null,
     };
   }
+}
+
+export const REFS_SUGGEST_SYSTEM = `Bạn là trợ lý nghiên cứu cho kênh podcast tiếng Việt "ByteCast Tech" về triết học/công nghệ/xã hội.
+
+Cho 1 essay (tiêu đề + đoạn nội dung), hãy đề xuất 5-7 reference user có thể đọc/xem để hiểu sâu hoặc mở rộng chủ đề.
+
+QUY TẮC:
+- KHÔNG bịa URL (LLM hay hallucinate URL chết). KHÔNG trả field "url".
+- "title" + "author" phải là TÁC PHẨM CÓ THẬT (sách, bài báo, video TED talk, podcast tập, paper academic). Nếu không chắc, KHÔNG bịa.
+- "type": "book" | "article" | "video" | "podcast" | "pdf" | "other"
+- "reason": 1-2 câu, vì sao essay này nên đọc reference đó (link cụ thể với luận điểm essay).
+- "searchHint": cụm từ tìm kiếm Google ngắn ~3-8 chữ. VD: 'burnout society byung-chul han pdf', 'sherry turkle alone together TED'.
+- Đa dạng nguồn: ít nhất 1 sách, 1 bài/paper, 1 video/podcast.
+- Ưu tiên nguồn tiếng Anh KINH ĐIỂN trong chủ đề thay vì blog ngẫu nhiên.
+
+Output JSON CHẶT: {"suggestions": [{"title":"...","author":"...","type":"book","reason":"...","searchHint":"..."}, ...]}
+Không thêm field, không markdown, không lời mở đầu.`;
+
+export function buildRefsSuggestUserContent(
+  title: string,
+  essayContent: string,
+): string {
+  const snippet = essayContent.slice(0, 1500);
+  return [
+    `Tiêu đề essay: ${title}`,
+    `\nTrích essay (1500 chars để bắt chủ đề):\n${snippet}`,
+    `\nĐề xuất 5-7 reference ngay bây giờ.`,
+  ].join("");
 }

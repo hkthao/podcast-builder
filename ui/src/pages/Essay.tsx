@@ -14,6 +14,10 @@ import {
   Check,
   ExternalLink,
   Headphones,
+  Library,
+  Search,
+  Upload,
+  Mic2,
 } from "lucide-react";
 import {
   api,
@@ -21,6 +25,7 @@ import {
   type EssayBrainstormRef,
   type EssayStreamEvent,
   type LLMProvider,
+  type SuggestedRef,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -121,6 +126,7 @@ export function EssayPage() {
     setNlmPrompt(e.nlmPrompt ?? "");
     setStreamContent("");
     setSavedAt(e.updatedAt);
+    setSuggestions([]);
   };
 
   const newEssay = () => {
@@ -133,6 +139,7 @@ export function EssayPage() {
     setNlmPrompt("");
     setStreamContent("");
     setSavedAt(null);
+    setSuggestions([]);
   };
 
   const startStream = () => {
@@ -206,6 +213,33 @@ export function EssayPage() {
       );
     },
   });
+
+  const [suggestions, setSuggestions] = useState<SuggestedRef[]>([]);
+  const suggestMut = useMutation({
+    mutationFn: () =>
+      api.suggestRefs({
+        title,
+        essayContent: content,
+        provider,
+        model,
+      }),
+    onSuccess: (data) => setSuggestions(data.suggestions),
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) =>
+      api.uploadAudio(file, { essayId: activeId ?? undefined }),
+    onSuccess: (summary) => {
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+      navigate(`/episodes/${encodeURIComponent(summary.name)}`);
+    },
+  });
+
+  const onPickAudio = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMut.mutate(file);
+    e.target.value = ""; // reset để chọn lại cùng file được
+  };
 
   const genNlmMut = useMutation({
     mutationFn: (id: string) => api.genNlmPrompt(id, { provider, model }),
@@ -447,6 +481,46 @@ export function EssayPage() {
             )}
           </Card>
 
+          {/* Hint khi chưa có essay nào */}
+          {!activeId && liveContent.length === 0 && !streaming && (
+            <Card className="p-6 border-dashed">
+              <p className="text-sm font-medium mb-3">
+                Sau khi Generate sẽ xuất hiện 3 panel:
+              </p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <FileText className="size-4 mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <strong>Editor essay</strong> — live stream khi gen, edit
+                    sau gen, auto-save 1.2s debounce.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Headphones className="size-4 mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <strong>NotebookLM prompt</strong> — LLM viết prompt tối ưu
+                    paste vào NLM để gen podcast 2-host tiếng Việt.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Library className="size-4 mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <strong>Suggest tài liệu tham khảo</strong> — LLM gợi ý
+                    5-7 sách/bài/video liên quan, click "Add to library" để
+                    save vào References.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Mic2 className="size-4 mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <strong>Upload audio NotebookLM</strong> — drop .m4a vào,
+                    tự tạo episode prefill title/hook → sẵn render.
+                  </span>
+                </li>
+              </ul>
+            </Card>
+          )}
+
           {/* Editor */}
           {(liveContent.length > 0 || activeId) && (
             <Card className="p-0 overflow-hidden">
@@ -620,7 +694,182 @@ export function EssayPage() {
               </div>
             </Card>
           )}
+
+          {/* Suggest references card */}
+          {activeId && content.length > 0 && !streaming && (
+            <Card className="p-0 overflow-hidden">
+              <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-3">
+                <span className="font-medium text-sm flex items-center gap-2">
+                  <Library className="size-4" />
+                  Đề xuất tài liệu tham khảo
+                </span>
+                {suggestions.length > 0 && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {suggestions.length} gợi ý
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    LLM gợi ý, KHÔNG bịa URL — user tự search Google
+                  </span>
+                </div>
+              </div>
+
+              {suggestions.length === 0 ? (
+                <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <Library className="mx-auto mb-2 size-8 opacity-40" />
+                  Bấm <strong>Suggest</strong> để LLM đề xuất 5-7 sách/bài/video.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {suggestions.map((s, idx) => (
+                    <SuggestionRow key={idx} suggestion={s} />
+                  ))}
+                </div>
+              )}
+
+              <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+                {suggestMut.isError && (
+                  <span className="mr-auto text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="size-3.5" />
+                    {String(suggestMut.error)}
+                  </span>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => suggestMut.mutate()}
+                  disabled={suggestMut.isPending || !model}
+                >
+                  {suggestMut.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                  {suggestions.length > 0 ? "Suggest lại" : "Suggest"}
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/references">
+                    <Library className="size-3.5" />
+                    Browse library ↗
+                  </a>
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {/* Upload audio from NotebookLM → tạo episode mới */}
+          {activeId && content.length > 0 && !streaming && (
+            <Card className="p-0 overflow-hidden">
+              <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-3">
+                <span className="font-medium text-sm flex items-center gap-2">
+                  <Mic2 className="size-4" />
+                  Audio từ NotebookLM
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Bước cuối: upload .m4a/.mp3 → tạo episode prefill title/hook
+                </span>
+              </div>
+              <div className="px-6 py-6">
+                <label className="block">
+                  <input
+                    type="file"
+                    accept=".m4a,.mp3,.wav,audio/*"
+                    onChange={onPickAudio}
+                    disabled={uploadMut.isPending}
+                    className="hidden"
+                  />
+                  <div
+                    className={cn(
+                      "border-2 border-dashed rounded-md p-8 text-center cursor-pointer transition-colors",
+                      uploadMut.isPending
+                        ? "opacity-50 cursor-wait"
+                        : "hover:border-accent hover:bg-secondary/30",
+                    )}
+                  >
+                    {uploadMut.isPending ? (
+                      <>
+                        <Loader2 className="mx-auto size-8 animate-spin text-accent" />
+                        <p className="mt-2 text-sm">Đang upload + tạo episode…</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mx-auto size-8 text-muted-foreground" />
+                        <p className="mt-2 text-sm font-medium">
+                          Click để chọn file audio
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Title + hook + essayId sẽ auto-link vào episode
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </label>
+                {uploadMut.isError && (
+                  <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive flex items-start gap-2">
+                    <AlertCircle className="size-4 mt-0.5 shrink-0" />
+                    <span>{String(uploadMut.error)}</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
+  const navigate = useNavigate();
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(suggestion.searchHint)}`;
+  return (
+    <div className="px-6 py-4 space-y-2">
+      <div className="flex items-start gap-3">
+        <Badge variant="outline" className="font-mono text-xs uppercase shrink-0 mt-0.5">
+          {suggestion.type}
+        </Badge>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium leading-tight">{suggestion.title}</p>
+          {suggestion.author && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {suggestion.author}
+            </p>
+          )}
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+            {suggestion.reason}
+          </p>
+          <code className="mt-2 inline-block px-2 py-0.5 rounded bg-secondary text-xs font-mono">
+            {suggestion.searchHint}
+          </code>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" asChild>
+          <a href={googleUrl} target="_blank" rel="noreferrer">
+            <Search className="size-3.5" />
+            Google ↗
+          </a>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            navigate("/references", {
+              state: {
+                prefillRef: {
+                  title: suggestion.title,
+                  author: suggestion.author,
+                  type: suggestion.type,
+                  notes: `Search hint: ${suggestion.searchHint}\n\nWhy: ${suggestion.reason}`,
+                },
+              },
+            })
+          }
+        >
+          <Library className="size-3.5" />
+          Add to library →
+        </Button>
       </div>
     </div>
   );

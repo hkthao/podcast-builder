@@ -5,6 +5,8 @@ import {
   EpisodeConfigSchema,
   type EpisodeConfig,
 } from "../../src/episode";
+import { getEssay } from "./essay-store";
+import { getSession as getBrainstormSession } from "./brainstorm-store";
 
 const INPUT_DIR = path.resolve("input");
 const OUTPUT_DIR = path.resolve("output");
@@ -200,15 +202,44 @@ const buildTemplate = (name: string): EpisodeConfig => ({
   showIntro: true,
   showOutro: true,
   sceneOverrides: null,
+  essayId: null,
 });
 
 /**
  * Upload audio file qua POST. Tạo template JSON nếu chưa có.
  * `originalName` đến từ multipart upload (vd "recording.m4a").
  */
+/**
+ * Lấy {title, hook} từ essay (+brainstormRef nếu có) để pre-fill episode config.
+ * Trả null nếu essayId không tồn tại.
+ */
+async function deriveFromEssay(
+  essayId: string,
+): Promise<{ title: string; hook: string | null } | null> {
+  const essay = await getEssay(essayId);
+  if (!essay) return null;
+  let hook: string | null = null;
+  if (essay.brainstormRef) {
+    const bs = await getBrainstormSession(essay.brainstormRef.id);
+    if (bs && bs.ideas[essay.brainstormRef.ideaIdx]) {
+      hook = bs.ideas[essay.brainstormRef.ideaIdx].hook;
+    }
+  }
+  // Fallback: 1 câu đầu của content
+  if (!hook && essay.content) {
+    const firstSentence = essay.content
+      .split(/[.!?\n]/)[0]
+      ?.trim()
+      .slice(0, 180);
+    if (firstSentence) hook = firstSentence;
+  }
+  return { title: essay.title, hook };
+}
+
 export async function uploadAudio(
   originalName: string,
   buffer: Uint8Array,
+  options: { essayId?: string } = {},
 ): Promise<EpisodeSummary> {
   const ext = (originalName.split(".").pop() ?? "").toLowerCase();
   if (!AUDIO_EXTS.includes(ext as (typeof AUDIO_EXTS)[number])) {
@@ -218,7 +249,21 @@ export async function uploadAudio(
     (err as Error & { code: string }).code = "VALIDATION";
     throw err;
   }
-  const baseName = originalName.replace(/\.[^.]+$/, "");
+
+  // Nếu có essayId → dùng essay title làm base slug để tên file đẹp
+  let derived: { title: string; hook: string | null } | null = null;
+  if (options.essayId) {
+    derived = await deriveFromEssay(options.essayId);
+    if (!derived) {
+      const err = new Error(`Essay không tồn tại: ${options.essayId}`);
+      (err as Error & { code: string }).code = "VALIDATION";
+      throw err;
+    }
+  }
+
+  const baseName = derived
+    ? derived.title
+    : originalName.replace(/\.[^.]+$/, "");
   const slug = slugify(baseName) || `episode-${Date.now()}`;
   const audioPath = path.join(INPUT_DIR, `${slug}.${ext}`);
   const configPath = path.join(INPUT_DIR, `${slug}.json`);
@@ -226,10 +271,26 @@ export async function uploadAudio(
   await fs.mkdir(INPUT_DIR, { recursive: true });
   await fs.writeFile(audioPath, buffer);
 
-  // Tạo template JSON nếu chưa có (để không ghi đè config đã edit).
+  // Tạo template JSON nếu chưa có. Khi có essay → prefill title/hook/essayId.
   if (!(await exists(configPath))) {
     const template = buildTemplate(slug);
+    if (derived && options.essayId) {
+      template.title = derived.title;
+      template.hook = derived.hook;
+      template.essayId = options.essayId;
+    }
     await fs.writeFile(configPath, JSON.stringify(template, null, 2));
+  } else if (derived && options.essayId) {
+    // Config đã có (re-upload audio cho cùng episode) — chỉ cập nhật essayId
+    // nếu nó còn null. Không ghi đè title/hook user đã edit.
+    const existing = JSON.parse(
+      await fs.readFile(configPath, "utf-8"),
+    ) as EpisodeConfig;
+    if (!existing.essayId) {
+      existing.essayId = options.essayId;
+      if (!existing.hook && derived.hook) existing.hook = derived.hook;
+      await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
+    }
   }
 
   const summary = await loadSummary(slug);

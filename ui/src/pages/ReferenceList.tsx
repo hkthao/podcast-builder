@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -34,11 +35,35 @@ const TYPES: ReferenceType[] = [
   "other",
 ];
 
+type ReferencePrefill = {
+  title?: string;
+  author?: string | null;
+  type?: ReferenceType;
+  notes?: string;
+};
+
 export function ReferenceList() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const state = (location.state ?? null) as {
+    prefillRef?: ReferencePrefill;
+  } | null;
   const [q, setQ] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [prefill, setPrefill] = useState<ReferencePrefill | null>(null);
+  const prefillAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    if (state?.prefillRef) {
+      setPrefill(state.prefillRef);
+      setShowAddForm(true);
+      prefillAppliedRef.current = true;
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [state, navigate, location.pathname]);
 
   const filtersQ = useQuery({
     queryKey: ["references", { q, tag: activeTag, type: activeType }],
@@ -72,7 +97,13 @@ export function ReferenceList() {
       </header>
 
       {showAddForm && (
-        <AddReferenceForm onSuccess={() => setShowAddForm(false)} />
+        <AddReferenceForm
+          prefill={prefill ?? undefined}
+          onSuccess={() => {
+            setShowAddForm(false);
+            setPrefill(null);
+          }}
+        />
       )}
 
       <div className="mb-4 flex items-center gap-3">
@@ -159,15 +190,21 @@ export function ReferenceList() {
   );
 }
 
-function AddReferenceForm({ onSuccess }: { onSuccess: () => void }) {
+function AddReferenceForm({
+  prefill,
+  onSuccess,
+}: {
+  prefill?: ReferencePrefill;
+  onSuccess: () => void;
+}) {
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [author, setAuthor] = useState("");
-  const [type, setType] = useState<ReferenceType>("article");
+  const [title, setTitle] = useState(prefill?.title ?? "");
+  const [author, setAuthor] = useState(prefill?.author ?? "");
+  const [type, setType] = useState<ReferenceType>(prefill?.type ?? "article");
   const [tagsInput, setTagsInput] = useState("");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(prefill?.notes ?? "");
   const [scrapeStatus, setScrapeStatus] = useState<
     "idle" | "scraping" | "done" | "error"
   >("idle");

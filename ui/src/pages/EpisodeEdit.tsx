@@ -138,6 +138,18 @@ export function EpisodeEdit() {
               "{ep.config.hook}"
             </p>
           )}
+          {ep.config.essayId && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <Link
+                to="/essay"
+                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                title={ep.config.essayId}
+              >
+                <FileText className="size-3" />
+                Linked essay: <code className="font-mono">{ep.config.essayId}</code>
+              </Link>
+            </p>
+          )}
         </div>
         <Badge variant={ep.status === "rendered" ? "accent" : "outline"}>
           {labelFor(ep.status)}

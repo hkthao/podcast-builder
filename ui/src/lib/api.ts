@@ -22,6 +22,7 @@ export type EpisodeConfig = {
   showIntro: boolean;
   showOutro: boolean;
   sceneOverrides: unknown;
+  essayId: string | null;
 };
 
 export type EpisodeSummary = {
@@ -150,6 +151,14 @@ export type ScrapeResult = {
   author: string | null;
   source: string;
   pdfUrl: string | null;
+};
+
+export type SuggestedRef = {
+  title: string;
+  author: string | null;
+  type: ReferenceType;
+  reason: string;
+  searchHint: string;
 };
 
 export type BrainstormIdea = {
@@ -323,6 +332,17 @@ export const api = {
       body: JSON.stringify({ url }),
     }),
 
+  suggestRefs: (input: {
+    title: string;
+    essayContent: string;
+    provider: LLMProvider;
+    model: string;
+  }) =>
+    jsonFetch<{ suggestions: SuggestedRef[] }>("/api/references/_/suggest", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
   addReference: (
     input: Pick<Reference, "url" | "title"> & Partial<Reference>,
   ) =>
@@ -493,9 +513,13 @@ export const api = {
       { method: "POST" },
     ),
 
-  uploadAudio: async (file: File): Promise<EpisodeSummary> => {
+  uploadAudio: async (
+    file: File,
+    options: { essayId?: string } = {},
+  ): Promise<EpisodeSummary> => {
     const form = new FormData();
     form.append("audio", file);
+    if (options.essayId) form.append("essayId", options.essayId);
     const res = await fetch("/api/episodes/upload", {
       method: "POST",
       body: form,

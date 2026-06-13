@@ -23,6 +23,8 @@ export const EpisodeConfigSchema = z.object({
   showIntro: z.boolean().default(true),
   showOutro: z.boolean().default(true),
   sceneOverrides: z.array(SceneOverrideSchema).nullable().default(null),
+  /** ID essay đã dùng làm input cho NotebookLM. Traceability. */
+  essayId: z.string().nullable().default(null),
 });
 
 export type EpisodeConfig = z.infer<typeof EpisodeConfigSchema>;
@@ -37,4 +39,5 @@ export const buildEpisodeTemplate = (name: string): EpisodeConfig => ({
   showIntro: true,
   showOutro: true,
   sceneOverrides: null,
+  essayId: null,
 });
