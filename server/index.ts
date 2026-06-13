@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
+import { brainstormRoutes } from "./routes/brainstorm";
 import { episodesRoutes } from "./routes/episodes";
 import { referencesRoutes } from "./routes/references";
 import { renderRoutes } from "./routes/render";
@@ -42,6 +43,7 @@ app.get("/api/events", (c) => sseFromBus(c));
 app.route("/api/episodes", episodesRoutes);
 app.route("/api/references", referencesRoutes);
 app.route("/api/render", renderRoutes);
+app.route("/api/brainstorm", brainstormRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.

@@ -152,6 +152,22 @@ export type ScrapeResult = {
   pdfUrl: string | null;
 };
 
+export type BrainstormIdea = {
+  title: string;
+  hook: string;
+  angle: string;
+  why: string;
+};
+
+export type BrainstormSession = {
+  id: string;
+  topic: string;
+  tone: string;
+  ideas: BrainstormIdea[];
+  createdAt: string;
+  pickedIdx: number | null;
+};
+
 export type RenderPhase =
   | "queued"
   | "process-audio"
@@ -298,6 +314,32 @@ export const api = {
     jsonFetch<Reference>(
       `/api/references/${encodeURIComponent(id)}/unlink`,
       { method: "POST", body: JSON.stringify({ episodeName }) },
+    ),
+
+  listBrainstorm: () =>
+    jsonFetch<{ sessions: BrainstormSession[] }>("/api/brainstorm"),
+
+  getBrainstorm: (id: string) =>
+    jsonFetch<BrainstormSession>(
+      `/api/brainstorm/${encodeURIComponent(id)}`,
+    ),
+
+  createBrainstorm: (input: { topic: string; tone: string; count?: number }) =>
+    jsonFetch<BrainstormSession>("/api/brainstorm", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  pickBrainstormIdea: (id: string, pickedIdx: number | null) =>
+    jsonFetch<BrainstormSession>(
+      `/api/brainstorm/${encodeURIComponent(id)}/pick`,
+      { method: "PUT", body: JSON.stringify({ pickedIdx }) },
+    ),
+
+  deleteBrainstorm: (id: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/brainstorm/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
     ),
 
   startRender: (episodeName: string, preview: boolean) =>

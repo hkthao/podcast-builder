@@ -5,6 +5,7 @@ import {
   Mic2,
   Home,
   Library,
+  Lightbulb,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -44,6 +45,11 @@ export function Sidebar() {
 
       <nav className="p-3 space-y-0.5">
         <NavItem to="/" icon={<Home className="size-4" />} label="Episodes" />
+        <NavItem
+          to="/brainstorm"
+          icon={<Lightbulb className="size-4" />}
+          label="Brainstorm"
+        />
         <NavItem
           to="/references"
           icon={<Library className="size-4" />}

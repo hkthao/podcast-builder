@@ -11,6 +11,8 @@ output/
 tmp/
 references/*
 !references/.gitkeep
+brainstorm/*
+!brainstorm/.gitkeep
 public/*
 !public/.gitkeep
 !public/brand/
