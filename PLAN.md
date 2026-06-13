@@ -791,3 +791,217 @@ Lỗi/thiếu dữ liệu → return `null` hoặc fallback `PodcastDesk`, khôn
 
 ### 13.5 Image-to-video (LTX-Video/SVD local) — chưa làm
 - Nặng, clip chỉ ~5s, chỉ hợp làm thủ công cho 1 cảnh hero mở đầu, không tự động hằng ngày.
+
+---
+---
+
+## 14. Studio UI — wrap Remotion pipeline cho non-console workflow
+
+> Phase 10 — sau khi pipeline video + spell-fix đã ổn định. Mục tiêu: thay
+> workflow console (`$EDITOR`, `npm run make`, mở Finder kéo file…) bằng web app
+> local đơn giản. KHÔNG phải full CapCut/Premiere — chỉ "studio lite" cho
+> 1-người-một-kênh.
+
+### 14.1 Mục tiêu
+
+- **Browse episodes** đã có: list `input/episode-*.{m4a,json}` + status (đã render? lock file hash khớp?)
+- **Edit episode config** qua form thay $EDITOR: title / hook / episodeNumber / moodOverride / bgm / showIntro / showOutro
+- **Edit scene plan** qua UI: thay đổi `sceneType` per scene, preview thay đổi (small thumbnail), reorder mood
+- **Edit transcript** sau spell-fix: fix lỗi chính tả còn sót, đóng dấu câu manual
+- **Trigger render** qua nút bấm: preview (10s) hoặc full
+- **Progress real-time**: transcribe %, spell-fix %, render frame N/total, ETA
+- **Preview player** HTML5 video embed sau khi render xong
+- **Download output** file .mp4 + .thumb.jpg
+
+KHÔNG làm trong Mục 15:
+- Timeline editor frame-by-frame (overkill cho daily podcast)
+- Multi-user / hosted (giữ local-only)
+- Mobile app (browser responsive cũng được)
+- Drag/drop reorder scene (chưa cần, sceneType edit là đủ)
+
+### 14.2 Stack đã chốt
+
+| Thành phần | Dùng cái gì | Vai trò |
+|---|---|---|
+| Frontend | **Vite + React 19** (SPA) | UI tự host ở `http://localhost:3000` |
+| UI library | **shadcn/ui** + **Tailwind 3.4** + **Radix primitives** | Form, Dialog, Tabs, Progress, Toast — copy-paste vào `ui/src/components/ui/` |
+| Style theme | **Reuse từ `family-tree-v3`** (xem 14.2.1) | Visual identity nhất quán với tool khác của user |
+| Icons | **lucide-react** | Match shadcn defaults |
+| State | **TanStack Query** | Fetch + cache + invalidation |
+| Backend | **Hono** + **Node** (TypeScript) | API REST + SSE, port 3001 |
+| Render integration | Reuse `scripts/make.ts` qua **import trực tiếp** (không spawn) | Một process, share Remotion bundler cache |
+| Progress | **SSE** (`text/event-stream`) | Real-time stream `transcribe/spell-fix/render` progress |
+| Episode storage | `input/*.json` + filesystem watcher (`chokidar`) | Source of truth là filesystem, KHÔNG đụng DB |
+| Auth | KHÔNG | Local-only, không expose network |
+| Build/run | `npm run studio` mở cả 2 process (Vite + Hono) qua `concurrently` | 1 lệnh khởi động toàn studio |
+
+Bỏ Remotion Studio built-in (`npx remotion studio`) — chỉ phù hợp dev/preview composition, không phải production episode management.
+
+#### 14.2.1 Style theme — kế thừa từ family-tree-v3
+
+**KHÔNG kế thừa kiến trúc** (routing, state, supabase, family-chart). Chỉ kế thừa **CSS theme + design tokens + typography** để giữ visual identity nhất quán.
+
+Cụ thể copy/clone từ `/Users/kimthaohuynh/SourceCode/family-tree-v3`:
+
+| File / setting | Action |
+|---|---|
+| `tailwind.config.ts` | Copy nguyên (HSL CSS variables, container, radius scale, fontFamily) |
+| `components.json` (shadcn config) | Copy nguyên — `style: default`, `baseColor: neutral`, `cssVariables: true` |
+| `src/index.css` | Copy phần `@layer base` (CSS vars light + dark) + `@apply border-border` + base font-size 17px. **BỎ** `.f3` family-chart overrides + print stylesheet |
+| `src/lib/theme.ts` | Copy nguyên — light/dark/system manager với localStorage |
+| `@fontsource/be-vietnam-pro` + `@fontsource/noto-serif` | npm install như deps |
+| `src/components/ui/*` | Khi cần component nào: `npx shadcn add button card dialog form input tabs progress toast …` |
+
+**Palette (light mode):**
+- `bg` cream paper `#FBF7F0` / `fg` ink `#2A2320`
+- `primary` oxblood `#7A2E2E` (button, focus ring, link active)
+- `accent` bronze `#B8862A` (highlight, badge "rendered ✓")
+- `muted` warm grey + warm `border` `#E8E0D2`
+- `destructive` bright red `#D92E2E` (cancel render, delete)
+
+**Palette (dark mode):**
+- `bg` warm ink `#1A1612` / `fg` cream `#EFE9DB`
+- Same hues, lifted lightness cho contrast
+
+**Fonts:**
+- Body: `Be Vietnam Pro` (400/500/600/700)
+- Headings (`h1-h3` + tên episode): `Noto Serif` (400/600/700) tracking-tight
+
+**Base size**: `html { font-size: 17px }` — scale rem theo user system preference.
+
+**Radius**: `--radius: 0.5rem` (8px) cho card; `calc(--radius - 2px)` cho input/button.
+
+Lý do reuse: 1 người dev — tránh duy trì 2 design system. Mọi tool nội bộ (family-tree, podcast-builder, sau này) cùng "Oxblood Paper" identity. Khi rebrand: sửa CSS vars 1 nơi → mọi tool theo.
+
+### 14.3 Architecture
+
+```
+podcast-builder/
+├── server/                      ← NEW Hono backend
+│   ├── index.ts                 ← entry, listen :3001
+│   ├── routes/
+│   │   ├── episodes.ts          ← GET list / GET one / PUT save
+│   │   ├── plan.ts              ← GET/PUT tmp/<name>.plan.json
+│   │   ├── transcript.ts        ← GET/PUT tmp/<name>.corrected.json
+│   │   ├── render.ts            ← POST start, SSE stream progress
+│   │   └── output.ts            ← static serve output/ + thumbnails
+│   ├── lib/
+│   │   ├── episode-store.ts     ← read/write input/*.json + cache
+│   │   ├── render-runner.ts     ← orchestrate scripts/make.ts với progress events
+│   │   └── sse.ts               ← helper format SSE messages
+│   └── tsconfig.json
+├── ui/                          ← NEW Vite React app
+│   ├── index.html
+│   ├── src/
+│   │   ├── main.tsx
+│   │   ├── App.tsx              ← router
+│   │   ├── pages/
+│   │   │   ├── EpisodeList.tsx
+│   │   │   ├── EpisodeEdit.tsx  ← form + sub-tabs (config / plan / transcript)
+│   │   │   └── RenderProgress.tsx
+│   │   ├── components/
+│   │   │   ├── SceneTypePicker.tsx
+│   │   │   ├── TranscriptEditor.tsx
+│   │   │   └── VideoPlayer.tsx
+│   │   ├── lib/api.ts           ← fetch wrapper + SSE consumer
+│   │   └── theme.ts             ← reuse COLORS từ src/theme.ts
+│   ├── package.json
+│   └── vite.config.ts
+└── scripts/                     ← EXISTING (reuse)
+```
+
+Server import trực tiếp `scripts/{make,transcribe,plan-episode,spell-fix}.ts` (cùng monorepo, không cần API call subprocess). Mỗi route gọi function tương ứng → bắt progress events → emit SSE.
+
+### 14.4 API endpoints (Hono)
+
+```ts
+// Episode CRUD
+GET    /api/episodes                          → Episode[] (parse all input/*.json)
+GET    /api/episodes/:name                    → EpisodeDetail (config + render status + plan + transcript)
+PUT    /api/episodes/:name/config             → save input/<name>.json
+PUT    /api/episodes/:name/plan               → save tmp/<name>.plan.json
+PUT    /api/episodes/:name/transcript         → save tmp/<name>.corrected.json
+
+// Render
+POST   /api/episodes/:name/render             → { preview: bool } → start async, return jobId
+GET    /api/render/:jobId/progress            → SSE stream {phase, percent, eta, message}
+GET    /api/render/:jobId/cancel              → abort current render
+GET    /api/episodes/:name/output             → 302 redirect to /output/<name>.mp4
+
+// Setup / utilities
+GET    /api/episodes/:name/transcribe-status  → cache hit / miss
+POST   /api/episodes/:name/force-retranscribe → xoá cache, regen
+GET    /api/episodes/:name/thumbnail          → serve thumb.jpg
+```
+
+### 14.5 SSE progress shape
+
+```json
+{ "phase": "process-audio", "percent": 100, "elapsed": 12000 }
+{ "phase": "transcribe", "percent": 45, "elapsed": 67000, "message": "frame 12345 / 27890" }
+{ "phase": "spell-fix", "percent": 80, "elapsed": 89000, "message": "batch 16/20" }
+{ "phase": "plan-episode", "percent": 100, "elapsed": 1000 }
+{ "phase": "render", "percent": 23, "elapsed": 120000, "eta": 400000, "message": "frame 7800 / 33586" }
+{ "phase": "done", "outputPath": "output/episode-XXX.mp4" }
+```
+
+Render-runner subscribes `renderMedia({ onProgress })` từ Remotion + chia phase events thành unified stream.
+
+### 14.6 UI pages
+
+**EpisodeList** (`/`):
+- Card grid: thumbnail + title + status badge (chưa render / đã render / outdated)
+- Filter: by date, by status
+- "New episode" button → file picker upload audio + tạo config template
+
+**EpisodeEdit** (`/episodes/:name`):
+- Header: title + status + nút Render / Preview / Cancel
+- Tab 1 — **Config**: form các field từ `EpisodeConfig` schema
+- Tab 2 — **Scenes**: list scenes từ `plan.json`, click mood/sceneType dropdown để đổi inline
+- Tab 3 — **Transcript**: hiển thị `corrected.json`, click sentence để edit text inline
+- Sticky footer: "Save" + "Render preview" + "Render full"
+
+**RenderProgress** (modal hoặc page):
+- Phase indicator (5 bước: audio → transcribe → spell-fix → plan → render)
+- Progress bar + ETA + log tail
+- Khi xong: embed HTML5 player + download button + open output folder
+
+### 14.7 Phases triển khai
+
+- [ ] **10.0** — Backend skeleton: Hono server, `/api/episodes` list+get (read-only). 0.5 ngày
+- [ ] **10.1** — Episode CRUD: PUT config, fs watcher, **POST `/upload` drag-drop** copy audio + tạo template json. 1 ngày
+- [ ] **10.2** — Frontend skeleton: Vite + React + **shadcn/ui setup từ family-tree-v3 theme** (Tailwind + CSS vars + fonts), EpisodeList với fetch + **drag-drop file**. 1 ngày
+- [ ] **10.3** — EpisodeEdit Config tab: form Zod-validated + auto-save debounce 500ms. 1 ngày
+- [ ] **10.4** — Render trigger + **modal SSE progress** + **queue 2-3 parallel** + cancel. 1.5 ngày
+- [ ] **10.5** — Preview player HTML5 + download + "Show in Finder". 0.5 ngày
+- [ ] **10.6** — **Transcript review + edit tab** (MVP+): list sentence từ `corrected.json`, click edit inline, diff highlight với raw, find/replace all cho lỗi lặp lại, save → invalidate render cache. 1.5 ngày
+- [ ] **10.7** — Scenes tab: inline sceneType + mood edit, small thumbnails qua `renderStill`. +1 ngày
+- [ ] **10.8** — Polish: dark mode, keyboard shortcuts, recent episodes pinned. +1 ngày
+
+10.0-10.6 = **MVP** (6-7 ngày). 10.7-10.8 = bonus.
+
+### 14.8 Acceptance MVP (10.0-10.6)
+
+- [ ] Mở `npm run studio` → browser tự open `http://localhost:3000`
+- [ ] List 2 episode hiện tại + status (đã render lần cuối khi nào)
+- [ ] Click episode → edit title/hook qua form, lưu thấy `input/*.json` update
+- [ ] Click "Render preview" → SSE stream phase progress → 10-15s sau có preview .mp4 play được
+- [ ] Click "Render full" → tương tự, ~10 phút sau có full .mp4 + thumb + lock file
+- [ ] Cancel render giữa chừng → process abort cleanly
+- [ ] Render xong → embed video player hoạt động, download button trỏ đúng file
+
+### 14.9 Rủi ro / cần thử
+
+- **Long-running render trong Node event loop** — `renderMedia` chạy trên worker thread của Remotion, OK. Nhưng `transcribe` (whisper.cpp) block. Cân nhắc worker_threads hoặc spawn subprocess cho transcribe.
+- **SSE connection drop** trong render dài (~10 phút) — proxy/browser có thể drop sau 30s idle. Cần keepalive heartbeat mỗi 15s.
+- **Concurrent renders** — chỉ cho 1 render tại 1 thời điểm (queue request). Hoặc warn user.
+- **Filesystem watcher** trên macOS có thể bug với rename → cập nhật khi user edit qua $EDITOR không 100% reliable. Fallback: pull latest list mỗi 5s.
+- **Bundle Remotion mỗi render** mất ~10s. Cache `serveUrl` cross-render — invalidate khi `src/` thay đổi (theme/components rebuild).
+- **Tốc độ frontend khi list >50 episodes** — virtualize grid hoặc paginate.
+
+### 14.10 Khi nào KHÔNG cần làm Mục 14
+
+- Nếu workflow daily đã quen + ổn định với 3 lệnh shell (`cp`, `$EDITOR`, `npm run make`)
+- Nếu video 1 tháng < 5 cái — overhead build UI > time saved
+
+Cân nhắc trước khi commit thời gian (1-2 tuần MVP). Có thể skip → giữ console nếu daily flow đã đủ smooth.

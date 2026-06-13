@@ -31,6 +31,7 @@ Mặc định lưu tại `whisper.cpp/`. Model lớn nặng vài trăm MB — ch
 
 ---
 
+
 ## Quy trình hằng ngày (3 bước)
 
 ```bash
@@ -147,6 +148,7 @@ Khuyến nghị: dùng model `medium` hoặc `large-v3` để giảm sai số ba
 | `npm run studio` | Mở Remotion Studio (preview composition + tune component) |
 | `npm run preview -- <audio>` | Render preview 480×854 / 10s |
 | `npm run make -- <audio>` | Render full + thumbnail + lock file |
+| `npm run spell-fix -- <audio>` | Sửa lỗi chính tả transcript Whisper qua OpenAI |
 | `npm run typecheck` | Type check toàn project |
 
 ---
@@ -194,9 +196,19 @@ npm run make -- input/<file>.mp3
 
 ---
 
+## Roadmap
+
+- **PLAN Mục 14 — Studio UI** (Phase 10): wrap pipeline thành web app local
+  thay workflow console. Vite + React frontend + Hono backend, SSE progress,
+  episode CRUD form, scene/transcript inline edit. MVP 10.0-10.5 = ~1-2 tuần.
+
+Chưa làm. Cân nhắc dựa trên volume video — chỉ build nếu console workflow
+thấy gò ép.
+
 ## Tham khảo
 
 - [PLAN.md](./PLAN.md) — spec đầy đủ (brand, episode config, từng phase, export spec FB)
+- [PLAN.md Mục 14](./PLAN.md#14-studio-ui--wrap-remotion-pipeline-cho-non-console-workflow) — roadmap Studio UI
 - [Remotion docs](https://www.remotion.dev/docs)
 - [@remotion/install-whisper-cpp](https://www.remotion.dev/docs/whisper-cpp)
 - [@remotion/captions](https://www.remotion.dev/docs/captions)
