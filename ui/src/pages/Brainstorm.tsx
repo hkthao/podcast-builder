@@ -9,6 +9,7 @@ import {
   Trash2,
   Loader2,
   History,
+  Search,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -152,8 +153,17 @@ export function Brainstorm() {
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        {/* History sidebar LEFT — match Essay page layout */}
+        <aside className="order-2 lg:order-1">
+          <HistorySidebar
+            sessions={sessions}
+            activeId={activeSession?.id ?? null}
+            onSelect={setActiveId}
+          />
+        </aside>
+
+        <div className="space-y-6 order-1 lg:order-2">
           {/* Generate form */}
           <Card className="p-6">
             <div className="space-y-4">
@@ -321,15 +331,6 @@ export function Brainstorm() {
             </Card>
           )}
         </div>
-
-        {/* History sidebar — Phase C: search + filter + categories */}
-        <aside>
-          <HistorySidebar
-            sessions={sessions}
-            activeId={activeSession?.id ?? null}
-            onSelect={setActiveId}
-          />
-        </aside>
       </div>
     </div>
   );
@@ -375,12 +376,15 @@ function HistorySidebar({
         </span>
       </div>
       <div className="p-2 space-y-2 border-b">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Tìm topic / ý tưởng…"
-          className="w-full h-8 px-2 rounded border bg-background text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Tìm topic / ý tưởng…"
+            className="w-full h-8 pl-8 pr-2 rounded border bg-background text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
         {allCats.size > 0 && (
           <div className="flex flex-wrap gap-1">
             <button

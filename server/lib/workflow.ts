@@ -36,6 +36,10 @@ export type WorkflowChain = {
     ideaCount: number;
     tone: string;
     createdAt: string;
+    /** Category tags Phase C — [] cho legacy. */
+    categories: string[];
+    /** Avg score (1-10) của picked idea hoặc max trong các ideas. null nếu legacy. */
+    topScore: number | null;
   } | null;
 
   essay: {
@@ -59,6 +63,19 @@ export type WorkflowChain = {
 
   /** Mtime gần nhất giữa các artifact để sort */
   updatedAt: string;
+};
+
+const computeTopScore = (bs: BrainstormSession): number | null => {
+  const ideas = bs.ideas.filter((i) => i.scores);
+  if (ideas.length === 0) return null;
+  const avg = (s: BrainstormSession["ideas"][number]["scores"]) =>
+    (s.universal + s.emotional + s.philosophical + s.aiRelevance + s.originality) /
+    5;
+  // Picked idea ưu tiên, fallback max avg
+  if (bs.pickedIdx !== null && ideas[bs.pickedIdx]) {
+    return Number(avg(ideas[bs.pickedIdx].scores).toFixed(1));
+  }
+  return Number(Math.max(...ideas.map((i) => avg(i.scores))).toFixed(1));
 };
 
 const countWords = (text: string): number => {
@@ -174,6 +191,8 @@ function buildChain(
           ideaCount: bs.ideas.length,
           tone: bs.tone,
           createdAt: bs.createdAt,
+          categories: (bs.categories ?? []) as string[],
+          topScore: computeTopScore(bs),
         }
       : null,
     essay: essay

@@ -288,6 +288,19 @@ export type KnowledgeEntry = {
   sessions: Array<{ id: string; topic: string; createdAt: string }>;
 };
 
+export type VisualEntry = {
+  metaphor: string;
+  sessionId: string;
+  sessionTopic: string;
+  categories: TopicCategory[];
+};
+
+export type VisualLibrary = {
+  total: number;
+  byCategory: Record<string, VisualEntry[]>;
+  uncategorized: VisualEntry[];
+};
+
 export type KnowledgeGraph = {
   groups: Record<string, KnowledgeEntry[]>;
   total: number;
@@ -304,6 +317,8 @@ export type WorkflowChain = {
     ideaCount: number;
     tone: string;
     createdAt: string;
+    categories: string[];
+    topScore: number | null;
   } | null;
   essay: {
     id: string;
@@ -524,6 +539,8 @@ export const api = {
     jsonFetch<{ chains: WorkflowChain[] }>("/api/workflow"),
 
   getKnowledgeGraph: () => jsonFetch<KnowledgeGraph>("/api/knowledge"),
+
+  getVisualLibrary: () => jsonFetch<VisualLibrary>("/api/visual"),
 
   listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
   getEssay: (id: string) =>

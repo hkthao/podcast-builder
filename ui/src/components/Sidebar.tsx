@@ -9,6 +9,7 @@ import {
   FileText,
   Workflow as WorkflowIcon,
   Network,
+  Image as ImageIcon,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -67,6 +68,11 @@ export function Sidebar() {
           to="/knowledge"
           icon={<Network className="size-4" />}
           label="Knowledge"
+        />
+        <NavItem
+          to="/visual"
+          icon={<ImageIcon className="size-4" />}
+          label="Visual"
         />
         <NavItem
           to="/references"

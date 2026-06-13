@@ -105,15 +105,22 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
     },
     {
       key: "refs",
-      label: chain.refsCount > 0 ? `Refs (${chain.refsCount})` : "Refs",
+      label: chain.refsCount > 0 ? `Refs ${chain.refsCount}` : "Refs",
       icon: <Library className="size-3.5" />,
       state:
-        chain.refsCount > 0
+        chain.refsCount >= 3
           ? "done"
-          : chain.essay
+          : chain.refsCount > 0
             ? "partial"
-            : "todo",
-      hint: null,
+            : chain.essay
+              ? "partial"
+              : "todo",
+      hint:
+        chain.refsCount > 0
+          ? `${chain.refsCount} linked`
+          : chain.essay
+            ? "0 — suggest từ essay"
+            : null,
       to: "/references",
     },
     {
@@ -151,10 +158,39 @@ function ChainCard({ chain }: { chain: WorkflowChain }) {
           {chain.source}
         </Badge>
         <div className="flex-1 min-w-0">
-          <h3 className="font-serif text-lg leading-tight">{chain.topic}</h3>
-          <p className="text-xs text-muted-foreground mt-1 font-mono">
-            {chain.id} · cập nhật {timeAgo(chain.updatedAt)}
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h3 className="font-serif text-lg leading-tight">{chain.topic}</h3>
+            {chain.brainstorm?.topScore !== null &&
+              chain.brainstorm?.topScore !== undefined && (
+                <Badge variant="outline" className="font-mono shrink-0">
+                  {chain.brainstorm.topScore.toFixed(1)}
+                </Badge>
+              )}
+          </div>
+          <p
+            className="text-xs text-muted-foreground mt-1"
+            title={chain.id}
+          >
+            cập nhật {timeAgo(chain.updatedAt)}
           </p>
+          {chain.brainstorm && chain.brainstorm.categories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {chain.brainstorm.categories.map((c) => (
+                <Badge
+                  key={c}
+                  variant="secondary"
+                  className="text-xs font-normal"
+                >
+                  #{c}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {chain.source === "episode" && !chain.brainstorm && !chain.essay && (
+            <p className="mt-2 text-xs text-muted-foreground italic">
+              Episode upload trực tiếp, không qua brainstorm/essay.
+            </p>
+          )}
         </div>
       </div>
       <div className="px-6 py-4">

@@ -24,6 +24,7 @@ import {
   Volume2,
   Lock,
   Database,
+  Search,
 } from "lucide-react";
 import {
   api,
@@ -749,14 +750,17 @@ function TranscriptPanel({
 
       {showFindBar && (
         <div className="px-6 py-3 border-b bg-secondary/10 flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Tìm…"
-            value={findQuery}
-            onChange={(e) => setFindQuery(e.target.value)}
-            className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            autoFocus
-          />
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Tìm…"
+              value={findQuery}
+              onChange={(e) => setFindQuery(e.target.value)}
+              className="w-full h-9 rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              autoFocus
+            />
+          </div>
           <span className="text-xs text-muted-foreground tabular-nums w-16">
             {findQuery ? `${matchCount} câu` : ""}
           </span>
