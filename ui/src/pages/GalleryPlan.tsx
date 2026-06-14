@@ -27,12 +27,19 @@ import {
   Trash2,
   Copy,
   Check,
+  Image as ImageIcon,
+  Plus,
+  X,
+  ExternalLink,
+  ChevronDown,
 } from "lucide-react";
 import {
   api,
   type GalleryChapterPlan,
   type GalleryPlanChapter,
+  type KenBurnsMode,
   type LLMProvider,
+  type VisualBeat,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -458,6 +465,15 @@ function ChapterCard({
               )}
             </div>
           </div>
+
+          {/* Phase 4a: visual beats editor */}
+          <VisualBeatsEditor
+            beats={chapter.visualBeats}
+            transcript={transcript}
+            sentenceCount={countSentences(transcript)}
+            onSave={(beats) => saveMut.mutate({ visualBeats: beats })}
+            saving={saveMut.isPending}
+          />
         </div>
       )}
 
@@ -487,6 +503,269 @@ function ChapterCard({
         </div>
       )}
     </Card>
+  );
+}
+
+function countSentences(text: string): number {
+  if (!text.trim()) return 0;
+  return text
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0).length;
+}
+
+function splitIntoSentences(text: string): string[] {
+  if (!text.trim()) return [];
+  return text
+    .split(/([.!?]+)/)
+    .reduce<string[]>((acc, part, i, arr) => {
+      // Re-attach punctuation to sentence
+      if (i % 2 === 0) {
+        const punct = arr[i + 1] ?? "";
+        const sentence = (part + punct).trim();
+        if (sentence) acc.push(sentence);
+      }
+      return acc;
+    }, []);
+}
+
+const KEN_BURNS_OPTIONS: KenBurnsMode[] = [
+  "zoom-in",
+  "zoom-out",
+  "pan-left",
+  "pan-right",
+  "pan-up",
+  "pan-down",
+  "static",
+];
+
+function VisualBeatsEditor({
+  beats,
+  transcript,
+  sentenceCount,
+  onSave,
+  saving,
+}: {
+  beats: VisualBeat[];
+  transcript: string;
+  sentenceCount: number;
+  onSave: (beats: VisualBeat[]) => void;
+  saving: boolean;
+}) {
+  const [expanded, setExpanded] = useState(beats.length > 0);
+  const sentences = splitIntoSentences(transcript);
+
+  // Detect mismatch: beat trỏ ra ngoài range câu (sau khi user edit transcript)
+  const staleBeats = beats.filter(
+    (b) => b.sentenceIdx < 0 || b.sentenceIdx >= sentenceCount,
+  );
+
+  const updateBeat = (i: number, patch: Partial<VisualBeat>) => {
+    const next = beats.map((b, j) => (j === i ? { ...b, ...patch } : b));
+    onSave(next);
+  };
+  const deleteBeat = (i: number) => {
+    onSave(beats.filter((_, j) => j !== i));
+  };
+  const addBeat = () => {
+    // Thêm beat mới sau beat cuối, +2 câu hoặc cuối transcript
+    const lastIdx = beats.length > 0 ? beats[beats.length - 1].sentenceIdx : -1;
+    const newIdx = Math.min(lastIdx + 2, Math.max(0, sentenceCount - 1));
+    onSave([
+      ...beats,
+      {
+        sentenceIdx: newIdx,
+        keyword: "",
+        assetIdRef: null,
+        kenBurns: "zoom-in",
+        durationMs: null,
+        note: "",
+      },
+    ]);
+  };
+
+  return (
+    <div className="mt-5 border-t pt-4">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 text-sm font-medium hover:text-accent transition-colors"
+      >
+        <ChevronDown
+          className={cn(
+            "size-4 transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+        <ImageIcon className="size-4" />
+        Visual beats ({beats.length})
+        {staleBeats.length > 0 && (
+          <Badge
+            variant="outline"
+            className="ml-1 text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+          >
+            {staleBeats.length} stale
+          </Badge>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground font-normal">
+          ~1 ảnh/{Math.max(1, Math.round(sentenceCount / Math.max(1, beats.length)))} câu
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          {beats.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              Chưa có beat. Re-gen transcript hoặc thêm thủ công.
+            </p>
+          ) : (
+            beats.map((beat, i) => (
+              <BeatRow
+                key={i}
+                beat={beat}
+                idx={i}
+                totalBeats={beats.length}
+                sentences={sentences}
+                sentenceCount={sentenceCount}
+                onUpdate={(patch) => updateBeat(i, patch)}
+                onDelete={() => deleteBeat(i)}
+                disabled={saving}
+              />
+            ))
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={addBeat}
+              disabled={saving || sentenceCount === 0}
+            >
+              <Plus className="size-3.5" />
+              Thêm beat
+            </Button>
+            {saving && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="size-3 animate-spin" />
+                Đang lưu…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BeatRow({
+  beat,
+  idx,
+  totalBeats,
+  sentences,
+  sentenceCount,
+  onUpdate,
+  onDelete,
+  disabled,
+}: {
+  beat: VisualBeat;
+  idx: number;
+  totalBeats: number;
+  sentences: string[];
+  sentenceCount: number;
+  onUpdate: (patch: Partial<VisualBeat>) => void;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
+  const isStale =
+    beat.sentenceIdx < 0 || beat.sentenceIdx >= sentenceCount;
+  const sentencePreview = sentences[beat.sentenceIdx]?.slice(0, 80) ?? "(out of range)";
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-3 space-y-2",
+        isStale && "border-amber-500/40 bg-amber-500/5",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono text-muted-foreground w-6 shrink-0">
+          #{idx + 1}/{totalBeats}
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">@câu</span>
+          <input
+            type="number"
+            min={0}
+            max={Math.max(0, sentenceCount - 1)}
+            value={beat.sentenceIdx}
+            onChange={(e) =>
+              onUpdate({ sentenceIdx: Math.max(0, Number(e.target.value)) })
+            }
+            disabled={disabled}
+            className="h-7 w-14 rounded border bg-background px-2 text-xs font-mono"
+          />
+        </div>
+        <select
+          value={beat.kenBurns}
+          onChange={(e) =>
+            onUpdate({ kenBurns: e.target.value as KenBurnsMode })
+          }
+          disabled={disabled}
+          className="h-7 rounded border bg-background px-2 text-xs"
+          title="Ken Burns motion"
+        >
+          {KEN_BURNS_OPTIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <a
+          href={`https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(beat.keyword)}&title=Special:MediaSearch&go=Go&type=image`}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(
+            "text-xs text-accent hover:underline inline-flex items-center gap-0.5 ml-auto",
+            !beat.keyword && "pointer-events-none opacity-40",
+          )}
+          title="Search Wikimedia Commons"
+        >
+          <ExternalLink className="size-3" />
+          Search
+        </a>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+          onClick={onDelete}
+          disabled={disabled}
+          title="Xoá beat"
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+      <input
+        type="text"
+        value={beat.keyword}
+        onChange={(e) => onUpdate({ keyword: e.target.value })}
+        disabled={disabled}
+        placeholder='Keyword (tiếng Anh): vd "Giotto Lamentation full fresco Arena Chapel"'
+        className="w-full h-8 rounded border bg-background px-2 text-sm"
+      />
+      <p
+        className={cn(
+          "text-xs italic",
+          isStale ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+        )}
+      >
+        {isStale
+          ? `⚠ Stale — câu #${beat.sentenceIdx} không còn trong transcript (chỉ có ${sentenceCount} câu)`
+          : `Câu khớp: "${sentencePreview}${sentencePreview.length === 80 ? "…" : ""}"`}
+      </p>
+      {beat.note && (
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium">Note:</span> {beat.note}
+        </p>
+      )}
+    </div>
   );
 }
 

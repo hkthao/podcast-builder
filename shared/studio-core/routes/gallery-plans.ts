@@ -118,6 +118,7 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
   const body = raw as {
     transcript?: string;
     status?: GalleryPlanChapter["status"];
+    visualBeats?: GalleryPlanChapter["visualBeats"];
   };
   if (
     body.status !== undefined &&
@@ -129,6 +130,9 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
       { error: "status phải là 'pending' | 'draft' | 'approved'" },
       400,
     );
+  }
+  if (body.visualBeats !== undefined && !Array.isArray(body.visualBeats)) {
+    return c.json({ error: "visualBeats phải là array" }, 400);
   }
   try {
     const plan = await updateChapter(id, idx, body);

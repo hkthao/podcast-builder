@@ -16,11 +16,25 @@ import type {
   GalleryBrainstormIdea,
   GalleryChapter,
 } from "../../gallery/src/brainstorm-idea";
+import {
+  VisualBeatSchema,
+  type VisualBeat,
+} from "../../gallery/src/visual-beat";
+import { safeParseJson } from "../lib/safe-json";
 
-/** Chapter trong plan = GalleryChapter + transcript + status review. */
+/**
+ * Chapter trong plan = GalleryChapter + transcript + visualBeats + status.
+ * Phase 4a: thêm visualBeats sidecar (anchored theo sentenceIdx trong transcript).
+ */
 export type GalleryPlanChapter = GalleryChapter & {
   /** Voiceover script tiếng Việt cho narration. "" cho music interlude. */
   transcript: string;
+  /**
+   * Phase 4a: visual beats sidecar — LLM gen kèm transcript trong 1 LLM call.
+   * Anchor bằng sentenceIdx → align với TTS word timestamps tại render (Phase 4b+).
+   * [] cho music chapter và cho chapter chưa gen.
+   */
+  visualBeats: VisualBeat[];
   /** Trạng thái review user: chưa gen / đang draft / đã approve. */
   status: "pending" | "draft" | "approved";
 };
@@ -60,17 +74,35 @@ const slugify = (s: string): string =>
     .replace(/^-|-$/g, "")
     .slice(0, 60);
 
-const rowToPlan = (r: DbRow): GalleryChapterPlan => ({
-  id: r.id,
-  brainstormId: r.brainstorm_id,
-  ideaIdx: r.idea_idx,
-  ideaSnapshot: JSON.parse(r.idea_snapshot_json) as GalleryBrainstormIdea,
-  chapters: JSON.parse(r.chapters_json) as GalleryPlanChapter[],
-  provider: (r.provider ?? null) as LLMProvider | null,
-  model: r.model,
-  createdAt: r.created_at,
-  updatedAt: r.updated_at,
-});
+const rowToPlan = (r: DbRow): GalleryChapterPlan => {
+  const chapters = JSON.parse(r.chapters_json) as Array<
+    GalleryPlanChapter & { visualBeats?: unknown }
+  >;
+  // Phase 4a: backfill visualBeats=[] cho plan tạo trước Phase 4a
+  for (const ch of chapters) {
+    if (!Array.isArray(ch.visualBeats)) {
+      ch.visualBeats = [];
+    } else {
+      ch.visualBeats = (ch.visualBeats as unknown[])
+        .map((b) => {
+          const r = VisualBeatSchema.safeParse(b);
+          return r.success ? r.data : null;
+        })
+        .filter((b): b is VisualBeat => b !== null);
+    }
+  }
+  return {
+    id: r.id,
+    brainstormId: r.brainstorm_id,
+    ideaIdx: r.idea_idx,
+    ideaSnapshot: JSON.parse(r.idea_snapshot_json) as GalleryBrainstormIdea,
+    chapters: chapters as GalleryPlanChapter[],
+    provider: (r.provider ?? null) as LLMProvider | null,
+    model: r.model,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+};
 
 const savePlan = (p: GalleryChapterPlan): void => {
   getDb()
@@ -165,6 +197,7 @@ export async function createPlanFromIdea(input: {
   const chapters: GalleryPlanChapter[] = input.idea.chapters.map((ch) => ({
     ...ch,
     transcript: "",
+    visualBeats: [], // Phase 4a: empty cho đến khi gen
     // Music interlude không cần gen transcript → mark draft luôn cho user
     // approve nhanh; narration thì pending chờ gen.
     status: ch.kind === "music" ? "draft" : "pending",
@@ -191,7 +224,11 @@ export async function createPlanFromIdea(input: {
 export async function updateChapter(
   planId: string,
   chapterIdx: number,
-  patch: { transcript?: string; status?: GalleryPlanChapter["status"] },
+  patch: {
+    transcript?: string;
+    status?: GalleryPlanChapter["status"];
+    visualBeats?: VisualBeat[];
+  },
 ): Promise<GalleryChapterPlan | null> {
   const plan = await getPlan(planId);
   if (!plan) return null;
@@ -203,6 +240,15 @@ export async function updateChapter(
   const ch = plan.chapters[chapterIdx];
   if (patch.transcript !== undefined) ch.transcript = patch.transcript;
   if (patch.status !== undefined) ch.status = patch.status;
+  if (patch.visualBeats !== undefined) {
+    // Validate qua zod để filter beat invalid + apply default
+    ch.visualBeats = patch.visualBeats
+      .map((b) => {
+        const r = VisualBeatSchema.safeParse(b);
+        return r.success ? r.data : null;
+      })
+      .filter((b): b is VisualBeat => b !== null);
+  }
   plan.updatedAt = new Date().toISOString();
   savePlan(plan);
   return plan;
@@ -232,30 +278,66 @@ export async function updatePlanChapters(
 
 // ────── LLM gen transcript per chapter ──────
 
-const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu nghệ thuật tiếng Việt. Bạn viết script cho narrator giọng trầm ấm, chiêm nghiệm, học thuật nhưng dễ nghe — phong cách Khan Academy Smarthistory + Waldemar Januszczak Vietnamese localization.
+const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu nghệ thuật tiếng Việt + visual director. Bạn vừa viết voiceover, vừa chỉ định hình ảnh nào hiện song song với từng phần của voiceover — như Khan Academy Smarthistory hoặc Waldemar Januszczak.
 
-Nhiệm vụ: viết NGUYÊN VĂN VOICEOVER cho 1 chương của video tài liệu nghệ thuật, dựa trên thông tin chương + bối cảnh video tổng thể.
+Nhiệm vụ: viết VOICEOVER + VISUAL BEATS cho 1 chương của video tài liệu nghệ thuật.
 
-CẤU TRÚC TỪNG CHƯƠNG (bắt buộc trong voiceover):
-1. Hook mở chương (1-2 câu) — gợi mở câu hỏi hoặc statement chương sắp giải đáp
+PHẦN 1 — VOICEOVER (field "transcript", prose tiếng Việt):
+
+Cấu trúc bắt buộc:
+1. Hook mở chương (1-2 câu) — câu hỏi hoặc statement chương sắp giải đáp.
 2. Phần thân — bám sát summary + key works của chương:
-   - Nhắc TÊN cụ thể: họa sĩ, tác phẩm, bảo tàng, năm sáng tác
-   - Giải thích kỹ thuật/innovation cụ thể của tác phẩm (vd: "Giotto dùng axial perspective trong Isaac Blessing Jacob — kỹ thuật cho phép đường thẳng song song lùi vào không gian")
-   - Đưa ngữ cảnh lịch sử + ý nghĩa văn hoá khi cần
-   - Trích quote ngắn từ nhà phê bình/sử gia nếu phù hợp
-3. Bridge sang chương sau (1 câu) — nối liền narrative arc
+   - Nhắc TÊN cụ thể: họa sĩ, tác phẩm, bảo tàng, năm sáng tác.
+   - Giải thích kỹ thuật/innovation cụ thể (vd "Giotto dùng axial perspective trong Isaac Blessing Jacob — đường thẳng song song lùi vào không gian").
+   - Đưa ngữ cảnh lịch sử + ý nghĩa văn hoá khi cần.
+   - Trích quote ngắn từ nhà phê bình/sử gia nếu phù hợp.
+3. Bridge sang chương sau (1 câu).
 
-KỸ THUẬT VIẾT BẮT BUỘC:
-- Tốc độ đọc voiceover Việt: ~150-180 từ/phút. Chapter X phút → viết ~X * 160 từ.
-- Câu ngắn-vừa (10-25 từ/câu). Tránh câu dài lê thê khó đọc.
-- Dùng "chúng ta" thay vì "bạn" để invoking shared viewing experience.
-- KHÔNG markdown, KHÔNG bullet, KHÔNG heading. Pure prose để TTS đọc liền mạch.
-- KHÔNG ngoặc kép "" cho dialogue trừ khi quote nhà phê bình.
-- KHÔNG xuống dòng giữa câu. Mỗi đoạn 3-6 câu, phân tách bằng dòng trắng.
-- Giữ NGUYÊN GỐC tên họa sĩ + tác phẩm + bảo tàng tiếng Anh/Ý/Pháp (vd "Lamentation", "Arena Chapel", không dịch thành "Bài than khóc", "Nhà nguyện Arena").
-- KHÔNG dùng cụm sáo rỗng: "không thể phủ nhận", "trong cuộc sống hối hả", "bài học sâu sắc".
+Kỹ thuật:
+- Tốc độ voiceover Việt ~150-180 từ/phút. Chapter X phút → viết ~X * 160 từ.
+- Câu ngắn-vừa (10-25 từ/câu).
+- Dùng "chúng ta" thay vì "bạn".
+- KHÔNG markdown, KHÔNG bullet, KHÔNG heading. Pure prose để TTS đọc liền.
+- Giữ NGUYÊN GỐC tên Anh/Ý/Pháp (Lamentation, Arena Chapel, không dịch).
+- KHÔNG cụm sáo rỗng: "không thể phủ nhận", "trong cuộc sống hối hả".
+- Mỗi câu kết thúc bằng dấu chấm/chấm hỏi/chấm than ĐÚNG — để parser split câu chính xác.
 
-OUTPUT: chỉ riêng đoạn voiceover prose. KHÔNG lời mở đầu kiểu "Đây là voiceover:", KHÔNG meta-text, KHÔNG dấu --- ngăn cách.`;
+PHẦN 2 — VISUAL BEATS (field "visualBeats", array):
+
+Mỗi beat = 1 hình ảnh sẽ hiện song song voiceover. Tốc độ thay đổi hình:
+- Trung bình 1 hình mỗi 6-12 giây (~1 beat mỗi 2-4 câu của voiceover).
+- 10 phút voiceover (~80 câu) → ~25-40 beats.
+
+Mỗi beat phải có:
+- "sentenceIdx": index 0-based của câu trong transcript khi beat bắt đầu. Câu 1 = sentenceIdx 0. Beat phải MONOTONIC TĂNG (sentenceIdx[i+1] > sentenceIdx[i]).
+- "keyword": mô tả ảnh NGẮN bằng TIẾNG ANH (để search Wikimedia/Met ra đúng). Phải có tên tác phẩm gốc + chi tiết focus.
+  TỐT: "Giotto Lamentation full fresco Arena Chapel", "Mary cradling Christ head close-up detail", "Arena Chapel interior wide angle".
+  TỆ: "buc tranh dep", "Giotto art", "fresco" (quá generic).
+- "kenBurns": camera motion phù hợp với loại ảnh:
+  * "zoom-in": cho ảnh chân dung họa sĩ hoặc detail-shot (default)
+  * "zoom-out": reveal toàn cảnh từ chi tiết
+  * "pan-left" / "pan-right": cho fresco tường dài hoặc landscape
+  * "pan-up": cho tranh dọc/altarpiece cao
+  * "pan-down": từ trời xuống đất (rare)
+  * "static": chỉ dùng cho text overlay/diagram (hiếm)
+- "note": (optional, "" nếu không cần) — gợi ý cho asset team, vd "ưu tiên ảnh restoration 2002".
+
+Quy tắc beat:
+- Beat đầu (sentenceIdx=0) PHẢI có — establish shot mở chương.
+- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có beat của tác phẩm đó.
+- KHÔNG để gap > 4 câu giữa 2 beats (khán giả sẽ nhìn 1 hình quá lâu).
+- Đa dạng kenBurns — không dồn hết zoom-in.
+
+OUTPUT JSON CHẶT (KHÔNG markdown wrap, KHÔNG meta-text):
+
+{
+  "transcript": "Câu 1. Câu 2. ... Câu N.",
+  "visualBeats": [
+    {"sentenceIdx": 0, "keyword": "...", "kenBurns": "zoom-in", "note": ""},
+    {"sentenceIdx": 3, "keyword": "...", "kenBurns": "pan-right", "note": ""},
+    ...
+  ]
+}`;
 
 const buildTranscriptUserPrompt = (
   idea: GalleryBrainstormIdea,
@@ -340,13 +422,56 @@ export async function generateChapterTranscript(input: {
       plan.chapters,
     ),
     temperature: 0.75,
+    jsonMode: true,
   });
 
-  chapter.transcript = content.trim();
+  // Phase 4a: LLM trả JSON {transcript, visualBeats[]}
+  const parsed = safeParseJson<{
+    transcript?: unknown;
+    visualBeats?: unknown;
+  }>(content);
+  const transcript =
+    typeof parsed.transcript === "string" ? parsed.transcript.trim() : "";
+  if (!transcript) {
+    throw new Error(
+      "LLM response không có 'transcript' string — không parse được.",
+    );
+  }
+  const sentenceCount = countSentences(transcript);
+  const visualBeats: VisualBeat[] = Array.isArray(parsed.visualBeats)
+    ? (parsed.visualBeats as unknown[])
+        .map((b) => {
+          const r = VisualBeatSchema.safeParse(b);
+          return r.success ? r.data : null;
+        })
+        .filter((b): b is VisualBeat => b !== null)
+        // Bound sentenceIdx vào [0, sentenceCount-1] để không trỏ ra ngoài
+        .map((b) => ({
+          ...b,
+          sentenceIdx: Math.max(0, Math.min(sentenceCount - 1, b.sentenceIdx)),
+        }))
+        // Đảm bảo monotonic tăng — LLM đôi khi lộn xộn
+        .sort((a, b) => a.sentenceIdx - b.sentenceIdx)
+    : [];
+
+  chapter.transcript = transcript;
+  chapter.visualBeats = visualBeats;
   chapter.status = "draft";
   plan.provider = input.provider;
   plan.model = input.model;
   plan.updatedAt = new Date().toISOString();
   savePlan(plan);
   return plan;
+}
+
+/**
+ * Đếm sentence trong transcript bằng split [.!?]. Đơn giản nhưng đủ cho
+ * Vietnamese — Phase 4a anchor beat.
+ */
+export function countSentences(transcript: string): number {
+  if (!transcript.trim()) return 0;
+  return transcript
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0).length;
 }

@@ -551,9 +551,29 @@ export type ProviderInfo = {
   note?: string;
 };
 
-// ─── Phase 3d — Gallery chapter plan ────────────────────────────────────
+// ─── Phase 3d / 4a — Gallery chapter plan ──────────────────────────────
+export type KenBurnsMode =
+  | "zoom-in"
+  | "zoom-out"
+  | "pan-left"
+  | "pan-right"
+  | "pan-up"
+  | "pan-down"
+  | "static";
+
+export type VisualBeat = {
+  sentenceIdx: number;
+  keyword: string;
+  assetIdRef: string | null;
+  kenBurns: KenBurnsMode;
+  durationMs: number | null;
+  note: string;
+};
+
 export type GalleryPlanChapter = GalleryChapter & {
   transcript: string;
+  /** Phase 4a: visual beats sidecar — anchored bằng sentenceIdx. */
+  visualBeats: VisualBeat[];
   status: "pending" | "draft" | "approved";
 };
 
@@ -1082,7 +1102,11 @@ export const api = {
   updateGalleryPlanChapter: (
     planId: string,
     chapterIdx: number,
-    patch: { transcript?: string; status?: GalleryPlanChapter["status"] },
+    patch: {
+      transcript?: string;
+      status?: GalleryPlanChapter["status"];
+      visualBeats?: VisualBeat[];
+    },
   ) =>
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}`,
