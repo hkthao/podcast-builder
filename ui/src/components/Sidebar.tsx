@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Mic2,
@@ -31,6 +31,7 @@ import {
   subscribeTheme,
   type Theme,
 } from "@/lib/theme";
+import { useWorkspace, type Workspace } from "@/lib/workspace";
 
 export function Sidebar() {
   const { data } = useQuery({
@@ -38,10 +39,28 @@ export function Sidebar() {
     queryFn: () => api.listEpisodes(),
   });
   const location = useLocation();
+  const navigate = useNavigate();
+  const { workspace, setWorkspace } = useWorkspace();
   const [pinned, setPinned] = usePersistedState<string[]>(
     "sidebar.pinned",
     [],
   );
+
+  // Items chỉ thuộc 1 workspace — switch sang workspace khác mà đang ở page
+  // đó → navigate về "/" (tránh user kẹt ở page không thuộc workspace).
+  const WORKSPACE_ONLY_PATHS: Record<Workspace, string[]> = {
+    podcast: ["/scenes"],
+    gallery: ["/research"],
+  };
+  const switchWorkspace = (next: Workspace) => {
+    if (next === workspace) return;
+    setWorkspace(next);
+    const otherWorkspacePaths =
+      WORKSPACE_ONLY_PATHS[next === "podcast" ? "gallery" : "podcast"];
+    if (otherWorkspacePaths.some((p) => location.pathname.startsWith(p))) {
+      navigate("/");
+    }
+  };
   const togglePin = (name: string) => {
     setPinned((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
@@ -67,6 +86,26 @@ export function Sidebar() {
           <Mic2 className="size-6 text-primary" />
           Podcast Studio
         </NavLink>
+      </div>
+
+      {/* Workspace switcher — top-level team toggle */}
+      <div className="px-3 pt-3 pb-2 border-b">
+        <div className="flex items-center gap-1 p-1 rounded-md border bg-secondary/30">
+          <WorkspaceButton
+            value="podcast"
+            current={workspace}
+            onClick={() => switchWorkspace("podcast")}
+            icon={<Mic className="size-3.5" />}
+            label="Podcast"
+          />
+          <WorkspaceButton
+            value="gallery"
+            current={workspace}
+            onClick={() => switchWorkspace("gallery")}
+            icon={<Frame className="size-3.5" />}
+            label="Gallery"
+          />
+        </div>
       </div>
 
       <nav className="p-3 space-y-3">
@@ -111,35 +150,38 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Group 3: Podcast — Style 1 (sticker SVG, 9:16 Reels) */}
-        <div className="space-y-0.5">
-          <SectionLabel>
-            <span className="inline-flex items-center gap-1.5">
-              <Mic className="size-3" />
-              Podcast
-            </span>
-          </SectionLabel>
-          <NavItem
-            to="/scenes"
-            icon={<Film className="size-4" />}
-            label="Scene templates"
-          />
-        </div>
+        {/* Production group — chỉ hiện workspace tương ứng */}
+        {workspace === "podcast" && (
+          <div className="space-y-0.5">
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1.5">
+                <Mic className="size-3" />
+                Podcast — Production
+              </span>
+            </SectionLabel>
+            <NavItem
+              to="/scenes"
+              icon={<Film className="size-4" />}
+              label="Scene templates"
+            />
+          </div>
+        )}
 
-        {/* Group 4: Gallery Art — Style 2 (real photos + Ken Burns, doc 16:9/9:16) */}
-        <div className="space-y-0.5">
-          <SectionLabel>
-            <span className="inline-flex items-center gap-1.5">
-              <Frame className="size-3" />
-              Gallery Art
-            </span>
-          </SectionLabel>
-          <NavItem
-            to="/research"
-            icon={<Compass className="size-4" />}
-            label="Research assets"
-          />
-        </div>
+        {workspace === "gallery" && (
+          <div className="space-y-0.5">
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1.5">
+                <Frame className="size-3" />
+                Gallery Art — Production
+              </span>
+            </SectionLabel>
+            <NavItem
+              to="/research"
+              icon={<Compass className="size-4" />}
+              label="Research assets"
+            />
+          </div>
+        )}
       </nav>
 
       <div className="px-3 pt-3 pb-1 border-t mt-1">
@@ -215,6 +257,38 @@ export function Sidebar() {
         <ThemeSwitcher />
       </div>
     </aside>
+  );
+}
+
+function WorkspaceButton({
+  value,
+  current,
+  onClick,
+  icon,
+  label,
+}: {
+  value: Workspace;
+  current: Workspace;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  const active = value === current;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex-1 inline-flex items-center justify-center gap-1.5 rounded h-7 text-xs font-medium transition-colors",
+        active
+          ? "bg-card text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+      aria-pressed={active}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

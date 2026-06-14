@@ -11,12 +11,14 @@ import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
 import { ResearchPage } from "./pages/Research";
 import { useEpisodesChangedSync } from "./lib/sse";
+import { WorkspaceProvider } from "./lib/workspace";
 
 export function App() {
   useEpisodesChangedSync();
   return (
     <BrowserRouter>
-      <AppLayout>
+      <WorkspaceProvider>
+        <AppLayout>
         <Routes>
           <Route path="/" element={<EpisodeList />} />
           <Route path="/episodes/:name" element={<EpisodeEdit />} />
@@ -29,7 +31,8 @@ export function App() {
           <Route path="/scenes" element={<ScenesPage />} />
           <Route path="/research" element={<ResearchPage />} />
         </Routes>
-      </AppLayout>
+        </AppLayout>
+      </WorkspaceProvider>
     </BrowserRouter>
   );
 }
