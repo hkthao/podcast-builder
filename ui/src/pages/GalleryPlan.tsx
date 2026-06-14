@@ -128,14 +128,6 @@ export function GalleryPlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [provider, setProvider] = usePersistedState<LLMProvider>(
-    "gallery-plan.provider",
-    "openai",
-  );
-  const [model, setModel] = usePersistedState<string>(
-    "gallery-plan.model",
-    "gpt-4o-mini",
-  );
   // Phase 4b': TTS provider + voice (default Gemini Kore)
   const [ttsProvider, setTtsProvider] = usePersistedState<TtsProvider>(
     "gallery-plan.tts-provider",
@@ -177,13 +169,6 @@ export function GalleryPlanPage() {
     queryFn: () => api.listLLMModels(),
     staleTime: 60_000,
   });
-
-  useEffect(() => {
-    const list = modelsQ.data?.[provider] ?? [];
-    if (list.length > 0 && !list.some((m) => m.id === model)) {
-      setModel(list[0].id);
-    }
-  }, [provider, modelsQ.data, model]);
 
   // Auto-fix voice khi đổi TTS provider — pick voice 1 của provider mới
   useEffect(() => {
@@ -291,53 +276,6 @@ export function GalleryPlanPage() {
           </Button>
         </div>
       </div>
-
-      {/* LLM provider/model picker (cho transcript gen) */}
-      <Card className="p-4 mb-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <Label htmlFor="provider" className="text-xs">
-              LLM Provider (cho transcript)
-            </Label>
-            <select
-              id="provider"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as LLMProvider)}
-              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option
-                value="openai"
-                disabled={!!modelsQ.data && modelsQ.data.openai.length === 0}
-              >
-                OpenAI
-              </option>
-              <option
-                value="ollama"
-                disabled={!!modelsQ.data && modelsQ.data.ollama.length === 0}
-              >
-                Ollama (local)
-              </option>
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <Label htmlFor="model" className="text-xs">
-              LLM Model
-            </Label>
-            <select
-              id="model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {(modelsQ.data?.[provider] ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </Card>
 
       {/* Phase 4e.x: BGM uploader */}
       <BgmPanel
@@ -532,8 +470,7 @@ export function GalleryPlanPage() {
             chapter={chapter}
             chapterIdx={idx}
             planId={plan.id}
-            provider={provider}
-            model={model}
+            modelsData={modelsQ.data}
             ttsProvider={ttsProvider}
             ttsVoice={ttsVoice}
             ttsModel={ttsModel}
@@ -569,8 +506,7 @@ function ChapterCard({
   chapter,
   chapterIdx,
   planId,
-  provider,
-  model,
+  modelsData,
   ttsProvider,
   ttsVoice,
   ttsModel,
@@ -583,8 +519,7 @@ function ChapterCard({
   chapter: GalleryPlanChapter;
   chapterIdx: number;
   planId: string;
-  provider: LLMProvider;
-  model: string;
+  modelsData: import("@/lib/api").LLMModels | undefined;
   ttsProvider: TtsProvider;
   ttsVoice: string;
   ttsModel: string;
@@ -594,6 +529,24 @@ function ChapterCard({
   ttsStyleInstruction: string;
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
+  // Phase: per-chapter LLM provider/model. Persist riêng per (plan, chapter)
+  // vì mỗi chương có thể cần model khác (vd intro dùng mini cho rẻ, deep
+  // analysis dùng gpt-4o cho chất lượng).
+  const [provider, setProvider] = usePersistedState<LLMProvider>(
+    `gallery-plan.${planId}.ch${chapterIdx}.llm-provider`,
+    "openai",
+  );
+  const [model, setModel] = usePersistedState<string>(
+    `gallery-plan.${planId}.ch${chapterIdx}.llm-model`,
+    "gpt-4o-mini",
+  );
+  // Auto-fix model nếu không có trong list của provider
+  useEffect(() => {
+    const list = modelsData?.[provider] ?? [];
+    if (list.length > 0 && !list.some((m) => m.id === model)) {
+      setModel(list[0].id);
+    }
+  }, [provider, modelsData, model]);
   const isMusic = chapter.kind === "music";
   const status = STATUS_META[chapter.status];
   const StatusIcon = status.icon;
@@ -716,14 +669,50 @@ function ChapterCard({
       {/* Body — chỉ narration mới có transcript */}
       {!isMusic && (
         <div className="mt-4">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
             <Label className="text-xs">
               Transcript voiceover{" "}
               <span className="font-mono text-muted-foreground">
                 ({wordCount}/{targetWords} từ)
               </span>
             </Label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Per-chapter LLM picker — compact inline */}
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as LLMProvider)}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                title="LLM provider"
+              >
+                <option
+                  value="openai"
+                  disabled={
+                    !!modelsData && modelsData.openai.length === 0
+                  }
+                >
+                  OpenAI
+                </option>
+                <option
+                  value="ollama"
+                  disabled={
+                    !!modelsData && modelsData.ollama.length === 0
+                  }
+                >
+                  Ollama
+                </option>
+              </select>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs max-w-[180px]"
+                title="LLM model"
+              >
+                {(modelsData?.[provider] ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
               <Button
                 size="sm"
                 variant="outline"
