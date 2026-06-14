@@ -128,35 +128,6 @@ export function GalleryPlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  // Phase 4b': TTS provider + voice (default Gemini Kore)
-  const [ttsProvider, setTtsProvider] = usePersistedState<TtsProvider>(
-    "gallery-plan.tts-provider",
-    "gemini",
-  );
-  const [ttsVoice, setTtsVoice] = usePersistedState<string>(
-    "gallery-plan.tts-voice",
-    "Kore",
-  );
-  // Cloud TTS advanced
-  const [ttsModel, setTtsModel] = usePersistedState<string>(
-    "gallery-plan.tts-model",
-    "gemini-2.5-flash-tts",
-  );
-  const [ttsLanguage, setTtsLanguage] = usePersistedState<string>(
-    "gallery-plan.tts-language",
-    "vi-VN",
-  );
-  const [ttsSpeakingRate, setTtsSpeakingRate] = usePersistedState<number>(
-    "gallery-plan.tts-speaking-rate",
-    1.0,
-  );
-  const [ttsPitch, setTtsPitch] = usePersistedState<number>(
-    "gallery-plan.tts-pitch",
-    0,
-  );
-  const [ttsStyleInstruction, setTtsStyleInstruction] =
-    usePersistedState<string>("gallery-plan.tts-style", DEFAULT_STYLE);
-  const [ttsAdvancedOpen, setTtsAdvancedOpen] = useState(false);
 
   const planQ = useQuery({
     queryKey: ["gallery-plan", id],
@@ -170,14 +141,6 @@ export function GalleryPlanPage() {
     staleTime: 60_000,
   });
 
-  // Auto-fix voice khi đổi TTS provider — pick voice 1 của provider mới
-  useEffect(() => {
-    const validVoices =
-      ttsProvider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
-    if (!validVoices.includes(ttsVoice)) {
-      setTtsVoice(validVoices[0]);
-    }
-  }, [ttsProvider, ttsVoice]);
 
   const deleteMut = useMutation({
     mutationFn: () => api.deleteGalleryPlan(id!),
@@ -288,179 +251,6 @@ export function GalleryPlanPage() {
         }
       />
 
-      {/* Phase 4b' v2: TTS Cloud TTS controls — match Google Studio UI */}
-      <Card className="p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <Label htmlFor="tts-provider" className="text-xs">
-              TTS Provider
-            </Label>
-            <select
-              id="tts-provider"
-              value={ttsProvider}
-              onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
-              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="gemini">Gemini Cloud TTS (recommend)</option>
-              <option value="openai">OpenAI TTS (legacy)</option>
-            </select>
-          </div>
-          {ttsProvider === "gemini" && (
-            <div>
-              <Label htmlFor="tts-model" className="text-xs">
-                Model
-              </Label>
-              <select
-                id="tts-model"
-                value={ttsModel}
-                onChange={(e) => setTtsModel(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {GEMINI_TTS_MODELS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div>
-            <Label htmlFor="tts-voice" className="text-xs">
-              Voice
-            </Label>
-            <select
-              id="tts-voice"
-              value={ttsVoice}
-              onChange={(e) => setTtsVoice(e.target.value)}
-              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {(ttsProvider === "gemini"
-                ? GEMINI_TTS_VOICES
-                : OPENAI_TTS_VOICES
-              ).map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Advanced — chỉ cho Gemini Cloud TTS */}
-        {ttsProvider === "gemini" && (
-          <>
-            <button
-              type="button"
-              onClick={() => setTtsAdvancedOpen((v) => !v)}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
-            >
-              <ChevronDown
-                className={cn(
-                  "size-3 transition-transform",
-                  ttsAdvancedOpen && "rotate-180",
-                )}
-              />
-              {ttsAdvancedOpen ? "Thu gọn" : "Tuỳ chọn nâng cao"} (language,
-              rate, pitch, style)
-            </button>
-            {ttsAdvancedOpen && (
-              <div className="mt-3 pt-3 border-t space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <Label htmlFor="tts-language" className="text-xs">
-                      Language / locale
-                    </Label>
-                    <select
-                      id="tts-language"
-                      value={ttsLanguage}
-                      onChange={(e) => setTtsLanguage(e.target.value)}
-                      className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      {LANGUAGE_CODES.map((l) => (
-                        <option key={l.value} value={l.value}>
-                          {l.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="tts-rate" className="text-xs">
-                      Speaking rate
-                      <span className="ml-2 text-muted-foreground font-mono">
-                        {ttsSpeakingRate.toFixed(2)}×
-                      </span>
-                    </Label>
-                    <input
-                      id="tts-rate"
-                      type="range"
-                      min={0.25}
-                      max={2}
-                      step={0.05}
-                      value={ttsSpeakingRate}
-                      onChange={(e) =>
-                        setTtsSpeakingRate(Number(e.target.value))
-                      }
-                      className="mt-3.5 w-full accent-accent"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tts-pitch" className="text-xs">
-                      Pitch
-                      <span className="ml-2 text-muted-foreground font-mono">
-                        {ttsPitch > 0 ? "+" : ""}
-                        {ttsPitch}
-                      </span>
-                    </Label>
-                    <input
-                      id="tts-pitch"
-                      type="range"
-                      min={-20}
-                      max={20}
-                      step={1}
-                      value={ttsPitch}
-                      onChange={(e) => setTtsPitch(Number(e.target.value))}
-                      className="mt-3.5 w-full accent-accent"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="tts-style" className="text-xs">
-                    Style instructions
-                    <span className="ml-2 text-muted-foreground font-normal">
-                      · gửi vào{" "}
-                      <code className="font-mono text-[11px]">input.prompt</code>{" "}
-                      RIÊNG với text → TTS không đọc đoạn này
-                    </span>
-                  </Label>
-                  <Textarea
-                    id="tts-style"
-                    value={ttsStyleInstruction}
-                    onChange={(e) => setTtsStyleInstruction(e.target.value)}
-                    rows={2}
-                    className="mt-1.5"
-                    placeholder='vd: "Read aloud in a warm, welcoming tone. Giọng miền Bắc."'
-                  />
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-muted-foreground">
-                      Apply cho mọi chapter render từ giờ. Persisted trong
-                      browser.
-                    </p>
-                    {ttsStyleInstruction !== DEFAULT_STYLE && (
-                      <button
-                        type="button"
-                        onClick={() => setTtsStyleInstruction(DEFAULT_STYLE)}
-                        className="text-[10px] text-accent hover:underline"
-                      >
-                        Reset default
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </Card>
 
       {/* Chapter list */}
       <div className="space-y-3">
@@ -471,13 +261,6 @@ export function GalleryPlanPage() {
             chapterIdx={idx}
             planId={plan.id}
             modelsData={modelsQ.data}
-            ttsProvider={ttsProvider}
-            ttsVoice={ttsVoice}
-            ttsModel={ttsModel}
-            ttsLanguage={ttsLanguage}
-            ttsSpeakingRate={ttsSpeakingRate}
-            ttsPitch={ttsPitch}
-            ttsStyleInstruction={ttsStyleInstruction}
             onMutate={(updated) => {
               qc.setQueryData<GalleryChapterPlan>(
                 ["gallery-plan", plan.id],
@@ -507,26 +290,12 @@ function ChapterCard({
   chapterIdx,
   planId,
   modelsData,
-  ttsProvider,
-  ttsVoice,
-  ttsModel,
-  ttsLanguage,
-  ttsSpeakingRate,
-  ttsPitch,
-  ttsStyleInstruction,
   onMutate,
 }: {
   chapter: GalleryPlanChapter;
   chapterIdx: number;
   planId: string;
   modelsData: import("@/lib/api").LLMModels | undefined;
-  ttsProvider: TtsProvider;
-  ttsVoice: string;
-  ttsModel: string;
-  ttsLanguage: string;
-  ttsSpeakingRate: number;
-  ttsPitch: number;
-  ttsStyleInstruction: string;
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
   // Phase: per-chapter LLM provider/model. Persist riêng per (plan, chapter)
@@ -577,27 +346,6 @@ function ChapterCard({
       onMutate(plan);
       setDirty(false);
     },
-  });
-
-  // Phase 4b: TTS + Whisper alignment (dispatch theo ttsProvider plan-level)
-  const audioMut = useMutation({
-    mutationFn: (force: boolean) =>
-      api.genGalleryPlanChapterAudio(planId, chapterIdx, {
-        ttsProvider,
-        voice: ttsVoice,
-        ttsModel: ttsProvider === "gemini" ? ttsModel : undefined,
-        force,
-        // Cloud TTS extras chỉ áp dụng cho Gemini
-        ...(ttsProvider === "gemini"
-          ? {
-              languageCode: ttsLanguage,
-              speakingRate: ttsSpeakingRate,
-              pitch: ttsPitch,
-              styleInstruction: ttsStyleInstruction,
-            }
-          : {}),
-      }),
-    onSuccess: (plan) => onMutate(plan),
   });
 
   // Phase 4d.2: Remotion render
@@ -795,12 +543,12 @@ function ChapterCard({
             </div>
           </div>
 
-          {/* Phase 4b: audio TTS + Whisper alignment */}
+          {/* Phase 4b: audio TTS + Whisper alignment — self-managed state per chapter */}
           <AudioPanel
             chapter={chapter}
-            onGen={(force) => audioMut.mutate(force)}
-            genPending={audioMut.isPending}
-            genError={audioMut.error}
+            planId={planId}
+            chapterIdx={chapterIdx}
+            onMutate={onMutate}
           />
 
           {/* Phase 4a: visual beats editor */}
@@ -897,25 +645,85 @@ const KEN_BURNS_OPTIONS: KenBurnsMode[] = [
 
 function AudioPanel({
   chapter,
-  onGen,
-  genPending,
-  genError,
+  planId,
+  chapterIdx,
+  onMutate,
 }: {
   chapter: GalleryPlanChapter;
-  onGen: (force: boolean) => void;
-  genPending: boolean;
-  genError: unknown;
+  planId: string;
+  chapterIdx: number;
+  onMutate: (plan: GalleryChapterPlan) => void;
 }) {
+  // Per-chapter TTS state — persisted độc lập với chapter khác
+  const stateKey = `gallery-plan.${planId}.ch${chapterIdx}`;
+  const [ttsProvider, setTtsProvider] = usePersistedState<TtsProvider>(
+    `${stateKey}.tts-provider`,
+    "gemini",
+  );
+  const [ttsVoice, setTtsVoice] = usePersistedState<string>(
+    `${stateKey}.tts-voice`,
+    "Kore",
+  );
+  const [ttsModel, setTtsModel] = usePersistedState<string>(
+    `${stateKey}.tts-model`,
+    "gemini-2.5-flash-tts",
+  );
+  const [ttsLanguage, setTtsLanguage] = usePersistedState<string>(
+    `${stateKey}.tts-language`,
+    "vi-VN",
+  );
+  const [ttsSpeakingRate, setTtsSpeakingRate] = usePersistedState<number>(
+    `${stateKey}.tts-rate`,
+    1.0,
+  );
+  const [ttsPitch, setTtsPitch] = usePersistedState<number>(
+    `${stateKey}.tts-pitch`,
+    0,
+  );
+  const [ttsStyleInstruction, setTtsStyleInstruction] = usePersistedState<string>(
+    `${stateKey}.tts-style`,
+    DEFAULT_STYLE,
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Auto-fix voice khi đổi TTS provider
+  useEffect(() => {
+    const valid =
+      ttsProvider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+    if (!valid.includes(ttsVoice)) setTtsVoice(valid[0]);
+  }, [ttsProvider, ttsVoice]);
+
+  const audioMut = useMutation({
+    mutationFn: (force: boolean) =>
+      api.genGalleryPlanChapterAudio(planId, chapterIdx, {
+        ttsProvider,
+        voice: ttsVoice,
+        ttsModel: ttsProvider === "gemini" ? ttsModel : undefined,
+        force,
+        ...(ttsProvider === "gemini"
+          ? {
+              languageCode: ttsLanguage,
+              speakingRate: ttsSpeakingRate,
+              pitch: ttsPitch,
+              styleInstruction: ttsStyleInstruction,
+            }
+          : {}),
+      }),
+    onSuccess: (plan) => onMutate(plan),
+  });
+
   const hasAudio = chapter.audioFilename !== null;
   const durSec = chapter.audioDurationMs
     ? Math.round(chapter.audioDurationMs / 1000)
     : 0;
   const targetSec = chapter.minutes * 60;
   const wordCount = chapter.wordTimestamps.length;
+  const genPending = audioMut.isPending;
+  const genError = audioMut.error;
 
   return (
     <div className="mt-5 border-t pt-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Headphones className="size-4" />
           Audio + word timestamps
@@ -926,33 +734,176 @@ function AudioPanel({
             </Badge>
           )}
         </h4>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onGen(hasAudio)} // hasAudio → force re-gen
-          disabled={genPending || !chapter.transcript.trim()}
-          title={
-            !chapter.transcript.trim()
-              ? "Cần transcript trước khi gen audio"
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Provider + voice + model selects compact inline (h-9 = button sm) */}
+          <select
+            value={ttsProvider}
+            onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+            title="TTS provider"
+          >
+            <option value="gemini">Gemini</option>
+            <option value="openai">OpenAI</option>
+          </select>
+          <select
+            value={ttsVoice}
+            onChange={(e) => setTtsVoice(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+            title="Voice"
+          >
+            {(ttsProvider === "gemini"
+              ? GEMINI_TTS_VOICES
+              : OPENAI_TTS_VOICES
+            ).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => audioMut.mutate(hasAudio)}
+            disabled={genPending || !chapter.transcript.trim()}
+            title={
+              !chapter.transcript.trim()
+                ? "Cần transcript trước khi gen audio"
+                : hasAudio
+                  ? "Re-gen audio (overwrite file cũ)"
+                  : "Gen TTS + Whisper alignment"
+            }
+          >
+            {genPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : hasAudio ? (
+              <RefreshCw className="size-3.5" />
+            ) : (
+              <Volume2 className="size-3.5" />
+            )}
+            {genPending
+              ? "Đang gen…"
               : hasAudio
-                ? "Re-gen audio (overwrite file cũ)"
-                : "Gen TTS + Whisper alignment"
-          }
-        >
-          {genPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : hasAudio ? (
-            <RefreshCw className="size-3.5" />
-          ) : (
-            <Volume2 className="size-3.5" />
-          )}
-          {genPending
-            ? "Đang gen…"
-            : hasAudio
-              ? "Re-gen audio"
-              : "Gen audio + timestamps"}
-        </Button>
+                ? "Re-gen"
+                : "Gen audio"}
+          </Button>
+        </div>
       </div>
+
+      {/* Advanced TTS (Gemini only) — collapsible */}
+      {ttsProvider === "gemini" && (
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3 transition-transform",
+                advancedOpen && "rotate-180",
+              )}
+            />
+            {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model, language,
+            rate, pitch, style)
+          </button>
+          {advancedOpen && (
+            <div className="mt-2 pt-2 space-y-2 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <Label className="text-[10px]">Model</Label>
+                  <select
+                    value={ttsModel}
+                    onChange={(e) => setTtsModel(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    {GEMINI_TTS_MODELS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Language</Label>
+                  <select
+                    value={ttsLanguage}
+                    onChange={(e) => setTtsLanguage(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    {LANGUAGE_CODES.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">
+                    Rate
+                    <span className="ml-1 font-mono text-muted-foreground">
+                      {ttsSpeakingRate.toFixed(2)}×
+                    </span>
+                  </Label>
+                  <input
+                    type="range"
+                    min={0.25}
+                    max={2}
+                    step={0.05}
+                    value={ttsSpeakingRate}
+                    onChange={(e) =>
+                      setTtsSpeakingRate(Number(e.target.value))
+                    }
+                    className="mt-3 w-full accent-accent"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px]">
+                    Pitch
+                    <span className="ml-1 font-mono text-muted-foreground">
+                      {ttsPitch > 0 ? "+" : ""}
+                      {ttsPitch}
+                    </span>
+                  </Label>
+                  <input
+                    type="range"
+                    min={-20}
+                    max={20}
+                    step={1}
+                    value={ttsPitch}
+                    onChange={(e) => setTtsPitch(Number(e.target.value))}
+                    className="mt-3 w-full accent-accent"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-[10px]">
+                  Style instructions
+                  <span className="ml-1 text-muted-foreground font-normal">
+                    · gửi vào <code className="font-mono">input.prompt</code>{" "}
+                    riêng — TTS không đọc
+                  </span>
+                </Label>
+                <Textarea
+                  value={ttsStyleInstruction}
+                  onChange={(e) => setTtsStyleInstruction(e.target.value)}
+                  rows={2}
+                  className="mt-1 text-xs"
+                  placeholder='vd: "Read aloud in a warm tone. Giọng miền Bắc."'
+                />
+                {ttsStyleInstruction !== DEFAULT_STYLE && (
+                  <button
+                    type="button"
+                    onClick={() => setTtsStyleInstruction(DEFAULT_STYLE)}
+                    className="mt-1 text-[10px] text-accent hover:underline"
+                  >
+                    Reset default
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {genError !== null && genError !== undefined ? (
         <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
