@@ -9,6 +9,7 @@ import { WorkflowPage } from "./pages/Workflow";
 import { KnowledgePage } from "./pages/Knowledge";
 import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
+import { ResearchPage } from "./pages/Research";
 import { useEpisodesChangedSync } from "./lib/sse";
 
 export function App() {
@@ -26,6 +27,7 @@ export function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
+          <Route path="/research" element={<ResearchPage />} />
         </Routes>
       </AppLayout>
     </BrowserRouter>

@@ -438,6 +438,51 @@ export type RenderProgressEvent = RenderJob & {
   elapsedMs: number;
 };
 
+// ─── Phase 26 — Research / Gallery assets ───────────────────────────────
+export type AssetKind = "image" | "video" | "audio";
+export type LicenseStatus = "safe" | "check" | "blocked";
+
+export type AssetResult = {
+  id: string;
+  provider: string;
+  kind: AssetKind;
+  title: string;
+  author?: string;
+  year?: string;
+  thumbUrl: string;
+  fullUrl: string;
+  sourcePage: string;
+  license: string;
+  licenseStatus: LicenseStatus;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+};
+
+export type SavedAsset = AssetResult & {
+  tags: string[];
+  savedAt: string;
+  pinned: boolean;
+  usedInEpisodes: string[];
+};
+
+export type ProviderInfo = {
+  id: string;
+  label: string;
+  kinds: AssetKind[];
+  needsKey: boolean;
+  enabled: boolean;
+  note?: string;
+};
+
+export type ResearchSearchResponse = {
+  results: AssetResult[];
+  total: number;
+  perProvider: Record<string, { count: number; error?: string }>;
+  page: number;
+  pageSize: number;
+};
+
 export const api = {
   listEpisodes: () =>
     jsonFetch<{ episodes: EpisodeSummary[] }>("/api/episodes"),
@@ -830,6 +875,75 @@ export const api = {
     jsonFetch<EpisodeSummary>(
       `/api/episodes/${encodeURIComponent(episodeName)}/cover`,
       { method: "DELETE" },
+    ),
+
+  // ─── Phase 26 — Research / Gallery assets ─────────────────────────────
+  listResearchProviders: () =>
+    jsonFetch<{ providers: ProviderInfo[] }>("/api/research/providers"),
+
+  searchResearch: (input: {
+    q: string;
+    kind: AssetKind;
+    providers?: string[];
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("q", input.q);
+    params.set("kind", input.kind);
+    if (input.providers && input.providers.length > 0)
+      params.set("providers", input.providers.join(","));
+    if (input.page) params.set("page", String(input.page));
+    if (input.pageSize) params.set("pageSize", String(input.pageSize));
+    return jsonFetch<ResearchSearchResponse>(
+      `/api/research/search?${params.toString()}`,
+    );
+  },
+
+  saveResearchAsset: (asset: AssetResult, tags: string[] = []) =>
+    jsonFetch<SavedAsset>("/api/research/save", {
+      method: "POST",
+      body: JSON.stringify({ asset, tags }),
+    }),
+
+  listResearchLibrary: (filters: {
+    q?: string;
+    kind?: AssetKind;
+    provider?: string;
+    licenseStatus?: LicenseStatus;
+    tag?: string;
+    pinned?: boolean;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.q) params.set("q", filters.q);
+    if (filters.kind) params.set("kind", filters.kind);
+    if (filters.provider) params.set("provider", filters.provider);
+    if (filters.licenseStatus) params.set("licenseStatus", filters.licenseStatus);
+    if (filters.tag) params.set("tag", filters.tag);
+    if (filters.pinned !== undefined)
+      params.set("pinned", filters.pinned ? "true" : "false");
+    const qs = params.toString();
+    return jsonFetch<{ assets: SavedAsset[] }>(
+      `/api/research/library${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  deleteResearchAsset: (id: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/research/library/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+
+  toggleResearchAssetPin: (id: string) =>
+    jsonFetch<SavedAsset>(
+      `/api/research/library/${encodeURIComponent(id)}/pin`,
+      { method: "PUT" },
+    ),
+
+  updateResearchAssetTags: (id: string, tags: string[]) =>
+    jsonFetch<SavedAsset>(
+      `/api/research/library/${encodeURIComponent(id)}/tags`,
+      { method: "PUT", body: JSON.stringify({ tags }) },
     ),
 };
 

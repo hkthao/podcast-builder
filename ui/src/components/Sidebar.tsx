@@ -11,6 +11,7 @@ import {
   Network,
   Image as ImageIcon,
   Film,
+  Compass,
   Star,
   CheckCircle2,
   Clock,
@@ -108,7 +109,7 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Group 3: Sản xuất — production assets + future styles */}
+        {/* Group 3: Sản xuất — production assets + gallery research */}
         <div className="space-y-0.5">
           <SectionLabel>Sản xuất</SectionLabel>
           <NavItem
@@ -116,7 +117,11 @@ export function Sidebar() {
             icon={<Film className="size-4" />}
             label="Scene"
           />
-          {/* Future expansion: tài liệu nghệ thuật, asset gallery, style mới */}
+          <NavItem
+            to="/research"
+            icon={<Compass className="size-4" />}
+            label="Research"
+          />
         </div>
       </nav>
 
