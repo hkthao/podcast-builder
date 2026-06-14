@@ -21,6 +21,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { api, type EpisodeStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -245,6 +246,19 @@ export function Sidebar() {
       </div>
 
       <div className="border-t p-3 space-y-2">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
+              "hover:bg-secondary",
+              isActive && "bg-secondary font-medium",
+            )
+          }
+        >
+          <SettingsIcon className="size-3.5" />
+          Settings
+        </NavLink>
         <p
           className="text-xs text-muted-foreground text-center"
           title="Bấm ?"

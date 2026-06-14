@@ -133,6 +133,17 @@ function initSchema(db: Database.Database): void {
       ON server_errors(id DESC);
   `);
 
+  // API keys — Phase 4b''. User edit qua Settings UI, DB-first fallback env.
+  // Lưu plaintext vì DB là local file 1 user 1 máy (không shared, không
+  // network-accessible). Match security model với .env hiện tại.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      provider TEXT PRIMARY KEY,
+      api_key TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Gallery chapter plans — Phase 3d. 1 plan = 1 gallery brainstorm idea đã pick
   // được expand thành transcript per chapter. Snapshot idea để stable kể cả khi
   // user edit brainstorm sau.

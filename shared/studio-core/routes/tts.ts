@@ -16,6 +16,7 @@
  */
 import { Hono } from "hono";
 import OpenAI from "openai";
+import { getApiKey } from "../api-keys-store";
 
 export const ttsRoutes = new Hono();
 
@@ -73,8 +74,12 @@ function chunkText(text: string): string[] {
 }
 
 ttsRoutes.post("/", async (c) => {
-  if (!process.env.OPENAI_API_KEY) {
-    return c.json({ error: "Thiếu OPENAI_API_KEY trong .env" }, 503);
+  const apiKey = getApiKey("openai");
+  if (!apiKey) {
+    return c.json(
+      { error: "Thiếu OPENAI_API_KEY — set qua Settings (/settings) hoặc .env" },
+      503,
+    );
   }
 
   let body: unknown;
@@ -123,7 +128,7 @@ ttsRoutes.post("/", async (c) => {
     return c.json({ error: "Text không có nội dung" }, 400);
   }
 
-  const openai = new OpenAI();
+  const openai = new OpenAI({ apiKey });
   try {
     const audioBuffers: Buffer[] = [];
     for (const chunk of chunks) {

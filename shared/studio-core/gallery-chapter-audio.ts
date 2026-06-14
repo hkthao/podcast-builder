@@ -27,6 +27,7 @@ import {
 } from "./gallery-plan-store";
 import { transcribeAudio } from "../transcribe/transcribe";
 import { PATHS } from "./paths";
+import { getApiKey } from "./api-keys-store";
 import type { WordTimestamp } from "../../gallery/src/word-timestamp";
 import {
   chunkTextForGemini,
@@ -167,10 +168,10 @@ type ProviderPipelineInput<V extends string, M extends string> = {
 async function runOpenAiTtsPipeline(
   input: ProviderPipelineInput<OpenAiVoice, OpenAiTtsModel>,
 ): Promise<void> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getApiKey("openai");
   if (!apiKey) {
     const err = new Error(
-      "Thiếu OPENAI_API_KEY — không gen được OpenAI TTS.",
+      "Thiếu OPENAI_API_KEY — set qua Settings (/settings) hoặc .env.",
     ) as Error & { code: string };
     err.code = "VALIDATION";
     throw err;
@@ -202,10 +203,10 @@ async function runOpenAiTtsPipeline(
 async function runGeminiTtsPipeline(
   input: ProviderPipelineInput<GeminiVoice, GeminiTtsModel>,
 ): Promise<void> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  const apiKey = getApiKey("gemini");
   if (!apiKey) {
     const err = new Error(
-      "Thiếu GEMINI_API_KEY (hoặc GOOGLE_API_KEY) — không gen được Gemini TTS.",
+      "Thiếu GEMINI_API_KEY — set qua Settings (/settings) hoặc .env.",
     ) as Error & { code: string };
     err.code = "VALIDATION";
     throw err;

@@ -8,6 +8,7 @@
  * Cả 2 đều phải hỗ trợ JSON-mode để brainstorm parse strict được.
  */
 import OpenAI from "openai";
+import { getApiKey } from "./api-keys-store";
 
 export type LLMProvider = "openai" | "ollama";
 
@@ -28,7 +29,7 @@ const OPENAI_MODELS: LLMModel[] = [
 const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://localhost:11434";
 
 export async function listOpenAIModels(): Promise<LLMModel[]> {
-  if (!process.env.OPENAI_API_KEY) return [];
+  if (!getApiKey("openai")) return [];
   return OPENAI_MODELS;
 }
 
@@ -85,14 +86,15 @@ export async function chatStream(
   signal?: AbortSignal,
 ): Promise<string> {
   if (req.provider === "openai") {
-    if (!process.env.OPENAI_API_KEY) {
-      const err = new Error("Thiếu OPENAI_API_KEY trong .env") as Error & {
-        code: string;
-      };
+    const apiKey = getApiKey("openai");
+    if (!apiKey) {
+      const err = new Error(
+        "Thiếu OPENAI_API_KEY — set qua Settings (/settings) hoặc .env",
+      ) as Error & { code: string };
       err.code = "VALIDATION";
       throw err;
     }
-    const openai = new OpenAI();
+    const openai = new OpenAI({ apiKey });
     const stream = await openai.chat.completions.create(
       {
         model: req.model,
@@ -180,14 +182,15 @@ export async function chatStream(
 
 export async function chat(req: LLMChatRequest): Promise<string> {
   if (req.provider === "openai") {
-    if (!process.env.OPENAI_API_KEY) {
-      const err = new Error("Thiếu OPENAI_API_KEY trong .env") as Error & {
-        code: string;
-      };
+    const apiKey = getApiKey("openai");
+    if (!apiKey) {
+      const err = new Error(
+        "Thiếu OPENAI_API_KEY — set qua Settings (/settings) hoặc .env",
+      ) as Error & { code: string };
       err.code = "VALIDATION";
       throw err;
     }
-    const openai = new OpenAI();
+    const openai = new OpenAI({ apiKey });
     const response = await openai.chat.completions.create({
       model: req.model,
       temperature: req.temperature ?? 0.7,

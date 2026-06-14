@@ -1162,6 +1162,29 @@ export const api = {
       `/api/gallery/plans/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
+
+  // ─── Phase 4b'' — API keys settings ─────────────────────────────────
+  listApiKeys: () =>
+    jsonFetch<{ keys: ApiKeyStatus[] }>("/api/settings/keys"),
+  setApiKey: (provider: string, apiKey: string) =>
+    jsonFetch<{ ok: boolean }>(
+      `/api/settings/keys/${encodeURIComponent(provider)}`,
+      { method: "PUT", body: JSON.stringify({ apiKey }) },
+    ),
+  deleteApiKey: (provider: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/settings/keys/${encodeURIComponent(provider)}`,
+      { method: "DELETE" },
+    ),
+};
+
+export type ApiKeyProvider = "openai" | "gemini" | "anthropic";
+
+export type ApiKeyStatus = {
+  provider: ApiKeyProvider;
+  hasKey: boolean;
+  source: "db" | "env" | "none";
+  keyHint: string | null;
 };
 
 export { ApiError };
