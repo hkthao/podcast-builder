@@ -1889,6 +1889,153 @@ function ExportPanel({
 
 const BGM_ACCEPT = ".mp3,.m4a,.wav,.aac,audio/*";
 
+/**
+ * Mapping era → music keyword gợi ý cho user search BGM. Mỗi era 5-6 keyword
+ * specific (composer + form) — phù hợp atmosphere documentary art. Generic
+ * fallback cho era không match.
+ */
+const ERA_MUSIC_KEYWORDS: Record<string, string[]> = {
+  Ancient: [
+    "Ancient Greek lyre",
+    "Roman cithara",
+    "Egyptian harp drone",
+    "Antique flute solo",
+  ],
+  Medieval: [
+    "Gregorian chant",
+    "Medieval organum",
+    "Plainsong contemplative",
+    "Hildegard von Bingen",
+    "Troubadour song lute",
+  ],
+  "Early-Renaissance": [
+    "Early Renaissance choir",
+    "Gregorian polyphony",
+    "Medieval lute solo",
+    "Sacred plainsong",
+    "Du Fay motet",
+  ],
+  "High-Renaissance": [
+    "Renaissance lute solo",
+    "Madrigal a cappella",
+    "Viol consort",
+    "Palestrina motet",
+    "Josquin des Prez",
+    "Recorder ensemble",
+  ],
+  Mannerism: [
+    "Late Renaissance choral",
+    "Monteverdi madrigal",
+    "Early Baroque vocal",
+  ],
+  Baroque: [
+    "Bach cello suite",
+    "Vivaldi Four Seasons",
+    "Pachelbel Canon",
+    "Handel Largo",
+    "Baroque harpsichord solo",
+    "Corelli concerto grosso",
+    "Albinoni adagio",
+  ],
+  Rococo: [
+    "Couperin harpsichord",
+    "Galant style chamber",
+    "Telemann flute",
+    "Early Mozart divertimento",
+  ],
+  Neoclassical: [
+    "Mozart string quartet",
+    "Haydn adagio",
+    "Beethoven moonlight sonata",
+    "Classical piano sonata",
+    "Schubert impromptu",
+  ],
+  Romanticism: [
+    "Chopin nocturne",
+    "Schumann träumerei",
+    "Brahms intermezzo",
+    "Liszt liebestraum",
+    "Mendelssohn songs without words",
+  ],
+  Realism: [
+    "Late Romantic strings",
+    "Mahler adagietto",
+    "Saint-Saëns swan",
+  ],
+  Impressionism: [
+    "Debussy clair de lune",
+    "Ravel pavane defunte",
+    "Satie Gymnopédie",
+    "Fauré pavane",
+  ],
+  "Post-Impressionism": [
+    "Satie ambient piano",
+    "Early Stravinsky",
+    "Vaughan Williams lark ascending",
+  ],
+  Modern: [
+    "Arvo Pärt minimalist",
+    "Philip Glass piano études",
+    "Górecki sorrowful symphony",
+    "Henryk Górecki",
+  ],
+  Contemporary: [
+    "Max Richter on the nature of daylight",
+    "Ludovico Einaudi piano",
+    "Ólafur Arnalds ambient strings",
+    "Nils Frahm",
+  ],
+};
+
+const GENERIC_BGM_KEYWORDS = [
+  "Cinematic strings ambient",
+  "Documentary contemplative piano",
+  "Classical instrumental no vocals",
+  "Solo cello documentary",
+  "Slow chamber music",
+];
+
+const REGION_BGM_HINT: Record<string, string> = {
+  Italian: "Italian Baroque Vivaldi",
+  "Dutch-Flemish": "Dutch Golden Age Sweelinck",
+  French: "French Baroque Couperin",
+  Spanish: "Spanish Renaissance Victoria",
+  German: "German Baroque Bach",
+  English: "English Renaissance Tallis",
+  American: "American minimalist Glass",
+  Asian: "Traditional Asian instrumental",
+  Russian: "Russian Orthodox choir",
+};
+
+function buildBgmKeywordSuggestions(
+  idea: import("@/lib/api").GalleryBrainstormIdea,
+): string[] {
+  // Tìm era key bằng partial match (era field free-text từ LLM, vd "1267-1337, tiền-Phục Hưng Ý")
+  const eraLower = idea.era.toLowerCase();
+  let eraKeywords: string[] = [];
+  for (const [eraKey, kws] of Object.entries(ERA_MUSIC_KEYWORDS)) {
+    if (eraLower.includes(eraKey.toLowerCase().replace(/-/g, " "))) {
+      eraKeywords = kws;
+      break;
+    }
+  }
+  if (eraKeywords.length === 0) eraKeywords = GENERIC_BGM_KEYWORDS;
+
+  const regionHint = REGION_BGM_HINT[idea.region];
+  const out: string[] = [];
+  if (regionHint) out.push(regionHint);
+  for (const kw of eraKeywords) {
+    if (out.length >= 10) break;
+    if (!out.includes(kw)) out.push(kw);
+  }
+  // Pad với generic nếu chưa đủ 10
+  for (const kw of GENERIC_BGM_KEYWORDS) {
+    if (out.length >= 10) break;
+    if (!out.includes(kw)) out.push(kw);
+  }
+  return out;
+}
+
 function BgmPanel({
   plan,
   onMutate,
@@ -1912,6 +2059,18 @@ function BgmPanel({
   const bgmUrl = hasBgm
     ? `/tmp/${encodeURIComponent(plan.bgmFilename!)}`
     : null;
+
+  const musicSuggestions = buildBgmKeywordSuggestions(plan.ideaSnapshot);
+  const [copiedKw, setCopiedKw] = useState<string | null>(null);
+  const copyKeyword = async (kw: string) => {
+    try {
+      await navigator.clipboard.writeText(kw);
+      setCopiedKw(kw);
+      setTimeout(() => setCopiedKw(null), 1500);
+    } catch {
+      /* clipboard denied */
+    }
+  };
 
   return (
     <Card className="p-4 mb-3">
@@ -1939,6 +2098,75 @@ function BgmPanel({
           </p>
         </div>
       </div>
+
+      {/* Keyword gợi ý tìm nhạc theo era của plan — click chip để copy + search */}
+      {musicSuggestions.length > 0 && (
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground self-center">
+              Gợi ý tìm nhạc:
+            </span>
+            {musicSuggestions.map((kw) => (
+              <button
+                key={kw}
+                type="button"
+                onClick={() => copyKeyword(kw)}
+                className={cn(
+                  "h-7 px-2 rounded-md border text-xs transition-colors max-w-[260px] truncate",
+                  copiedKw === kw
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : "border-input hover:bg-secondary text-muted-foreground",
+                )}
+                title={
+                  copiedKw === kw
+                    ? "Đã copy vào clipboard"
+                    : `Copy "${kw}" rồi paste vào trang nhạc bên dưới`
+                }
+              >
+                {copiedKw === kw ? `✓ Đã copy: ${kw}` : kw}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            Tải nhạc royalty-free từ:{" "}
+            <a
+              href="https://freemusicarchive.org/genres/Classical"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              Free Music Archive
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://pixabay.com/music/search/classical/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              Pixabay Music
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://www.youtube.com/audiolibrary"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              YouTube Audio Library
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://incompetech.com/music/royalty-free/music.html"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              Incompetech (Kevin MacLeod)
+            </a>
+          </p>
+        </div>
+      )}
 
       {hasBgm && bgmUrl && (
         <audio
