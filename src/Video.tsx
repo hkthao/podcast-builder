@@ -77,7 +77,13 @@ export const Video: React.FC<CompProps> = ({
 
       {episode.showIntro ? (
         <Sequence from={0} durationInFrames={INTRO_DURATION_FRAMES} layout="none">
-          <IntroCard title={episode.title} episodeNumber={episode.episodeNumber} />
+          <IntroCard
+            title={episode.title}
+            episodeNumber={episode.episodeNumber}
+            coverImage={episode.coverImage}
+            coverFit={episode.coverFit}
+            coverPosition={episode.coverPosition}
+          />
         </Sequence>
       ) : null}
 

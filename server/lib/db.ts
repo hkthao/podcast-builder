@@ -64,12 +64,23 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_essays_updated
       ON essays(updated_at DESC);
   `);
-  // Migration cho DB cũ chưa có column suggested_refs_json
+  // Migration cho DB cũ chưa có columns mới
   const cols = db
     .prepare("PRAGMA table_info(essays)")
     .all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === "suggested_refs_json")) {
-    db.exec("ALTER TABLE essays ADD COLUMN suggested_refs_json TEXT");
+  const colNames = new Set(cols.map((c) => c.name));
+  const extras: Array<[string, string]> = [
+    ["suggested_refs_json", "TEXT"],
+    ["shorts_scripts_json", "TEXT"],
+    ["fb_posts_json", "TEXT"],
+    ["quotes_json", "TEXT"],
+    ["blog_md", "TEXT"],
+    ["newsletter_md", "TEXT"],
+  ];
+  for (const [name, type] of extras) {
+    if (!colNames.has(name)) {
+      db.exec(`ALTER TABLE essays ADD COLUMN ${name} ${type}`);
+    }
   }
 
   // References library (table name `reference_items` để tránh từ khóa SQL "references")

@@ -10,6 +10,7 @@ import {
   Workflow as WorkflowIcon,
   Network,
   Image as ImageIcon,
+  Film,
   Star,
   CheckCircle2,
   Clock,
@@ -91,6 +92,11 @@ export function Sidebar() {
           to="/visual"
           icon={<ImageIcon className="size-4" />}
           label="Hình ảnh"
+        />
+        <NavItem
+          to="/scenes"
+          icon={<Film className="size-4" />}
+          label="Scene"
         />
         <NavItem
           to="/references"

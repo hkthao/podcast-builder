@@ -11,26 +11,25 @@ import {
   FileText,
   Settings,
   Film,
-  Library,
   Pencil,
   Save,
   X as XIcon,
   Loader2,
-  ExternalLink,
   Trash2,
-  Plus,
-  FileDown,
   Files,
   Volume2,
   Lock,
-  Database,
   Search,
+  AlertCircle,
+  Sparkles,
+  Copy,
+  Check,
+  Send,
 } from "lucide-react";
 import {
   api,
   type EpisodeFile,
   type EpisodeFileKind,
-  type Reference,
   type ScenePlanItem,
   type TranscriptSegment,
 } from "@/lib/api";
@@ -38,18 +37,15 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
-import { RenderModal } from "@/components/RenderModal";
+import { RenderTab } from "@/components/RenderTab";
+import { PublishTab } from "@/components/PublishTab";
 import { cn } from "@/lib/utils";
 
-type Tab = "config" | "scenes" | "transcript" | "references" | "files";
+type Tab = "config" | "scenes" | "transcript" | "render" | "publish" | "files";
 
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
   const [tab, setTab] = useState<Tab>("config");
-  const [renderModal, setRenderModal] = useState<{
-    open: boolean;
-    preview: boolean;
-  }>({ open: false, preview: false });
 
   const epQ = useQuery({
     queryKey: ["episode", name],
@@ -64,12 +60,6 @@ export function EpisodeEdit() {
   const transcriptQ = useQuery({
     queryKey: ["transcript", name],
     queryFn: () => api.getTranscript(name),
-    enabled: !!name,
-  });
-
-  const refsQ = useQuery({
-    queryKey: ["episode-refs", name],
-    queryFn: () => api.listReferences({ episode: name }),
     enabled: !!name,
   });
 
@@ -113,7 +103,6 @@ export function EpisodeEdit() {
   const ep = epQ.data;
   const planCount = planQ.data?.totalScenes ?? 0;
   const transcriptCount = transcriptQ.data?.totalSegments ?? 0;
-  const refsCount = refsQ.data?.items.length ?? 0;
   const filesCount =
     (filesQ.data?.input.length ?? 0) +
     (filesQ.data?.output.length ?? 0) +
@@ -181,22 +170,34 @@ export function EpisodeEdit() {
           label="Cấu hình"
         />
         <TabButton
-          active={tab === "scenes"}
-          onClick={() => setTab("scenes")}
-          icon={<Film className="size-4" />}
-          label={`Cảnh${planCount > 0 ? ` (${planCount})` : ""}`}
-        />
-        <TabButton
           active={tab === "transcript"}
           onClick={() => setTab("transcript")}
           icon={<FileText className="size-4" />}
           label={`Transcript${transcriptCount > 0 ? ` (${transcriptCount})` : ""}`}
         />
         <TabButton
-          active={tab === "references"}
-          onClick={() => setTab("references")}
-          icon={<Library className="size-4" />}
-          label={`Tài liệu${refsCount > 0 ? ` (${refsCount})` : ""}`}
+          active={tab === "scenes"}
+          onClick={() => setTab("scenes")}
+          icon={<Film className="size-4" />}
+          label={`Cảnh${planCount > 0 ? ` (${planCount})` : ""}`}
+        />
+        <TabButton
+          active={tab === "render"}
+          onClick={() => setTab("render")}
+          icon={<Play className="size-4" />}
+          label={`Render${ep.hasOutput ? " ✓" : ""}`}
+        />
+        <TabButton
+          active={tab === "publish"}
+          onClick={() => setTab("publish")}
+          icon={<Send className="size-4" />}
+          label={`Đăng${
+            ep.config.publishStatus === "published"
+              ? " ✓"
+              : ep.config.publishStatus === "ready"
+                ? " ●"
+                : ""
+          }`}
         />
         <TabButton
           active={tab === "files"}
@@ -207,68 +208,50 @@ export function EpisodeEdit() {
       </div>
 
       {tab === "config" && <EpisodeConfigForm ep={ep} />}
-      {tab === "scenes" && (
-        <ScenesPanel
-          episodeName={name}
-          scenes={planQ.data?.scenes ?? []}
-          totalDurationMs={planQ.data?.totalDurationMs ?? 0}
-          loading={planQ.isLoading}
-        />
-      )}
       {tab === "transcript" && (
         <TranscriptPanel
           episodeName={name}
           segments={transcriptQ.data?.segments ?? []}
           source={transcriptQ.data?.source ?? "none"}
           loading={transcriptQ.isLoading}
+          hasAudio={!!ep.audioPath}
         />
       )}
-      {tab === "references" && (
-        <ReferencesPanel
+      {tab === "scenes" && (
+        <ScenesPanel
           episodeName={name}
-          linked={refsQ.data?.items ?? []}
-          loading={refsQ.isLoading}
+          scenes={planQ.data?.scenes ?? []}
+          totalDurationMs={planQ.data?.totalDurationMs ?? 0}
+          loading={planQ.isLoading}
+          hasTranscript={transcriptCount > 0}
+        />
+      )}
+      {tab === "render" && (
+        <RenderTab
+          ep={ep}
+          files={
+            filesQ.data ?? { input: [], output: [], tmp: [] }
+          }
+          loading={filesQ.isLoading}
+          hasTranscript={transcriptCount > 0}
+          hasPlan={planCount > 0}
+        />
+      )}
+      {tab === "publish" && (
+        <PublishTab
+          ep={ep}
+          files={filesQ.data ?? { input: [], output: [], tmp: [] }}
+          loading={filesQ.isLoading}
         />
       )}
       {tab === "files" && (
         <FilesPanel
           episodeName={name}
           input={filesQ.data?.input ?? []}
-          output={filesQ.data?.output ?? []}
           tmp={filesQ.data?.tmp ?? []}
           loading={filesQ.isLoading}
         />
       )}
-
-      <div className="flex gap-3 mt-8 pt-6 border-t">
-        <Button
-          disabled={!ep.audioPath}
-          onClick={() => setRenderModal({ open: true, preview: true })}
-        >
-          <Play className="size-4" />
-          Render preview (10s)
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={!ep.audioPath}
-          onClick={() => setRenderModal({ open: true, preview: false })}
-        >
-          <Play className="size-4" />
-          Render full
-        </Button>
-        {!ep.audioPath && (
-          <p className="self-center text-sm text-muted-foreground">
-            Thiếu audio — drag .m4a vào trang Episodes trước.
-          </p>
-        )}
-      </div>
-
-      <RenderModal
-        open={renderModal.open}
-        episodeName={ep.name}
-        preview={renderModal.preview}
-        onClose={() => setRenderModal({ open: false, preview: false })}
-      />
     </div>
   );
 }
@@ -305,11 +288,13 @@ function ScenesPanel({
   scenes,
   totalDurationMs,
   loading,
+  hasTranscript,
 }: {
   episodeName: string;
   scenes: ScenePlanItem[];
   totalDurationMs: number;
   loading: boolean;
+  hasTranscript: boolean;
 }) {
   const qc = useQueryClient();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -330,6 +315,13 @@ function ScenesPanel({
     mutationFn: () => api.genSceneThumbnails(episodeName),
     onSuccess: (data) =>
       qc.setQueryData(["scene-thumbs", episodeName], data),
+  });
+
+  const planJobMut = useMutation({
+    mutationFn: () => api.startPlan(episodeName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["render-jobs"] });
+    },
   });
 
   const saveMutation = useMutation({
@@ -357,10 +349,33 @@ function ScenesPanel({
       <Card className="p-12 text-center border-dashed">
         <Film className="mx-auto mb-3 size-10 text-muted-foreground" />
         <p className="font-medium">Chưa có scene plan</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Plan sinh ra sau khi render lần đầu (transcribe → spell-fix →
-          plan-episode).
+        <p className="mt-1 text-sm text-muted-foreground mb-4">
+          {hasTranscript
+            ? "Bấm nút bên dưới để tự gen plan cảnh từ transcript."
+            : "Cần transcript trước — vào tab Transcript bấm 'Tạo transcript'."}
         </p>
+        <Button
+          onClick={() => planJobMut.mutate()}
+          disabled={!hasTranscript || planJobMut.isPending}
+        >
+          {planJobMut.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          Tạo plan cảnh
+        </Button>
+        {planJobMut.isSuccess && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Đang chạy — xem progress ở tab Render.
+          </p>
+        )}
+        {planJobMut.isError && (
+          <p className="mt-3 text-xs text-destructive flex items-center justify-center gap-1">
+            <AlertCircle className="size-3" />
+            {String(planJobMut.error)}
+          </p>
+        )}
       </Card>
     );
   }
@@ -391,6 +406,27 @@ function ScenesPanel({
           <Button
             variant="outline"
             size="sm"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Tạo lại plan cảnh sẽ ghi đè plan hiện tại (mất các sửa của bạn). Tiếp tục?",
+                )
+              )
+                planJobMut.mutate();
+            }}
+            disabled={planJobMut.isPending || !hasTranscript}
+            title="Re-run plan-episode từ transcript hiện tại. GHI ĐÈ plan đang có."
+          >
+            {planJobMut.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            Tạo lại plan
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => genThumbsMut.mutate()}
             disabled={genThumbsMut.isPending}
             title="Render thumbnail .jpg cho mỗi cảnh (~10-60s, cần đã render preview/full trước)"
@@ -404,11 +440,15 @@ function ScenesPanel({
           </Button>
         </div>
       </div>
-      {(saveMutation.isError || genThumbsMut.isError) && (
+      {(saveMutation.isError ||
+        genThumbsMut.isError ||
+        planJobMut.isError) && (
         <div className="px-6 py-2 bg-destructive/10 text-destructive text-sm border-b">
           {saveMutation.isError
             ? `Save thất bại: ${String(saveMutation.error)}`
-            : `Render ảnh thất bại: ${String(genThumbsMut.error)}`}
+            : genThumbsMut.isError
+              ? `Render ảnh thất bại: ${String(genThumbsMut.error)}`
+              : `Tạo plan thất bại: ${String(planJobMut.error)}`}
         </div>
       )}
       <div className="divide-y">
@@ -452,6 +492,21 @@ const FALLBACK_SCENE_TYPES = [
   "InnerSelf",
   "Choice",
   "Knowledge",
+  "OnAir",
+  "DualMic",
+  "Journal",
+  "Morning",
+  "Listening",
+  "Voices",
+  "Growth",
+  "Quote",
+  "Doubt",
+  "LettingGo",
+  "Sacrifice",
+  "Metamorphosis",
+  "Bridge",
+  "Mirror",
+  "Threshold",
 ];
 
 function SceneViewRow({
@@ -627,11 +682,13 @@ function TranscriptPanel({
   segments,
   source,
   loading,
+  hasAudio,
 }: {
   episodeName: string;
   segments: TranscriptSegment[];
   source: "corrected" | "raw" | "none";
   loading: boolean;
+  hasAudio: boolean;
 }) {
   const qc = useQueryClient();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -640,6 +697,28 @@ function TranscriptPanel({
   const [replaceWith, setReplaceWith] = useState("");
   const [showFindBar, setShowFindBar] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyFullTranscript = async () => {
+    const fullText = segments
+      .map((s) => s.text.trim())
+      .filter((t) => t.length > 0)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(fullText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      alert("Clipboard không khả dụng — copy thủ công.");
+    }
+  };
+
+  const transcribeJobMut = useMutation({
+    mutationFn: () => api.startTranscribe(episodeName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["render-jobs"] });
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: (newSegments: TranscriptSegment[]) =>
@@ -692,11 +771,33 @@ function TranscriptPanel({
       <Card className="p-12 text-center border-dashed">
         <FileText className="mx-auto mb-3 size-10 text-muted-foreground" />
         <p className="font-medium">Chưa có transcript</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Transcript sinh ra sau khi chạy{" "}
-          <code className="rounded bg-muted px-1.5">npm run make</code>{" "}
-          (Whisper transcribe).
+        <p className="mt-1 text-sm text-muted-foreground mb-4">
+          {hasAudio
+            ? "Bấm nút bên dưới để chạy Whisper transcribe + sửa chính tả (~30-60s)."
+            : "Cần audio trước — upload .m4a vào trang Episodes."}
         </p>
+        <Button
+          onClick={() => transcribeJobMut.mutate()}
+          disabled={!hasAudio || transcribeJobMut.isPending}
+        >
+          {transcribeJobMut.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          Tạo transcript
+        </Button>
+        {transcribeJobMut.isSuccess && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Đang chạy — xem progress ở tab Render.
+          </p>
+        )}
+        {transcribeJobMut.isError && (
+          <p className="mt-3 text-xs text-destructive flex items-center justify-center gap-1">
+            <AlertCircle className="size-3" />
+            {String(transcribeJobMut.error)}
+          </p>
+        )}
       </Card>
     );
   }
@@ -736,6 +837,41 @@ function TranscriptPanel({
               Hiện tất cả {segments.length}
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Tạo lại transcript sẽ ghi đè bản đang có (mất các sửa chính tả của bạn). Tiếp tục?",
+                )
+              )
+                transcribeJobMut.mutate();
+            }}
+            disabled={transcribeJobMut.isPending}
+            title="Re-run Whisper transcribe + spell-fix. GHI ĐÈ transcript hiện tại."
+          >
+            {transcribeJobMut.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            Tạo lại
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copyFullTranscript}
+            disabled={segments.length === 0}
+            title={`Copy ${segments.length} câu vào clipboard`}
+          >
+            {copied ? (
+              <Check className="size-3.5 text-accent" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+            {copied ? "Đã copy" : "Copy toàn bộ"}
+          </Button>
           <Button
             variant={showFindBar ? "secondary" : "ghost"}
             size="sm"
@@ -889,203 +1025,14 @@ function highlightMatches(text: string, query: string): string {
   );
 }
 
-function ReferencesPanel({
-  episodeName,
-  linked,
-  loading,
-}: {
-  episodeName: string;
-  linked: Reference[];
-  loading: boolean;
-}) {
-  const qc = useQueryClient();
-  const [showPicker, setShowPicker] = useState(false);
-
-  const allRefsQ = useQuery({
-    queryKey: ["references-all"],
-    queryFn: () => api.listReferences({}),
-    enabled: showPicker,
-  });
-
-  const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ["episode-refs", episodeName] });
-    qc.invalidateQueries({ queryKey: ["references"] });
-    qc.invalidateQueries({ queryKey: ["references-all"] });
-  };
-
-  const linkMutation = useMutation({
-    mutationFn: (refId: string) => api.linkReference(refId, episodeName),
-    onSuccess: invalidateAll,
-  });
-
-  const unlinkMutation = useMutation({
-    mutationFn: (refId: string) => api.unlinkReference(refId, episodeName),
-    onSuccess: invalidateAll,
-  });
-
-  if (loading) {
-    return <Card className="h-64 animate-pulse bg-muted/30" />;
-  }
-
-  const linkedIds = new Set(linked.map((r) => r.id));
-  const candidates =
-    allRefsQ.data?.items.filter((r) => !linkedIds.has(r.id)) ?? [];
-
-  return (
-    <div className="space-y-4">
-      <Card className="p-0 overflow-hidden">
-        <div className="px-6 py-3 border-b bg-secondary/30 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {linked.length} tài liệu link vào tập này
-          </span>
-          <Button
-            size="sm"
-            onClick={() => setShowPicker((v) => !v)}
-            variant={showPicker ? "secondary" : "default"}
-          >
-            <Plus className="size-4" />
-            {showPicker ? "Đóng" : "Thêm từ thư viện"}
-          </Button>
-        </div>
-
-        {linked.length === 0 && !showPicker && (
-          <div className="p-12 text-center border-dashed">
-            <Library className="mx-auto mb-3 size-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Chưa link reference nào. Add từ library hoặc thêm mới ở{" "}
-              <Link to="/references" className="text-primary hover:underline">
-                References page
-              </Link>
-              .
-            </p>
-          </div>
-        )}
-
-        <div className="divide-y">
-          {linked.map((r) => (
-            <div
-              key={r.id}
-              className="px-6 py-3 hover:bg-secondary/20 flex items-start gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <Badge variant="outline" className="text-xs uppercase">
-                    {r.type}
-                  </Badge>
-                  {r.source !== "web" && (
-                    <Badge variant="secondary" className="text-xs">
-                      {r.source}
-                    </Badge>
-                  )}
-                  {r.tags.slice(0, 4).map((t) => (
-                    <Badge key={t} variant="default" className="text-xs">
-                      {t}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="font-medium leading-tight">{r.title}</p>
-                {r.author && (
-                  <p className="text-sm text-muted-foreground">{r.author}</p>
-                )}
-                <p className="text-xs text-muted-foreground font-mono truncate mt-1">
-                  {r.url}
-                </p>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Button variant="outline" size="sm" asChild title="Open page">
-                  <a href={r.url} target="_blank" rel="noreferrer noopener">
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                </Button>
-                {r.pdfUrl && (
-                  <Button variant="outline" size="sm" asChild title="Open PDF">
-                    <a
-                      href={r.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      download
-                    >
-                      <FileDown className="size-3.5" />
-                    </a>
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => unlinkMutation.mutate(r.id)}
-                  disabled={unlinkMutation.isPending}
-                  className="text-destructive hover:bg-destructive/10"
-                  title="Bỏ link khỏi tập này (không xoá khỏi library)"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {showPicker && (
-        <Card className="p-4 border-primary/40">
-          <h3 className="font-medium mb-3">Add từ library</h3>
-          {allRefsQ.isLoading && (
-            <div className="text-sm text-muted-foreground">Đang tải…</div>
-          )}
-          {candidates.length === 0 && !allRefsQ.isLoading && (
-            <p className="text-sm text-muted-foreground">
-              Không còn reference nào chưa link. Thêm reference mới ở{" "}
-              <Link to="/references" className="text-primary hover:underline">
-                References page
-              </Link>
-              .
-            </p>
-          )}
-          <div className="space-y-1 max-h-96 overflow-y-auto">
-            {candidates.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => linkMutation.mutate(r.id)}
-                disabled={linkMutation.isPending}
-                className={cn(
-                  "w-full text-left px-3 py-2 rounded-md hover:bg-secondary transition-colors",
-                  "flex items-start gap-3",
-                )}
-              >
-                <Plus className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <Badge variant="outline" className="text-xs uppercase">
-                      {r.type}
-                    </Badge>
-                    {r.tags.slice(0, 3).map((t) => (
-                      <Badge key={t} variant="default" className="text-xs">
-                        {t}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-sm font-medium leading-tight truncate">
-                    {r.title}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 function FilesPanel({
   episodeName,
   input,
-  output,
   tmp,
   loading,
 }: {
   episodeName: string;
   input: EpisodeFile[];
-  output: EpisodeFile[];
   tmp: EpisodeFile[];
   loading: boolean;
 }) {
@@ -1094,12 +1041,11 @@ function FilesPanel({
 
   const deleteMut = useMutation({
     mutationFn: (vars: {
-      bucket: "input" | "output" | "tmp";
+      bucket: "input" | "tmp";
       filename: string;
     }) => api.deleteFile(episodeName, vars.bucket, vars.filename),
     onSuccess: (data) => {
       queryClient.setQueryData(["episode-files", episodeName], data);
-      // Audio bị xoá → status episode đổi
       queryClient.invalidateQueries({
         queryKey: ["episode", episodeName],
       });
@@ -1109,17 +1055,13 @@ function FilesPanel({
   });
 
   const confirmAndDelete = (f: EpisodeFile) => {
-    const bucket: "input" | "output" | "tmp" = f.url.startsWith("/input")
+    const bucket: "input" | "tmp" = f.url.startsWith("/input")
       ? "input"
-      : f.url.startsWith("/output")
-        ? "output"
-        : "tmp";
+      : "tmp";
     const warn =
       f.kind === "audio-original"
         ? `XOÁ audio gốc "${f.filename}"?\n\nEpisode sẽ chuyển sang trạng thái no-audio. Phải upload lại để render.`
-        : f.kind === "video-full"
-          ? `XOÁ video full "${f.filename}" (${humanSize(f.size)})?\n\nPhải render lại để tái tạo.`
-          : `XOÁ "${f.filename}"?`;
+        : `XOÁ "${f.filename}"?`;
     if (!window.confirm(warn)) return;
     setDeletingUrl(f.url);
     deleteMut.mutate({ bucket, filename: f.filename });
@@ -1128,7 +1070,7 @@ function FilesPanel({
   if (loading) {
     return <Card className="h-64 animate-pulse bg-muted/30" />;
   }
-  if (input.length === 0 && output.length === 0 && tmp.length === 0) {
+  if (input.length === 0 && tmp.length === 0) {
     return (
       <Card className="p-12 text-center border-dashed">
         <Files className="mx-auto mb-3 size-10 text-muted-foreground" />
@@ -1140,109 +1082,12 @@ function FilesPanel({
     );
   }
 
-  const fullVideo = output.find((f) => f.kind === "video-full");
-  const previewVideo = output.find((f) => f.kind === "video-preview");
-
   return (
     <div className="space-y-6">
-      {/* Video showcase nếu có */}
-      {fullVideo && (
-        <Card className="p-0 overflow-hidden">
-          <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
-            <Play className="size-4 text-accent" />
-            <span className="font-medium">Video full</span>
-            <code className="text-xs text-muted-foreground font-mono truncate">
-              · {fullVideo.filename}
-            </code>
-            <span className="text-xs text-muted-foreground ml-auto font-mono shrink-0">
-              {humanSize(fullVideo.size)} · {timeAgo(fullVideo.mtime)}
-            </span>
-          </div>
-          <div className="bg-black">
-            <video
-              controls
-              src={fullVideo.url}
-              className="w-full max-h-[480px] object-contain mx-auto"
-              preload="metadata"
-              poster={
-                output.find((f) => f.kind === "thumbnail")?.url
-              }
-            />
-          </div>
-          <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <a href={fullVideo.url} download>
-                <Download className="size-4" />
-                Tải về
-              </a>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => confirmAndDelete(fullVideo)}
-              disabled={deletingUrl === fullVideo.url}
-            >
-              {deletingUrl === fullVideo.url ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              Xoá
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {previewVideo && (
-        <Card className="p-0 overflow-hidden">
-          <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
-            <Play className="size-4 text-muted-foreground" />
-            <span className="font-medium">Preview 10s</span>
-            <code className="text-xs text-muted-foreground font-mono truncate">
-              · {previewVideo.filename}
-            </code>
-            <span className="text-xs text-muted-foreground ml-auto font-mono shrink-0">
-              {humanSize(previewVideo.size)} · {timeAgo(previewVideo.mtime)}
-            </span>
-          </div>
-          <div className="bg-black">
-            <video
-              controls
-              src={previewVideo.url}
-              className="w-full max-h-[320px] object-contain mx-auto"
-              preload="metadata"
-            />
-          </div>
-          <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <a href={previewVideo.url} download>
-                <Download className="size-4" />
-                Tải về
-              </a>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => confirmAndDelete(previewVideo)}
-              disabled={deletingUrl === previewVideo.url}
-            >
-              {deletingUrl === previewVideo.url ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              Xoá
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Audio originals */}
+      {/* Audio originals + cover image */}
       {input.length > 0 && (
         <FileSection
-          title="Audio đã upload"
+          title="Input (audio + cover)"
           icon={<Volume2 className="size-4" />}
           files={input}
           deletingUrl={deletingUrl}
@@ -1255,29 +1100,11 @@ function FilesPanel({
                 className="w-full mt-2"
                 preload="metadata"
               />
-            ) : null
-          }
-        />
-      )}
-
-      {/* Other outputs (thumbnail + lock) */}
-      {output.filter(
-        (f) => f.kind !== "video-full" && f.kind !== "video-preview",
-      ).length > 0 && (
-        <FileSection
-          title="Outputs khác"
-          icon={<Database className="size-4" />}
-          files={output.filter(
-            (f) => f.kind !== "video-full" && f.kind !== "video-preview",
-          )}
-          deletingUrl={deletingUrl}
-          onDelete={confirmAndDelete}
-          renderInline={(f) =>
-            f.kind === "thumbnail" ? (
+            ) : f.kind === "cover" ? (
               <img
                 src={f.url}
-                alt="thumbnail"
-                className="mt-2 max-h-40 rounded border"
+                alt="cover"
+                className="mt-2 max-h-48 rounded border"
               />
             ) : null
           }
@@ -1298,6 +1125,9 @@ function FilesPanel({
 
       <p className="text-xs text-muted-foreground">
         Episode: <code className="font-mono">{episodeName}</code>
+        {" · "}
+        Video / thumbnail / lock đã được chuyển sang tab{" "}
+        <strong>Render</strong>.
       </p>
     </div>
   );
@@ -1389,6 +1219,7 @@ const kindLabel = (k: EpisodeFileKind): string =>
     "video-full": "mp4",
     "video-preview": "preview",
     thumbnail: "thumb",
+    cover: "cover",
     lock: "lock",
     "transcript-raw": "raw",
     "transcript-corrected": "fixed",

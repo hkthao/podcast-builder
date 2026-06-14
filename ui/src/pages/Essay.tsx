@@ -19,14 +19,18 @@ import {
   Upload,
   Mic2,
   X,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   api,
   type Essay,
   type EssayBrainstormRef,
+  type EssayDerivatives,
   type EssayStreamEvent,
   type LLMProvider,
+  type ShortsScript,
   type SuggestedRef,
+  type DerivativeType,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -128,6 +132,15 @@ export function EssayPage() {
     setStreamContent("");
     setSavedAt(e.updatedAt);
     setSuggestions(e.suggestedRefs ?? []);
+    setDerivatives(
+      e.derivatives ?? {
+        shorts: [],
+        fbPosts: [],
+        quotes: [],
+        blog: null,
+        newsletter: null,
+      },
+    );
   };
 
   const newEssay = () => {
@@ -141,6 +154,13 @@ export function EssayPage() {
     setStreamContent("");
     setSavedAt(null);
     setSuggestions([]);
+    setDerivatives({
+      shorts: [],
+      fbPosts: [],
+      quotes: [],
+      blog: null,
+      newsletter: null,
+    });
   };
 
   const startStream = () => {
@@ -216,6 +236,13 @@ export function EssayPage() {
   });
 
   const [suggestions, setSuggestions] = useState<SuggestedRef[]>([]);
+  const [derivatives, setDerivatives] = useState<EssayDerivatives>({
+    shorts: [],
+    fbPosts: [],
+    quotes: [],
+    blog: null,
+    newsletter: null,
+  });
   const suggestMut = useMutation({
     mutationFn: () =>
       api.suggestRefs({
@@ -232,11 +259,23 @@ export function EssayPage() {
     },
   });
 
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const coverPreviewUrl = coverFile ? URL.createObjectURL(coverFile) : null;
+  useEffect(() => {
+    return () => {
+      if (coverPreviewUrl) URL.revokeObjectURL(coverPreviewUrl);
+    };
+  }, [coverPreviewUrl]);
+
   const uploadMut = useMutation({
     mutationFn: (file: File) =>
-      api.uploadAudio(file, { essayId: activeId ?? undefined }),
+      api.uploadAudio(file, {
+        essayId: activeId ?? undefined,
+        cover: coverFile ?? undefined,
+      }),
     onSuccess: (summary) => {
       qc.invalidateQueries({ queryKey: ["episodes"] });
+      setCoverFile(null);
       navigate(`/episodes/${encodeURIComponent(summary.name)}`);
     },
   });
@@ -245,6 +284,12 @@ export function EssayPage() {
     const file = e.target.files?.[0];
     if (file) uploadMut.mutate(file);
     e.target.value = ""; // reset để chọn lại cùng file được
+  };
+
+  const onPickCover = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setCoverFile(file);
+    e.target.value = "";
   };
 
   const genNlmMut = useMutation({
@@ -539,13 +584,13 @@ export function EssayPage() {
                   {wordCount.toLocaleString("vi-VN")} từ
                 </span>
                 {streaming && (
-                  <Badge variant="secondary" className="gap-1">
+                  <Badge variant="secondary" className="gap-1 ml-auto">
                     <Loader2 className="size-3 animate-spin" />
                     streaming…
                   </Badge>
                 )}
                 {!streaming && activeId && savedAt && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
                     {saveMut.isPending ? (
                       <>
                         <Loader2 className="size-3 animate-spin" />
@@ -559,33 +604,6 @@ export function EssayPage() {
                     )}
                   </span>
                 )}
-                <div className="ml-auto flex items-center gap-2">
-                  <CopyButton text={liveContent} />
-                  {activeId && !streaming && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Xoá essay "${title.slice(0, 40)}…"?`,
-                          )
-                        ) {
-                          deleteMut.mutate(activeId);
-                        }
-                      }}
-                      disabled={deleteMut.isPending}
-                    >
-                      {deleteMut.isPending ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3.5" />
-                      )}
-                      Xoá
-                    </Button>
-                  )}
-                </div>
               </div>
               <Textarea
                 value={liveContent}
@@ -595,6 +613,31 @@ export function EssayPage() {
                 className="min-h-[600px] rounded-none border-0 font-serif text-base leading-relaxed focus-visible:ring-0 resize-none"
               />
               <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+                <CopyButton text={liveContent} />
+                {activeId && !streaming && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Xoá essay "${title.slice(0, 40)}…"?`,
+                        )
+                      ) {
+                        deleteMut.mutate(activeId);
+                      }
+                    }}
+                    disabled={deleteMut.isPending}
+                  >
+                    {deleteMut.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                    Xoá
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -764,6 +807,17 @@ export function EssayPage() {
             </Card>
           )}
 
+          {/* Phase E: Tái sử dụng nội dung */}
+          {activeId && content.length > 0 && !streaming && (
+            <ContentReusePanel
+              essayId={activeId}
+              derivatives={derivatives}
+              provider={provider}
+              model={model}
+              onUpdate={(updated) => setDerivatives(updated)}
+            />
+          )}
+
           {/* Upload audio from NotebookLM → tạo episode mới */}
           {activeId && content.length > 0 && !streaming && (
             <Card className="p-0 overflow-hidden">
@@ -776,7 +830,81 @@ export function EssayPage() {
                   Bước cuối: upload .m4a/.mp3 → tạo episode prefill title/hook
                 </span>
               </div>
-              <div className="px-6 py-6">
+              <div className="px-6 py-6 space-y-4">
+                {/* Cover image (optional) — chọn trước audio để gắn luôn vào episode */}
+                <div>
+                  <Label className="flex items-center gap-2 mb-1.5">
+                    <ImageIcon className="size-4" />
+                    Ảnh cover{" "}
+                    <span className="text-muted-foreground font-normal text-xs">
+                      (optional — dùng làm intro 3s thay vì auto-gen)
+                    </span>
+                  </Label>
+                  <div className="flex items-start gap-3 rounded-md border p-3">
+                    {coverPreviewUrl ? (
+                      <img
+                        src={coverPreviewUrl}
+                        alt="cover preview"
+                        className="w-20 h-36 object-cover rounded border shrink-0 bg-secondary"
+                      />
+                    ) : (
+                      <div className="w-20 h-36 rounded border border-dashed flex items-center justify-center shrink-0 bg-secondary/30">
+                        <ImageIcon className="size-5 text-muted-foreground/40" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <p className="text-sm">
+                        {coverFile ? (
+                          <code className="font-mono text-xs">
+                            {coverFile.name}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Chưa chọn ảnh — bỏ trống để dùng auto-gen từ title
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex gap-2">
+                        <label>
+                          <input
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp,image/*"
+                            onChange={onPickCover}
+                            disabled={uploadMut.isPending}
+                            className="hidden"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            asChild
+                            disabled={uploadMut.isPending}
+                          >
+                            <span className="cursor-pointer">
+                              <Upload className="size-3.5" />
+                              {coverFile ? "Đổi ảnh" : "Chọn ảnh"}
+                            </span>
+                          </Button>
+                        </label>
+                        {coverFile && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setCoverFile(null)}
+                            disabled={uploadMut.isPending}
+                          >
+                            <X className="size-3.5" />
+                            Bỏ
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audio drop zone */}
                 <label className="block">
                   <input
                     type="file"
@@ -805,7 +933,7 @@ export function EssayPage() {
                           Click để chọn file audio
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Title + hook + essayId sẽ auto-link vào episode
+                          Title + hook + essayId{coverFile ? " + ảnh cover" : ""} sẽ auto-link vào episode
                         </p>
                       </>
                     )}
@@ -896,6 +1024,246 @@ function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
           onClose={() => setModalOpen(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── ContentReusePanel — Phase E: 5 derivative formats ────────────────────
+
+type ReuseTab = "shorts" | "fb-posts" | "quotes" | "blog" | "newsletter";
+
+const TAB_META: Array<{ key: ReuseTab; label: string; icon: string }> = [
+  { key: "shorts", label: "Shorts", icon: "🎬" },
+  { key: "fb-posts", label: "FB Posts", icon: "📱" },
+  { key: "quotes", label: "Quotes", icon: "💬" },
+  { key: "blog", label: "Blog", icon: "📝" },
+  { key: "newsletter", label: "Newsletter", icon: "✉️" },
+];
+
+function ContentReusePanel({
+  essayId,
+  derivatives,
+  provider,
+  model,
+  onUpdate,
+}: {
+  essayId: string;
+  derivatives: EssayDerivatives;
+  provider: LLMProvider;
+  model: string;
+  onUpdate: (next: EssayDerivatives) => void;
+}) {
+  const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState<ReuseTab>("shorts");
+
+  const genMut = useMutation({
+    mutationFn: (type: DerivativeType) =>
+      api.genDerivative(essayId, type, { provider, model }),
+    onSuccess: (essay) => {
+      onUpdate(essay.derivatives);
+      qc.invalidateQueries({ queryKey: ["essays"] });
+    },
+  });
+
+  const isReady = (key: ReuseTab): boolean => {
+    if (key === "shorts") return derivatives.shorts.length > 0;
+    if (key === "fb-posts") return derivatives.fbPosts.length > 0;
+    if (key === "quotes") return derivatives.quotes.length > 0;
+    if (key === "blog") return !!derivatives.blog;
+    if (key === "newsletter") return !!derivatives.newsletter;
+    return false;
+  };
+
+  return (
+    <Card className="p-0 overflow-hidden">
+      <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-3">
+        <span className="font-medium text-sm">♻️ Tái sử dụng nội dung</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          1 essay → 5 format: shorts / FB / quotes / blog / newsletter
+        </span>
+      </div>
+      <div className="px-6 pt-3 flex gap-1 border-b">
+        {TAB_META.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+              activeTab === t.key
+                ? "border-primary text-foreground font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span>{t.icon}</span>
+            {t.label}
+            {isReady(t.key) && (
+              <Check className="size-3 text-accent" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "shorts" && <ShortsView shorts={derivatives.shorts} />}
+      {activeTab === "fb-posts" && (
+        <ListView items={derivatives.fbPosts} placeholder="FB post" />
+      )}
+      {activeTab === "quotes" && (
+        <ListView items={derivatives.quotes} placeholder="quote" quoted />
+      )}
+      {activeTab === "blog" && (
+        <LongFormView content={derivatives.blog} placeholder="blog" />
+      )}
+      {activeTab === "newsletter" && (
+        <LongFormView
+          content={derivatives.newsletter}
+          placeholder="newsletter"
+        />
+      )}
+      <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+        {genMut.isError && (
+          <span className="mr-auto text-xs text-destructive flex items-center gap-1">
+            <AlertCircle className="size-3.5" />
+            {String(genMut.error)}
+          </span>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => genMut.mutate(activeTab)}
+          disabled={genMut.isPending || !model}
+        >
+          {genMut.isPending && genMut.variables === activeTab ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          {isReady(activeTab) ? "Gen lại" : "Generate"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function ShortsView({ shorts }: { shorts: ShortsScript[] }) {
+  if (shorts.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-12">
+        Chưa có. Bấm Generate để gen 3 scripts (30s / 60s / 60s narrative).
+      </p>
+    );
+  }
+  return (
+    <div className="divide-y">
+      {shorts.map((s, i) => (
+        <div key={i} className="px-6 py-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="font-mono">
+              #{i + 1} · {s.duration}s
+            </Badge>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {(s.hook + " " + s.body + " " + s.cta).split(/\s+/).length} từ
+            </span>
+            <div className="ml-auto">
+              <CopyButton
+                text={`HOOK: ${s.hook}\n\nBODY:\n${s.body}\n\nCTA: ${s.cta}`}
+              />
+            </div>
+          </div>
+          <div className="text-sm space-y-2">
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Hook (3s)
+              </Label>
+              <p className="mt-0.5 italic">{s.hook}</p>
+            </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Body
+              </Label>
+              <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">
+                {s.body}
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                CTA
+              </Label>
+              <p className="mt-0.5">{s.cta}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ListView({
+  items,
+  placeholder,
+  quoted,
+}: {
+  items: string[];
+  placeholder: string;
+  quoted?: boolean;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-12">
+        Chưa có {placeholder}. Bấm Generate.
+      </p>
+    );
+  }
+  return (
+    <div className="divide-y">
+      {items.map((item, i) => (
+        <div key={i} className="px-6 py-3 flex items-start gap-3">
+          <Badge variant="outline" className="font-mono shrink-0 mt-0.5">
+            #{i + 1}
+          </Badge>
+          <p
+            className={cn(
+              "flex-1 text-sm whitespace-pre-wrap leading-relaxed",
+              quoted && "italic",
+            )}
+          >
+            {quoted ? `"${item}"` : item}
+          </p>
+          <div className="shrink-0">
+            <CopyButton text={quoted ? `"${item}"` : item} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LongFormView({
+  content,
+  placeholder,
+}: {
+  content: string | null;
+  placeholder: string;
+}) {
+  if (!content) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-12">
+        Chưa có {placeholder}. Bấm Generate.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <div className="px-6 py-2 border-b flex items-center gap-2">
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {content.split(/\s+/).length} từ
+        </span>
+        <div className="ml-auto">
+          <CopyButton text={content} />
+        </div>
+      </div>
+      <pre className="px-6 py-4 text-sm whitespace-pre-wrap font-sans leading-relaxed max-h-[500px] overflow-y-auto">
+        {content}
+      </pre>
     </div>
   );
 }

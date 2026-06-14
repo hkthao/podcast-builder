@@ -13,6 +13,7 @@ const OUTPUT_DIR = path.resolve("output");
 const TMP_DIR = path.resolve("tmp");
 
 const AUDIO_EXTS = ["m4a", "mp3", "wav"] as const;
+const COVER_EXTS = ["jpg", "jpeg", "png", "webp"] as const;
 
 export type EpisodeStatus =
   | "no-audio"   // chỉ có .json, chưa kéo audio vào
@@ -203,6 +204,13 @@ const buildTemplate = (name: string): EpisodeConfig => ({
   showOutro: true,
   sceneOverrides: null,
   essayId: null,
+  coverImage: null,
+  coverFit: "cover",
+  coverPosition: "center",
+  publishStatus: "draft",
+  publishedAt: null,
+  publishCaption: null,
+  publishHashtags: [],
 });
 
 /**
@@ -236,10 +244,80 @@ async function deriveFromEssay(
   return { title: essay.title, hook };
 }
 
+/**
+ * Lưu cover image cho 1 episode. Ghi đè cover cũ nếu có (xóa file cũ).
+ * `originalName` để lấy ext (vd "cover.jpg"). Update config.coverImage = filename.
+ */
+export async function uploadCover(
+  name: string,
+  originalName: string,
+  buffer: Uint8Array,
+): Promise<EpisodeSummary> {
+  const summary = await loadSummary(name);
+  if (!summary) {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const ext = (originalName.split(".").pop() ?? "").toLowerCase();
+  if (!COVER_EXTS.includes(ext as (typeof COVER_EXTS)[number])) {
+    const err = new Error(
+      `Ext không hỗ trợ: ${ext}. Hợp lệ: ${COVER_EXTS.join(", ")}`,
+    );
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+
+  // Xóa cover cũ (mọi ext) trước khi ghi mới
+  for (const e of COVER_EXTS) {
+    const old = path.join(INPUT_DIR, `${name}.cover.${e}`);
+    if (await exists(old)) {
+      try {
+        await fs.unlink(old);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  const filename = `${name}.cover.${ext}`;
+  const filePath = path.join(INPUT_DIR, filename);
+  await fs.mkdir(INPUT_DIR, { recursive: true });
+  await fs.writeFile(filePath, buffer);
+
+  const nextConfig = { ...summary.config, coverImage: filename };
+  return saveEpisode(name, nextConfig);
+}
+
+/** Xóa cover image của episode + clear config.coverImage. */
+export async function deleteCover(name: string): Promise<EpisodeSummary> {
+  const summary = await loadSummary(name);
+  if (!summary) {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  for (const e of COVER_EXTS) {
+    const p = path.join(INPUT_DIR, `${name}.cover.${e}`);
+    if (await exists(p)) {
+      try {
+        await fs.unlink(p);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (summary.config.coverImage) {
+    const nextConfig = { ...summary.config, coverImage: null };
+    return saveEpisode(name, nextConfig);
+  }
+  return summary;
+}
+
 export async function uploadAudio(
   originalName: string,
   buffer: Uint8Array,
-  options: { essayId?: string } = {},
+  options: { essayId?: string; cover?: { originalName: string; buffer: Uint8Array } } = {},
 ): Promise<EpisodeSummary> {
   const ext = (originalName.split(".").pop() ?? "").toLowerCase();
   if (!AUDIO_EXTS.includes(ext as (typeof AUDIO_EXTS)[number])) {
@@ -298,6 +376,11 @@ export async function uploadAudio(
       if (!existing.hook && derived.hook) existing.hook = derived.hook;
       await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
     }
+  }
+
+  // Nếu user upload kèm cover image → ghi cover ngay (sau khi episode đã tồn tại)
+  if (options.cover) {
+    return uploadCover(slug, options.cover.originalName, options.cover.buffer);
   }
 
   const summary = await loadSummary(slug);
@@ -398,6 +481,21 @@ const VALID_SCENE_TYPES = [
   "InnerSelf",
   "Choice",
   "Knowledge",
+  "OnAir",
+  "DualMic",
+  "Journal",
+  "Morning",
+  "Listening",
+  "Voices",
+  "Growth",
+  "Quote",
+  "Doubt",
+  "LettingGo",
+  "Sacrifice",
+  "Metamorphosis",
+  "Bridge",
+  "Mirror",
+  "Threshold",
 ] as const;
 
 type RawScene = Partial<ScenePlanItem>;
@@ -539,6 +637,7 @@ export async function getPlan(name: string): Promise<PlanPayload> {
 
 export const PATHS = { INPUT_DIR, OUTPUT_DIR, TMP_DIR } as const;
 export const AUDIO_EXTENSIONS = AUDIO_EXTS;
+export const COVER_EXTENSIONS = COVER_EXTS;
 
 export type EpisodeFile = {
   /** Relative filename, vd "mu-loa….m4a" hoặc "mu-loa….mp4" */
@@ -556,6 +655,7 @@ export type EpisodeFile = {
     | "video-full"
     | "video-preview"
     | "thumbnail"
+    | "cover"
     | "lock"
     | "transcript-raw"
     | "transcript-corrected"
@@ -606,6 +706,18 @@ export async function listEpisodeFiles(
       path.join(INPUT_DIR, fn),
       fn,
       "audio-original",
+      "/input",
+    );
+    if (f) input.push(f);
+  }
+
+  // Cover image trong input/
+  for (const ext of COVER_EXTS) {
+    const fn = `${name}.cover.${ext}`;
+    const f = await fileInfo(
+      path.join(INPUT_DIR, fn),
+      fn,
+      "cover",
       "/input",
     );
     if (f) input.push(f);
@@ -702,7 +814,10 @@ export async function deleteEpisodeFile(
   filename: string,
 ): Promise<EpisodeFiles> {
   const valid: Record<"input" | "output" | "tmp", string[]> = {
-    input: AUDIO_EXTS.map((ext) => `${name}.${ext}`),
+    input: [
+      ...AUDIO_EXTS.map((ext) => `${name}.${ext}`),
+      ...COVER_EXTS.map((ext) => `${name}.cover.${ext}`),
+    ],
     output: [
       `${name}.mp4`,
       `${name}.preview.mp4`,

@@ -19,6 +19,21 @@ import { Crowd } from "./scenes/Crowd";
 import { InnerSelf } from "./scenes/InnerSelf";
 import { Choice } from "./scenes/Choice";
 import { Knowledge } from "./scenes/Knowledge";
+import { OnAir } from "./scenes/OnAir";
+import { DualMic } from "./scenes/DualMic";
+import { Journal } from "./scenes/Journal";
+import { Morning } from "./scenes/Morning";
+import { Listening } from "./scenes/Listening";
+import { Voices } from "./scenes/Voices";
+import { Growth } from "./scenes/Growth";
+import { Quote } from "./scenes/Quote";
+import { Doubt } from "./scenes/Doubt";
+import { LettingGo } from "./scenes/LettingGo";
+import { Sacrifice } from "./scenes/Sacrifice";
+import { Metamorphosis } from "./scenes/Metamorphosis";
+import { Bridge } from "./scenes/Bridge";
+import { Mirror } from "./scenes/Mirror";
+import { Threshold } from "./scenes/Threshold";
 import type { SceneProps } from "./scenes/base";
 
 const CROSSFADE_MS = 1000;
@@ -31,6 +46,21 @@ const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
   InnerSelf,
   Choice,
   Knowledge,
+  OnAir,
+  DualMic,
+  Journal,
+  Morning,
+  Listening,
+  Voices,
+  Growth,
+  Quote,
+  Doubt,
+  LettingGo,
+  Sacrifice,
+  Metamorphosis,
+  Bridge,
+  Mirror,
+  Threshold,
 };
 
 type Props = {

@@ -14,6 +14,26 @@ export type EssayBrainstormRef = {
   ideaIdx: number;
 };
 
+export type ShortsScript = {
+  duration: number; // target seconds
+  hook: string;
+  body: string;
+  cta: string;
+};
+
+export type EssayDerivatives = {
+  /** 3 short-form scripts cho Reels/Shorts/TikTok */
+  shorts: ShortsScript[];
+  /** 5 FB post ngắn, viral-style */
+  fbPosts: string[];
+  /** 10 câu đắt quotable */
+  quotes: string[];
+  /** Blog post markdown (subheadings + SEO-friendly) */
+  blog: string | null;
+  /** Newsletter markdown (email-friendly, có lời chào kết) */
+  newsletter: string | null;
+};
+
 export type Essay = {
   id: string;
   title: string;
@@ -24,11 +44,14 @@ export type Essay = {
   brainstormRef: EssayBrainstormRef | null;
   /** Suggestions từ LLM refs-suggest — cache để load lại không gen tiếp. */
   suggestedRefs: SuggestedRef[];
+  /** Phase E: tái sử dụng nội dung — 5 derivatives. */
+  derivatives: EssayDerivatives;
   provider: LLMProvider;
   model: string;
   createdAt: string;
   updatedAt: string;
 };
+
 
 const slugify = (s: string): string =>
   s
@@ -50,6 +73,11 @@ type DbRow = {
   nlm_prompt: string | null;
   brainstorm_ref_json: string | null;
   suggested_refs_json: string | null;
+  shorts_scripts_json: string | null;
+  fb_posts_json: string | null;
+  quotes_json: string | null;
+  blog_md: string | null;
+  newsletter_md: string | null;
   provider: string;
   model: string;
   created_at: string;
@@ -68,6 +96,17 @@ const rowToEssay = (r: DbRow): Essay => ({
   suggestedRefs: r.suggested_refs_json
     ? (JSON.parse(r.suggested_refs_json) as SuggestedRef[])
     : [],
+  derivatives: {
+    shorts: r.shorts_scripts_json
+      ? (JSON.parse(r.shorts_scripts_json) as ShortsScript[])
+      : [],
+    fbPosts: r.fb_posts_json
+      ? (JSON.parse(r.fb_posts_json) as string[])
+      : [],
+    quotes: r.quotes_json ? (JSON.parse(r.quotes_json) as string[]) : [],
+    blog: r.blog_md,
+    newsletter: r.newsletter_md,
+  },
   provider: r.provider as LLMProvider,
   model: r.model,
   createdAt: r.created_at,
@@ -97,11 +136,15 @@ export async function deleteEssay(id: string): Promise<boolean> {
 }
 
 export async function saveEssay(essay: Essay): Promise<void> {
+  const d = essay.derivatives;
   getDb()
     .prepare(
       `INSERT OR REPLACE INTO essays
-         (id, title, outline, content, nlm_prompt, brainstorm_ref_json, suggested_refs_json, provider, model, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, title, outline, content, nlm_prompt, brainstorm_ref_json,
+          suggested_refs_json, shorts_scripts_json, fb_posts_json, quotes_json,
+          blog_md, newsletter_md,
+          provider, model, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       essay.id,
@@ -113,11 +156,36 @@ export async function saveEssay(essay: Essay): Promise<void> {
       essay.suggestedRefs.length > 0
         ? JSON.stringify(essay.suggestedRefs)
         : null,
+      d.shorts.length > 0 ? JSON.stringify(d.shorts) : null,
+      d.fbPosts.length > 0 ? JSON.stringify(d.fbPosts) : null,
+      d.quotes.length > 0 ? JSON.stringify(d.quotes) : null,
+      d.blog,
+      d.newsletter,
       essay.provider,
       essay.model,
       essay.createdAt,
       essay.updatedAt,
     );
+}
+
+export type DerivativeType =
+  | "shorts"
+  | "fbPosts"
+  | "quotes"
+  | "blog"
+  | "newsletter";
+
+export async function saveEssayDerivative<K extends DerivativeType>(
+  id: string,
+  type: K,
+  value: EssayDerivatives[K],
+): Promise<Essay | null> {
+  const e = await getEssay(id);
+  if (!e) return null;
+  (e.derivatives[type] as EssayDerivatives[K]) = value;
+  e.updatedAt = new Date().toISOString();
+  await saveEssay(e);
+  return e;
 }
 
 export async function saveEssaySuggestedRefs(

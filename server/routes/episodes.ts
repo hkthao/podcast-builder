@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import {
   AUDIO_EXTENSIONS,
+  COVER_EXTENSIONS,
+  deleteCover,
   deleteEpisodeFile,
   getEpisode,
   getPlan,
@@ -12,6 +14,7 @@ import {
   saveEpisode,
   saveTranscript,
   uploadAudio,
+  uploadCover,
 } from "../lib/episode-store";
 import {
   genSceneThumbnails,
@@ -51,13 +54,79 @@ episodesRoutes.post("/upload", async (c) => {
     typeof body["essayId"] === "string" && body["essayId"]
       ? (body["essayId"] as string)
       : undefined;
+  // Optional: cover image trong cùng request
+  const coverFile = body["cover"];
+  let cover: { originalName: string; buffer: Uint8Array } | undefined;
+  if (coverFile && typeof coverFile !== "string" && coverFile instanceof File) {
+    const coverExt = (coverFile.name.split(".").pop() ?? "").toLowerCase();
+    if (!COVER_EXTENSIONS.includes(coverExt as (typeof COVER_EXTENSIONS)[number])) {
+      return c.json(
+        {
+          error: `Cover ext không hỗ trợ: .${coverExt}`,
+          accepted: COVER_EXTENSIONS.map((e) => `.${e}`),
+        },
+        400,
+      );
+    }
+    cover = {
+      originalName: coverFile.name,
+      buffer: new Uint8Array(await coverFile.arrayBuffer()),
+    };
+  }
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
-    const summary = await uploadAudio(file.name, buf, { essayId });
+    const summary = await uploadAudio(file.name, buf, { essayId, cover });
     return c.json(summary, 201);
   } catch (e) {
     const err = e as Error & { code?: string };
     const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Upload cover image cho episode đã có. Ghi đè cover cũ.
+ * Content-Type: multipart/form-data, field "cover".
+ */
+episodesRoutes.post("/:name/cover", async (c) => {
+  const name = c.req.param("name");
+  const body = await c.req.parseBody();
+  const file = body["cover"];
+  if (!file || typeof file === "string" || !(file instanceof File)) {
+    return c.json({ error: "Thiếu field 'cover' (file)" }, 400);
+  }
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!COVER_EXTENSIONS.includes(ext as (typeof COVER_EXTENSIONS)[number])) {
+    return c.json(
+      {
+        error: `Cover ext không hỗ trợ: .${ext}`,
+        accepted: COVER_EXTENSIONS.map((e) => `.${e}`),
+      },
+      400,
+    );
+  }
+  const buf = new Uint8Array(await file.arrayBuffer());
+  try {
+    const summary = await uploadCover(name, file.name, buf);
+    return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/** Xóa cover image + clear config.coverImage. */
+episodesRoutes.delete("/:name/cover", async (c) => {
+  const name = c.req.param("name");
+  try {
+    const summary = await deleteCover(name);
+    return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
     return c.json({ error: err.message }, status);
   }
 });

@@ -18,15 +18,15 @@ export const Idea: React.FC<SceneProps> = ({ accentColor, audioLevel = 0 }) => {
       />
       <QuestionMark
         x={STICKER_BAND.xCenter - 340}
-        y={midY + 240}
-        size={220}
+        y={midY + 180}
+        size={170}
         delay={18}
         accent={COLORS.accentBlue}
       />
       <Star
         x={STICKER_BAND.xCenter + 340}
-        y={midY + 220}
-        size={180}
+        y={midY + 170}
+        size={170}
         delay={24}
         accent={accentColor}
         rotate={-12}

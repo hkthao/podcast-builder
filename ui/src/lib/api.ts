@@ -39,6 +39,13 @@ export type EpisodeConfig = {
   showOutro: boolean;
   sceneOverrides: unknown;
   essayId: string | null;
+  coverImage: string | null;
+  coverFit: "cover" | "contain";
+  coverPosition: "top" | "center" | "bottom";
+  publishStatus: "draft" | "ready" | "published";
+  publishedAt: string | null;
+  publishCaption: string | null;
+  publishHashtags: string[];
 };
 
 export type EpisodeSummary = {
@@ -119,6 +126,7 @@ export type EpisodeFileKind =
   | "video-full"
   | "video-preview"
   | "thumbnail"
+  | "cover"
   | "lock"
   | "transcript-raw"
   | "transcript-corrected"
@@ -262,6 +270,28 @@ export type EssayBrainstormRef = {
   ideaIdx: number;
 };
 
+export type ShortsScript = {
+  duration: number;
+  hook: string;
+  body: string;
+  cta: string;
+};
+
+export type EssayDerivatives = {
+  shorts: ShortsScript[];
+  fbPosts: string[];
+  quotes: string[];
+  blog: string | null;
+  newsletter: string | null;
+};
+
+export type DerivativeType =
+  | "shorts"
+  | "fb-posts"
+  | "quotes"
+  | "blog"
+  | "newsletter";
+
 export type Essay = {
   id: string;
   title: string;
@@ -270,6 +300,7 @@ export type Essay = {
   nlmPrompt: string | null;
   brainstormRef: EssayBrainstormRef | null;
   suggestedRefs: SuggestedRef[];
+  derivatives: EssayDerivatives;
   provider: LLMProvider;
   model: string;
   createdAt: string;
@@ -300,6 +331,37 @@ export type VisualLibrary = {
   total: number;
   byCategory: Record<string, VisualEntry[]>;
   uncategorized: VisualEntry[];
+};
+
+export type SceneCatalogEntry = {
+  key: string;
+  label: string;
+  description: string;
+  stickers: string[];
+  doodles: string[];
+  keywords: string[];
+  suggestedMoods: string[];
+  category:
+    | "default"
+    | "broadcast"
+    | "dialogue"
+    | "reflection"
+    | "calm"
+    | "emotion"
+    | "social"
+    | "thought"
+    | "wisdom"
+    | "giving"
+    | "transformation";
+  usageCount: number;
+  thumbUrl: string | null;
+};
+
+export type SceneCatalogResponse = {
+  scenes: SceneCatalogEntry[];
+  totalScenes: number;
+  totalUsage: number;
+  thumbsGenerated: number;
 };
 
 export type KnowledgeGraph = {
@@ -353,9 +415,12 @@ export type RenderPhase =
   | "error"
   | "cancelled";
 
+export type JobType = "transcribe" | "plan" | "render";
+
 export type RenderJob = {
   id: string;
   episodeName: string;
+  jobType: JobType;
   preview: boolean;
   status: RenderPhase;
   percent: number;
@@ -364,6 +429,8 @@ export type RenderJob = {
   finishedAt: number | null;
   outputPath: string | null;
   error: string | null;
+  regenTranscribe: boolean;
+  regenPlan: boolean;
 };
 
 export type RenderProgressEvent = RenderJob & {
@@ -533,6 +600,18 @@ export const api = {
 
   listLLMModels: () => jsonFetch<LLMModels>("/api/llm/models"),
 
+  genSocialCaption: (input: {
+    title: string;
+    hook?: string | null;
+    essayContent?: string;
+    provider: LLMProvider;
+    model: string;
+  }) =>
+    jsonFetch<{ caption: string; hashtags: string[] }>(
+      "/api/llm/social-caption",
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
   getHealth: () => jsonFetch<ServerHealth>("/api/health"),
 
   clearServerErrors: () =>
@@ -544,6 +623,15 @@ export const api = {
   getKnowledgeGraph: () => jsonFetch<KnowledgeGraph>("/api/knowledge"),
 
   getVisualLibrary: () => jsonFetch<VisualLibrary>("/api/visual"),
+
+  getSceneCatalog: () =>
+    jsonFetch<SceneCatalogResponse>("/api/scenes/catalog"),
+
+  regenerateSceneThumbs: () =>
+    jsonFetch<{ generated: string[] }>(
+      "/api/scenes/catalog/thumbs/regenerate",
+      { method: "POST" },
+    ),
 
   listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
   getEssay: (id: string) =>
@@ -570,6 +658,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  genDerivative: (
+    id: string,
+    type: DerivativeType,
+    input: { provider: LLMProvider; model: string },
+  ) =>
+    jsonFetch<Essay>(
+      `/api/essay/${encodeURIComponent(id)}/derivatives/${type}`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   deleteEssay: (id: string) =>
     jsonFetch<{ deleted: boolean }>(
       `/api/essay/${encodeURIComponent(id)}`,
@@ -649,10 +747,31 @@ export const api = {
       { method: "DELETE" },
     ),
 
-  startRender: (episodeName: string, preview: boolean) =>
+  startRender: (
+    episodeName: string,
+    preview: boolean,
+    opts: { regenTranscribe?: boolean; regenPlan?: boolean } = {},
+  ) =>
     jsonFetch<RenderJob>("/api/render", {
       method: "POST",
-      body: JSON.stringify({ episodeName, preview }),
+      body: JSON.stringify({
+        episodeName,
+        preview,
+        regenTranscribe: opts.regenTranscribe,
+        regenPlan: opts.regenPlan,
+      }),
+    }),
+
+  startTranscribe: (episodeName: string) =>
+    jsonFetch<RenderJob>("/api/render/transcribe", {
+      method: "POST",
+      body: JSON.stringify({ episodeName }),
+    }),
+
+  startPlan: (episodeName: string) =>
+    jsonFetch<RenderJob>("/api/render/plan", {
+      method: "POST",
+      body: JSON.stringify({ episodeName }),
     }),
 
   cancelJob: (jobId: string) =>
@@ -661,13 +780,22 @@ export const api = {
       { method: "POST" },
     ),
 
+  listRenderJobs: () =>
+    jsonFetch<{ jobs: RenderJob[] }>("/api/render/jobs"),
+
+  resetRenderQueue: () =>
+    jsonFetch<{ cancelledJobs: number }>("/api/render/jobs/_reset", {
+      method: "POST",
+    }),
+
   uploadAudio: async (
     file: File,
-    options: { essayId?: string } = {},
+    options: { essayId?: string; cover?: File } = {},
   ): Promise<EpisodeSummary> => {
     const form = new FormData();
     form.append("audio", file);
     if (options.essayId) form.append("essayId", options.essayId);
+    if (options.cover) form.append("cover", options.cover);
     const res = await fetch("/api/episodes/upload", {
       method: "POST",
       body: form,
@@ -680,6 +808,29 @@ export const api = {
     }
     return (await res.json()) as EpisodeSummary;
   },
+
+  uploadCover: async (
+    episodeName: string,
+    file: File,
+  ): Promise<EpisodeSummary> => {
+    const form = new FormData();
+    form.append("cover", file);
+    const res = await fetch(
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as EpisodeSummary;
+  },
+
+  deleteCover: (episodeName: string) =>
+    jsonFetch<EpisodeSummary>(
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover`,
+      { method: "DELETE" },
+    ),
 };
 
 export { ApiError };

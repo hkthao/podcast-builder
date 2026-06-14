@@ -10,11 +10,22 @@ import {
   newEssayId,
   NLM_PROMPT_SYSTEM,
   saveEssay,
+  saveEssayDerivative,
   updateEssayContent,
+  type DerivativeType,
   type Essay,
   type EssayBrainstormRef,
+  type ShortsScript,
 } from "../lib/essay-store";
 import { chat, chatStream, type LLMProvider } from "../lib/llm-providers";
+import { safeParseJson } from "../lib/safe-json";
+import {
+  BLOG_SYSTEM,
+  FB_POSTS_SYSTEM,
+  NEWSLETTER_SYSTEM,
+  QUOTES_SYSTEM,
+  SHORTS_SYSTEM,
+} from "../lib/derivative-prompts";
 
 export const essayRoutes = new Hono();
 
@@ -157,6 +168,13 @@ essayRoutes.post("/stream", async (c) => {
     content: "",
     nlmPrompt: null,
     suggestedRefs: [],
+    derivatives: {
+      shorts: [],
+      fbPosts: [],
+      quotes: [],
+      blog: null,
+      newsletter: null,
+    },
     brainstormRef,
     provider,
     model,
@@ -228,4 +246,203 @@ essayRoutes.post("/stream", async (c) => {
       });
     }
   });
+});
+
+/**
+ * Phase E: Tái sử dụng nội dung — 5 LLM endpoint sinh derivative từ essay.
+ * Body: {provider, model}. Persist vào essay row.
+ */
+
+type DerivBody = { provider?: string; model?: string };
+
+type DerivStatus = 400 | 404 | 500;
+
+const requireEssayWithContent = async (
+  id: string,
+): Promise<Essay | { error: string; status: DerivStatus }> => {
+  const essay = await getEssay(id);
+  if (!essay) return { error: "Essay not found", status: 404 };
+  if (!essay.content || essay.content.trim().length < 200) {
+    return {
+      error: "Essay content quá ngắn (< 200 chars). Gen essay trước.",
+      status: 400,
+    };
+  }
+  return essay;
+};
+
+const parseDerivBody = (
+  raw: unknown,
+):
+  | { provider: LLMProvider; model: string }
+  | { error: string; status: DerivStatus } => {
+  const body = raw as DerivBody;
+  if (body.provider !== "openai" && body.provider !== "ollama") {
+    return { error: "provider phải là 'openai' hoặc 'ollama'", status: 400 };
+  }
+  if (typeof body.model !== "string" || body.model.trim().length === 0) {
+    return { error: "Thiếu model", status: 400 };
+  }
+  return {
+    provider: body.provider as LLMProvider,
+    model: body.model.trim(),
+  };
+};
+
+const userPromptForDerivative = (essay: Essay): string => {
+  return [
+    `Title: ${essay.title}`,
+    `\nEssay content:\n${essay.content}`,
+    `\nViết derivative ngay bây giờ.`,
+  ].join("");
+};
+
+const callDeriv = async (
+  essay: Essay,
+  systemPrompt: string,
+  body: { provider: LLMProvider; model: string },
+  jsonMode: boolean,
+): Promise<string> => {
+  return chat({
+    provider: body.provider,
+    model: body.model,
+    systemPrompt,
+    userContent: userPromptForDerivative(essay),
+    temperature: 0.8,
+    jsonMode,
+  });
+};
+
+const persistDerivative = async <K extends DerivativeType>(
+  id: string,
+  type: K,
+  value: Essay["derivatives"][K],
+): Promise<Essay> => {
+  const updated = await saveEssayDerivative(id, type, value);
+  if (!updated) throw new Error("Essay biến mất giữa chừng");
+  return updated;
+};
+
+// ---- Shorts (3 scripts) ----
+essayRoutes.post("/:id/derivatives/shorts", async (c) => {
+  const id = c.req.param("id");
+  const essay = await requireEssayWithContent(id);
+  if ("error" in essay) return c.json({ error: essay.error }, essay.status);
+  const raw = await c.req.json().catch(() => ({}));
+  const body = parseDerivBody(raw);
+  if ("error" in body) return c.json({ error: body.error }, body.status);
+  try {
+    const content = await callDeriv(essay, SHORTS_SYSTEM, body, true);
+    const parsed = safeParseJson<{ shorts?: unknown }>(content);
+    if (!Array.isArray(parsed.shorts)) {
+      return c.json({ error: "LLM thiếu 'shorts' array" }, 502);
+    }
+    const shorts: ShortsScript[] = [];
+    for (const r of parsed.shorts as unknown[]) {
+      const o = r as Partial<ShortsScript>;
+      if (
+        typeof o.hook !== "string" ||
+        typeof o.body !== "string" ||
+        typeof o.cta !== "string"
+      )
+        continue;
+      shorts.push({
+        duration: typeof o.duration === "number" ? o.duration : 60,
+        hook: o.hook.trim(),
+        body: o.body.trim(),
+        cta: o.cta.trim(),
+      });
+    }
+    if (shorts.length === 0) return c.json({ error: "0 shorts parse được" }, 502);
+    const updated = await persistDerivative(id, "shorts", shorts);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---- FB Posts (5) ----
+essayRoutes.post("/:id/derivatives/fb-posts", async (c) => {
+  const id = c.req.param("id");
+  const essay = await requireEssayWithContent(id);
+  if ("error" in essay) return c.json({ error: essay.error }, essay.status);
+  const raw = await c.req.json().catch(() => ({}));
+  const body = parseDerivBody(raw);
+  if ("error" in body) return c.json({ error: body.error }, body.status);
+  try {
+    const content = await callDeriv(essay, FB_POSTS_SYSTEM, body, true);
+    const parsed = safeParseJson<{ posts?: unknown }>(content);
+    if (!Array.isArray(parsed.posts)) {
+      return c.json({ error: "LLM thiếu 'posts' array" }, 502);
+    }
+    const posts = (parsed.posts as unknown[])
+      .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+      .map((p) => p.trim());
+    if (posts.length === 0) return c.json({ error: "0 post parse được" }, 502);
+    const updated = await persistDerivative(id, "fbPosts", posts);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---- Quotes (10) ----
+essayRoutes.post("/:id/derivatives/quotes", async (c) => {
+  const id = c.req.param("id");
+  const essay = await requireEssayWithContent(id);
+  if ("error" in essay) return c.json({ error: essay.error }, essay.status);
+  const raw = await c.req.json().catch(() => ({}));
+  const body = parseDerivBody(raw);
+  if ("error" in body) return c.json({ error: body.error }, body.status);
+  try {
+    const content = await callDeriv(essay, QUOTES_SYSTEM, body, true);
+    const parsed = safeParseJson<{ quotes?: unknown }>(content);
+    if (!Array.isArray(parsed.quotes)) {
+      return c.json({ error: "LLM thiếu 'quotes' array" }, 502);
+    }
+    const quotes = (parsed.quotes as unknown[])
+      .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+      .map((q) => q.trim().replace(/^["']|["']$/g, ""));
+    if (quotes.length === 0) return c.json({ error: "0 quote parse được" }, 502);
+    const updated = await persistDerivative(id, "quotes", quotes);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---- Blog (markdown) ----
+essayRoutes.post("/:id/derivatives/blog", async (c) => {
+  const id = c.req.param("id");
+  const essay = await requireEssayWithContent(id);
+  if ("error" in essay) return c.json({ error: essay.error }, essay.status);
+  const raw = await c.req.json().catch(() => ({}));
+  const body = parseDerivBody(raw);
+  if ("error" in body) return c.json({ error: body.error }, body.status);
+  try {
+    const content = await callDeriv(essay, BLOG_SYSTEM, body, false);
+    const cleaned = content.trim().replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "");
+    const updated = await persistDerivative(id, "blog", cleaned);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---- Newsletter (markdown) ----
+essayRoutes.post("/:id/derivatives/newsletter", async (c) => {
+  const id = c.req.param("id");
+  const essay = await requireEssayWithContent(id);
+  if ("error" in essay) return c.json({ error: essay.error }, essay.status);
+  const raw = await c.req.json().catch(() => ({}));
+  const body = parseDerivBody(raw);
+  if ("error" in body) return c.json({ error: body.error }, body.status);
+  try {
+    const content = await callDeriv(essay, NEWSLETTER_SYSTEM, body, false);
+    const cleaned = content.trim().replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "");
+    const updated = await persistDerivative(id, "newsletter", cleaned);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
 });

@@ -11,6 +11,7 @@ import { llmRoutes } from "./routes/llm";
 import { referencesRoutes } from "./routes/references";
 import { renderRoutes } from "./routes/render";
 import { knowledgeRoutes } from "./routes/knowledge";
+import { scenesRoutes } from "./routes/scenes";
 import { visualRoutes } from "./routes/visual";
 import { workflowRoutes } from "./routes/workflow";
 import { startFsWatcher } from "./lib/events";
@@ -28,6 +29,7 @@ registerGlobalHandlers();
 const OUTPUT_DIR = path.resolve("output");
 const INPUT_DIR = path.resolve("input");
 const TMP_DIR = path.resolve("tmp");
+const SCENE_CATALOG_DIR = path.resolve("public/scene-catalog");
 
 const PORT = Number(process.env.STUDIO_PORT ?? 3001);
 /** Origin của Vite dev server. Local-only — không expose. */
@@ -73,6 +75,7 @@ app.route("/api/llm", llmRoutes);
 app.route("/api/workflow", workflowRoutes);
 app.route("/api/knowledge", knowledgeRoutes);
 app.route("/api/visual", visualRoutes);
+app.route("/api/scenes", scenesRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.
@@ -140,6 +143,7 @@ const serveStatic = (rootDir: string) =>
 app.get("/output/:filename", serveStatic(OUTPUT_DIR));
 app.get("/input/:filename", serveStatic(INPUT_DIR));
 app.get("/tmp/:filename", serveStatic(TMP_DIR));
+app.get("/scene-catalog/:filename", serveStatic(SCENE_CATALOG_DIR));
 
 startFsWatcher();
 

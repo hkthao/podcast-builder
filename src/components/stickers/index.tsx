@@ -244,3 +244,201 @@ export const Plant: React.FC<StickerProps> = (props) => (
     />
   </StickerBase>
 );
+
+/* ─────────────────────────  Giving / Transform family (Phase 2)  ───────────────────────── */
+
+/** Bridge — vòm cầu nối 2 bờ. Cho cảnh kết nối / chuyển tiếp. */
+export const Bridge: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Banks left + right */}
+    <StickerShape d="M 4 70 L 22 70 L 22 88 L 4 88 Z" fill={COLORS.accentTeal} />
+    <StickerShape d="M 78 70 L 96 70 L 96 88 L 78 88 Z" fill={COLORS.accentTeal} />
+    {/* Arch (vòm cầu) */}
+    <StickerShape
+      d="M 22 70 Q 50 22 78 70"
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* Deck (mặt cầu) */}
+    <StickerShape d="M 18 70 L 82 70" inkWidth={5} halo={false} />
+    {/* Cables / dây cầu */}
+    <StickerShape d="M 32 60 L 32 70" inkWidth={3} halo={false} />
+    <StickerShape d="M 50 36 L 50 70" inkWidth={3} halo={false} />
+    <StickerShape d="M 68 60 L 68 70" inkWidth={3} halo={false} />
+    {/* Water wave */}
+    <StickerShape d="M 4 92 Q 16 96 28 92 Q 40 88 52 92 Q 64 96 76 92 Q 88 88 96 92" inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Mirror — gương oval có handle. Cho cảnh tự nhìn / phản chiếu / looking-glass self. */
+export const Mirror: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Mirror oval frame */}
+    <StickerShape
+      ellipse={{ cx: 50, cy: 40, rx: 30, ry: 36 }}
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* Inner glass surface */}
+    <StickerShape
+      ellipse={{ cx: 50, cy: 40, rx: 22, ry: 28 }}
+      fill={COLORS.white}
+      halo={false}
+      inkWidth={3}
+    />
+    {/* Highlight curve */}
+    <StickerShape d="M 38 30 Q 42 22 52 24" inkWidth={3} halo={false} />
+    {/* Handle */}
+    <StickerShape d="M 50 76 L 50 92" inkWidth={6} />
+    <StickerShape
+      ellipse={{ cx: 50, cy: 92, rx: 6, ry: 4 }}
+      fill={COLORS.ink}
+      halo={false}
+    />
+  </StickerBase>
+);
+
+/** Door — cánh cửa hé mở có ánh sáng. Cho cảnh ngưỡng cửa / chuyển giao. */
+export const Door: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Door frame */}
+    <StickerShape
+      rect={{ x: 24, y: 14, width: 52, height: 78, rx: 4 }}
+      fill={COLORS.white}
+    />
+    {/* Door panel slightly ajar (door inset right) */}
+    <StickerShape
+      d="M 30 18 L 56 22 L 56 86 L 30 88 Z"
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* Handle on the open door */}
+    <StickerShape
+      circle={{ cx: 50, cy: 54, r: 3 }}
+      fill={COLORS.accentRed}
+      halo={false}
+    />
+    {/* Light rays escaping through gap */}
+    <StickerShape d="M 60 40 L 78 32" inkWidth={4} halo={false} />
+    <StickerShape d="M 60 54 L 82 54" inkWidth={4} halo={false} />
+    <StickerShape d="M 60 68 L 78 76" inkWidth={4} halo={false} />
+  </StickerBase>
+);
+
+/** Butterfly — 2 wings + body. Cho cảnh metamorphosis / biến thái / hóa bướm. */
+export const Butterfly: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Body */}
+    <StickerShape
+      ellipse={{ cx: 50, cy: 50, rx: 3, ry: 22 }}
+      fill={COLORS.ink}
+    />
+    {/* Antennae */}
+    <StickerShape d="M 50 30 Q 44 22 38 18" inkWidth={3} halo={false} />
+    <StickerShape d="M 50 30 Q 56 22 62 18" inkWidth={3} halo={false} />
+    {/* Left top wing */}
+    <StickerShape
+      d="M 50 40 Q 18 26 12 44 Q 14 60 50 54 Z"
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* Right top wing */}
+    <StickerShape
+      d="M 50 40 Q 82 26 88 44 Q 86 60 50 54 Z"
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* Left bottom wing */}
+    <StickerShape
+      d="M 50 58 Q 26 64 24 80 Q 36 84 50 70 Z"
+      fill={COLORS.accentRed}
+    />
+    {/* Right bottom wing */}
+    <StickerShape
+      d="M 50 58 Q 74 64 76 80 Q 64 84 50 70 Z"
+      fill={COLORS.accentRed}
+    />
+    {/* Wing spots */}
+    <StickerShape
+      circle={{ cx: 28, cy: 44, r: 4 }}
+      fill={COLORS.white}
+      halo={false}
+    />
+    <StickerShape
+      circle={{ cx: 72, cy: 44, r: 4 }}
+      fill={COLORS.white}
+      halo={false}
+    />
+  </StickerBase>
+);
+
+/** HandOpen — bàn tay mở (palm view). Cho cảnh trao đi / cho đi vật chất. */
+export const HandOpen: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Palm */}
+    <StickerShape
+      d="M 30 50 Q 30 38 40 38 L 60 38 Q 70 38 70 50 L 70 78 Q 70 90 60 90 L 40 90 Q 30 90 30 78 Z"
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    {/* Thumb */}
+    <StickerShape
+      d="M 30 56 Q 18 56 16 46 Q 20 38 30 42 Z"
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    {/* 4 fingers (sticking up) */}
+    <StickerShape
+      rect={{ x: 36, y: 18, width: 7, height: 24, rx: 3 }}
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    <StickerShape
+      rect={{ x: 46, y: 12, width: 7, height: 30, rx: 3 }}
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    <StickerShape
+      rect={{ x: 56, y: 16, width: 7, height: 26, rx: 3 }}
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    <StickerShape
+      rect={{ x: 65, y: 22, width: 6, height: 20, rx: 3 }}
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+  </StickerBase>
+);
+
+/** Apple — táo có cuống + lá. Cho cảnh sacrifice / cho đi vật chất / "phép trừ". */
+export const Apple: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Body — two-lobe heart-ish */}
+    <StickerShape
+      d="M 50 26 Q 38 26 30 36 Q 20 50 26 70 Q 32 86 50 86 Q 68 86 74 70 Q 80 50 70 36 Q 62 26 50 26 Z"
+      fill={props.accent ?? COLORS.accentRed}
+    />
+    {/* Stem */}
+    <StickerShape d="M 50 26 L 50 14" inkWidth={5} />
+    {/* Leaf */}
+    <StickerShape
+      d="M 50 20 Q 62 12 66 22 Q 60 28 50 24 Z"
+      fill={COLORS.accentTeal}
+    />
+    {/* Shine highlight */}
+    <StickerShape d="M 38 44 Q 36 38 42 36" inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Cocoon — kén nằm trên cành. Pre-metamorphosis state. */
+export const Cocoon: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Branch above */}
+    <StickerShape d="M 14 24 L 86 24" inkWidth={5} />
+    {/* Small leaf on branch */}
+    <StickerShape
+      d="M 70 24 Q 80 18 84 24 Q 80 30 72 26 Z"
+      fill={COLORS.accentTeal}
+    />
+    {/* Cocoon hanging */}
+    <StickerShape d="M 50 24 L 50 38" inkWidth={3} halo={false} />
+    <StickerShape
+      d="M 50 38 Q 30 44 30 60 Q 30 84 50 86 Q 70 84 70 60 Q 70 44 50 38 Z"
+      fill={props.accent ?? COLORS.bgAlt}
+    />
+    {/* Cocoon stripes */}
+    <StickerShape d="M 34 56 Q 50 60 66 56" inkWidth={3} halo={false} />
+    <StickerShape d="M 34 68 Q 50 72 66 68" inkWidth={3} halo={false} />
+    <StickerShape d="M 36 78 Q 50 82 64 78" inkWidth={3} halo={false} />
+  </StickerBase>
+);

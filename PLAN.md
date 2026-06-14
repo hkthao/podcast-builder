@@ -1144,7 +1144,7 @@ NLM không có API. Phần ta giúp được:
 - [x] **11.5** — LLM NLM-prompt tuner + copy/open helper. 0.5 ngày
 - [x] **11.6** — LLM refs-suggest + auto-add vào library. 0.5 ngày
 - [x] **11.7** — Workflow page (`/workflow`) overview brainstorm/essay/nlm/refs/audio/render. 1 ngày
-- [ ] **11.8** — Watch `~/Downloads/` → toast suggest link audio. 0.5 ngày (bonus)
+- ~~**11.8** — Watch `~/Downloads/` → toast suggest link audio~~ (bỏ — drag-drop đã đủ)
 
 **Extras đã thêm (không có trong PLAN gốc):**
 - [x] **Bridge Essay → Episode**: upload audio NLM trực tiếp từ Essay page, auto prefill title/hook + essayId trace.

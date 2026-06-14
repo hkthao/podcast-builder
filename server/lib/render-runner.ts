@@ -34,9 +34,12 @@ export type RenderPhase =
   | "error"
   | "cancelled";
 
+export type JobType = "transcribe" | "plan" | "render";
+
 export type RenderJob = {
   id: string;
   episodeName: string;
+  jobType: JobType;
   preview: boolean;
   status: RenderPhase;
   percent: number;
@@ -45,6 +48,10 @@ export type RenderJob = {
   finishedAt: number | null;
   outputPath: string | null;
   error: string | null;
+  /** Cho jobType="render": force re-run transcribe phases dù corrected.json đã có. */
+  regenTranscribe: boolean;
+  /** Cho jobType="render": force re-run plan phase dù plan.json đã có. */
+  regenPlan: boolean;
 };
 
 type JobInternal = RenderJob & {
@@ -111,6 +118,38 @@ export function getJob(jobId: string): RenderJob | null {
   return pub;
 }
 
+/**
+ * Force-reset queue + activeCount. Hủy tất cả job đang chạy/queue, reset
+ * counter về 0. Dùng khi worker thread bị wedged (ffmpeg/whisper hung) khiến
+ * queue không drain được. Subprocess đang chạy vẫn tiếp tục → resource leak
+ * cho tới khi subprocess tự kết thúc, nhưng queue mới sẽ chạy ngay.
+ */
+export function resetQueue(): { cancelledJobs: number } {
+  let cancelled = 0;
+  for (const job of jobs.values()) {
+    if (
+      job.status === "done" ||
+      job.status === "error" ||
+      job.status === "cancelled"
+    ) {
+      continue;
+    }
+    try {
+      job.abort.abort();
+    } catch {
+      /* ignore */
+    }
+    job.status = "cancelled";
+    job.finishedAt = Date.now();
+    job.error = "Force reset by user";
+    emitProgress(job);
+    cancelled++;
+  }
+  queue.length = 0;
+  activeCount = 0;
+  return { cancelledJobs: cancelled };
+}
+
 export function cancelJob(jobId: string): boolean {
   const job = jobs.get(jobId);
   if (!job) return false;
@@ -129,19 +168,35 @@ export function cancelJob(jobId: string): boolean {
   return true;
 }
 
-export async function startRender(
+async function enqueueJob(
   episodeName: string,
-  opts: { preview: boolean },
+  jobType: JobType,
+  opts: { preview?: boolean; regenTranscribe?: boolean; regenPlan?: boolean },
 ): Promise<RenderJob> {
   const ep = await getEpisode(episodeName);
   if (!ep) throw new Error(`Episode không tồn tại: ${episodeName}`);
   if (!ep.audioPath) throw new Error(`Episode "${episodeName}" chưa có audio`);
 
+  // Pre-check phụ thuộc: plan job cần corrected transcript đã có
+  if (jobType === "plan") {
+    const correctedJson = path.join(
+      PATHS.TMP_DIR,
+      `${episodeName}.corrected.json`,
+    );
+    const rawJson = path.join(PATHS.TMP_DIR, `${episodeName}.json`);
+    if (!fs.existsSync(correctedJson) && !fs.existsSync(rawJson)) {
+      throw new Error(
+        `Cần transcript trước khi tạo plan. Chạy "Tạo transcript" tab Transcript.`,
+      );
+    }
+  }
+
   const id = `job_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const job: JobInternal = {
     id,
     episodeName,
-    preview: opts.preview,
+    jobType,
+    preview: opts.preview ?? false,
     status: "queued",
     percent: 0,
     message: "",
@@ -149,6 +204,8 @@ export async function startRender(
     finishedAt: null,
     outputPath: null,
     error: null,
+    regenTranscribe: opts.regenTranscribe ?? false,
+    regenPlan: opts.regenPlan ?? false,
     abort: new AbortController(),
   };
   jobs.set(id, job);
@@ -159,6 +216,23 @@ export async function startRender(
   return pub;
 }
 
+export async function startRender(
+  episodeName: string,
+  opts: { preview: boolean; regenTranscribe?: boolean; regenPlan?: boolean },
+): Promise<RenderJob> {
+  return enqueueJob(episodeName, "render", opts);
+}
+
+export async function startTranscribe(
+  episodeName: string,
+): Promise<RenderJob> {
+  return enqueueJob(episodeName, "transcribe", {});
+}
+
+export async function startPlan(episodeName: string): Promise<RenderJob> {
+  return enqueueJob(episodeName, "plan", {});
+}
+
 function processQueue() {
   while (activeCount < MAX_PARALLEL && queue.length > 0) {
     const jobId = queue.shift()!;
@@ -166,7 +240,10 @@ function processQueue() {
     if (!job || job.status !== "queued") continue;
     activeCount++;
     runJob(job).finally(() => {
-      activeCount--;
+      // Guard <0: resetQueue() có thể đã set activeCount=0 trong khi job này
+      // chưa hoàn tất subprocess, khi nó thực sự settle thì .finally()
+      // sẽ kéo activeCount âm → kẹt mãi.
+      activeCount = Math.max(0, activeCount - 1);
       processQueue();
     });
   }
@@ -199,26 +276,76 @@ async function runJob(job: JobInternal): Promise<void> {
   const correctedJson = path.join(PATHS.TMP_DIR, `${baseName}.corrected.json`);
   const planJsonPath = path.join(PATHS.TMP_DIR, `${baseName}.plan.json`);
 
+  // Logic skip phases — chỉ áp dụng cho jobType="render". transcribe/plan
+  // jobs luôn re-run phần của mình (user explicit gọi qua nút riêng).
+  const hasCorrected =
+    fs.existsSync(correctedJson) || fs.existsSync(transcriptJson);
+  const hasPlan = fs.existsSync(planJsonPath);
+  const runTranscribe =
+    job.jobType === "transcribe" ||
+    (job.jobType === "render" && (job.regenTranscribe || !hasCorrected));
+  const runPlan =
+    job.jobType === "plan" ||
+    (job.jobType === "render" && (job.regenPlan || !hasPlan));
+  // ProcessAudio cần cho whisperWav (transcribe) hoặc renderWav (render).
+  // Plan-only job → không cần.
+  const needAudioPipeline = job.jobType !== "plan";
+
   try {
+    let whisperWav: string | undefined;
+    let renderWav: string | undefined;
+
     // 1. Process audio
-    setPhase(job, "process-audio", 5, "Normalizing loudness…");
-    const { whisperWav, renderWav } = await processAudio(ep.audioPath);
-    checkAbort();
+    if (needAudioPipeline) {
+      setPhase(job, "process-audio", 5, "Normalizing loudness…");
+      const audioOut = await processAudio(ep.audioPath);
+      whisperWav = audioOut.whisperWav;
+      renderWav = audioOut.renderWav;
+      checkAbort();
+    }
 
     // 2. Transcribe
-    setPhase(job, "transcribe", 15, "Whisper transcribing…");
-    await transcribeAudio(whisperWav, transcriptJson);
-    checkAbort();
+    if (runTranscribe && whisperWav) {
+      setPhase(job, "transcribe", 15, "Whisper transcribing…");
+      await transcribeAudio(whisperWav, transcriptJson);
+      checkAbort();
 
-    // 3. Spell fix
-    setPhase(job, "spell-fix", 30, "Sửa chính tả qua OpenAI…");
-    await spellFix(transcriptJson, correctedJson);
-    checkAbort();
+      // 3. Spell fix
+      setPhase(job, "spell-fix", 30, "Sửa chính tả qua OpenAI…");
+      await spellFix(transcriptJson, correctedJson);
+      checkAbort();
+    } else if (job.jobType === "render") {
+      // Skip transcribe phases — UI sẽ thấy phases này done (currentOrder vượt qua)
+      setPhase(job, "spell-fix", 32, "Reuse existing transcript (cached)");
+    }
+
+    // Job transcribe-only → kết thúc ở đây
+    if (job.jobType === "transcribe") {
+      job.finishedAt = Date.now();
+      setPhase(job, "done", 100, "Tạo transcript xong");
+      return;
+    }
 
     // 4. Plan episode
-    setPhase(job, "plan-episode", 40, "Cắt cảnh + gán sceneType…");
-    await planEpisode(correctedJson, ep.config, planJsonPath);
-    checkAbort();
+    if (runPlan) {
+      setPhase(job, "plan-episode", 40, "Cắt cảnh + gán sceneType…");
+      await planEpisode(correctedJson, ep.config, planJsonPath);
+      checkAbort();
+    } else if (job.jobType === "render") {
+      setPhase(job, "plan-episode", 42, "Reuse existing plan (cached)");
+    }
+
+    // Job plan-only → kết thúc ở đây
+    if (job.jobType === "plan") {
+      job.finishedAt = Date.now();
+      setPhase(job, "done", 100, "Tạo plan cảnh xong");
+      return;
+    }
+
+    // jobType === "render": tiếp tục phases 5-9
+    if (!renderWav) {
+      throw new Error("Internal: renderWav undefined cho render job");
+    }
 
     // 5. Copy public assets
     const audioPublicName = `${baseName}.audio.wav`;
@@ -249,12 +376,27 @@ async function runJob(job: JobInternal): Promise<void> {
       }
     }
 
+    // Cover image — copy từ input/ sang public/, giữ nguyên filename để
+    // `staticFile(episode.coverImage)` trong IntroCard resolve được.
+    let episodeConfig = ep.config;
+    if (ep.config.coverImage) {
+      const coverAbsPath = path.join(PATHS.INPUT_DIR, ep.config.coverImage);
+      if (fs.existsSync(coverAbsPath)) {
+        const coverPublicName = ep.config.coverImage;
+        fs.copyFileSync(coverAbsPath, path.join(PUBLIC_DIR, coverPublicName));
+        cleanupList.push(coverPublicName);
+      } else {
+        // File đã bị xóa thủ công — fallback: bỏ cover, render intro auto-gen
+        episodeConfig = { ...ep.config, coverImage: null };
+      }
+    }
+
     const inputProps = {
       audioSrc: audioPublicName,
       transcriptSrc: transcriptPublicName,
       planSrc: planPublicName,
       bgmSrc: bgmPublicName,
-      episode: ep.config,
+      episode: episodeConfig,
     };
 
     try {

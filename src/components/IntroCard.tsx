@@ -1,4 +1,4 @@
-import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, FPS } from "../theme";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
@@ -19,7 +19,19 @@ const T = {
 type Props = {
   title: string;
   episodeNumber: number;
+  /** Nếu set → render ảnh user upload full-frame thay vì auto-gen từ title. */
+  coverImage?: string | null;
+  /** Fit mode khi ảnh ≠ 9:16. `cover` crop, `contain` letterbox với nền vàng. */
+  coverFit?: "cover" | "contain";
+  /** Vị trí crop khi `coverFit=cover`. */
+  coverPosition?: "top" | "center" | "bottom";
 };
+
+const POSITION_CSS = {
+  top: "center top",
+  center: "center center",
+  bottom: "center bottom",
+} as const;
 
 const splitIntoLines = (title: string): string[] => {
   const cleaned = title.trim();
@@ -40,10 +52,38 @@ const splitIntoLines = (title: string): string[] => {
   ];
 };
 
-export const IntroCard: React.FC<Props> = ({ title }) => {
+export const IntroCard: React.FC<Props> = ({
+  title,
+  coverImage,
+  coverFit = "cover",
+  coverPosition = "center",
+}) => {
   const frame = useCurrentFrame();
   const lines = splitIntoLines(title);
   const emphasisIdx = Math.floor(lines.length / 2);
+
+  // User-uploaded cover: render image full-frame với fade-out cuối, KHÔNG auto-gen.
+  if (coverImage) {
+    const outOpacity = interpolate(
+      frame,
+      [T.outStart, INTRO_DURATION_FRAMES],
+      [1, 0],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+    );
+    return (
+      <AbsoluteFill style={{ backgroundColor: COLORS.bg, opacity: outOpacity }}>
+        <Img
+          src={staticFile(coverImage)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: coverFit,
+            objectPosition: POSITION_CSS[coverPosition],
+          }}
+        />
+      </AbsoluteFill>
+    );
+  }
 
   const emphasisPulse = interpolate(
     frame,

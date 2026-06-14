@@ -92,8 +92,12 @@ export const BRAND = {
     "ByteCast Tech khám phá những câu hỏi lớn của thời đại AI, nơi công nghệ giao thoa với triết học, tâm lý học và xã hội học để giúp chúng ta hiểu rõ hơn về con người, ý nghĩa và tương lai.",
   /** Logo lockup đầy đủ (1536×1024 PNG) — dùng ở Intro/Outro. */
   logoSrc: staticFile("brand/logo.png"),
-  /** Mark đơn giản (SVG) — dùng ở Watermark / chỗ size nhỏ <80px. */
-  markSrc: staticFile("brand/logo.svg"),
+  /**
+   * Logo lockup ByteCast Tech (1536×1024 PNG RGBA) — paper-card style với
+   * brand text "ByteCast Tech" sẵn trong ảnh. Dùng ở Watermark — không cần
+   * thêm text "ByteCast Tech" bên cạnh nữa.
+   */
+  markSrc: staticFile("brand/logo-bytecast.png"),
   cta: "Theo dõi để xem thêm",
 } as const;
 
@@ -123,6 +127,23 @@ export const SCENE_TYPES = [
   "InnerSelf",
   "Choice",
   "Knowledge",
+  // ──────── 10 scene mới (Phase visual-richness) ────────
+  "OnAir",
+  "DualMic",
+  "Journal",
+  "Morning",
+  "Listening",
+  "Voices",
+  "Growth",
+  "Quote",
+  "Doubt",
+  "LettingGo",
+  // ──────── Phase 3: giving / transformation (từ essay "Cho đi") ────────
+  "Sacrifice",
+  "Metamorphosis",
+  "Bridge",
+  "Mirror",
+  "Threshold",
 ] as const;
 
 export type SceneType = (typeof SCENE_TYPES)[number];

@@ -3,13 +3,22 @@ import {
   cancelJob,
   getJob,
   listJobs,
+  resetQueue,
+  startPlan,
   startRender,
+  startTranscribe,
 } from "../lib/render-runner";
 
 export const renderRoutes = new Hono();
 
 renderRoutes.get("/jobs", (c) => {
   return c.json({ jobs: listJobs() });
+});
+
+/** Force-reset queue: hủy tất cả job + reset counter. Dùng khi queue kẹt. */
+renderRoutes.post("/jobs/_reset", (c) => {
+  const result = resetQueue();
+  return c.json(result);
 });
 
 renderRoutes.get("/jobs/:id", (c) => {
@@ -24,7 +33,11 @@ renderRoutes.post("/jobs/:id/cancel", (c) => {
   return c.json({ cancelled: true });
 });
 
-/** Start render — POST /api/render { episodeName, preview } */
+/**
+ * Start render — POST /api/render
+ * Body: { episodeName, preview, regenTranscribe?, regenPlan? }
+ * Mặc định reuse transcript/plan đã có. Set regen* = true để force re-run.
+ */
 renderRoutes.post("/", async (c) => {
   let body: unknown;
   try {
@@ -32,15 +45,61 @@ renderRoutes.post("/", async (c) => {
   } catch {
     return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
   }
-  const { episodeName, preview } = (body as {
+  const { episodeName, preview, regenTranscribe, regenPlan } = body as {
     episodeName?: string;
     preview?: boolean;
-  });
+    regenTranscribe?: boolean;
+    regenPlan?: boolean;
+  };
   if (typeof episodeName !== "string") {
     return c.json({ error: "Thiếu episodeName" }, 400);
   }
   try {
-    const job = await startRender(episodeName, { preview: !!preview });
+    const job = await startRender(episodeName, {
+      preview: !!preview,
+      regenTranscribe: !!regenTranscribe,
+      regenPlan: !!regenPlan,
+    });
+    return c.json(job, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+/** Trigger transcribe-only job (process audio + whisper + spell-fix). */
+renderRoutes.post("/transcribe", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { episodeName } = body as { episodeName?: string };
+  if (typeof episodeName !== "string") {
+    return c.json({ error: "Thiếu episodeName" }, 400);
+  }
+  try {
+    const job = await startTranscribe(episodeName);
+    return c.json(job, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+/** Trigger plan-only job (plan-episode). Requires transcript exists. */
+renderRoutes.post("/plan", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { episodeName } = body as { episodeName?: string };
+  if (typeof episodeName !== "string") {
+    return c.json({ error: "Thiếu episodeName" }, 400);
+  }
+  try {
+    const job = await startPlan(episodeName);
     return c.json(job, 201);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);

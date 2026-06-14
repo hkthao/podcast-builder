@@ -67,6 +67,38 @@ const SCENE_KEYWORDS: Record<Exclude<SceneType, "PodcastDesk">, RegExp> = {
     /\b(lựa chọn|tự do|quyết định|ngã ba|hướng đi|nghịch lý|đối mặt|chọn lựa|từ chối|chấp nhận)\b/gi,
   Knowledge:
     /\b(sách|tri thức|học|đọc|thiền|chiêm nghiệm|suy ngẫm|hiểu biết|nghiên cứu|triết học|tâm lý học|khoa học)\b/gi,
+  // ──────── 10 scene mới ────────
+  OnAir:
+    /\b(hôm nay|bắt đầu|tuyên bố|chia sẻ|kể bạn|nói thẳng|tôi muốn nói|hôm nay tôi|mở đầu|tuyên ngôn)\b/gi,
+  DualMic:
+    /\b(đối thoại|tranh luận|hai phía|phản biện|đối lập|bàn luận|trao đổi|hai góc nhìn|đôi bên|debate)\b/gi,
+  Journal:
+    /\b(ghi chép|nhật ký|viết xuống|liệt kê|danh sách|to-do|tự hỏi|nhìn lại|reflect|kiểm điểm)\b/gi,
+  Morning:
+    /\b(buổi sáng|cà phê|tỉnh dậy|khởi đầu|chậm rãi|hiện diện|tận hưởng|sống chậm|bình yên|thư thái)\b/gi,
+  Listening:
+    /\b(lắng nghe|nghe thấy|đồng cảm|im lặng|thấu hiểu|cảm thông|chú tâm|chú ý|nghe lòng|nghe nhau)\b/gi,
+  Voices:
+    /\b(tiếng nói|chatter|self-talk|đầu óc|suy nghĩ rối|nội tâm ồn|tiếng vọng|hỗn loạn|nhiều giọng|tự nói)\b/gi,
+  Growth:
+    /\b(trưởng thành|phát triển|lớn lên|tiến bộ|kiên nhẫn|nuôi dưỡng|từng bước|hành trình|becoming|hành trang)\b/gi,
+  Quote:
+    /\b(châm ngôn|trích dẫn|câu nói|lời thầy|danh ngôn|triết lý sống|câu chuyện hay|smile bài học|wisdom|insight)\b/gi,
+  Doubt:
+    /\b(hoài nghi|không chắc|liệu rằng|có thật|do dự|băn khoăn|mơ hồ|bối rối|chần chừ|uncertainty)\b/gi,
+  LettingGo:
+    /\b(buông bỏ|từ bỏ|chia tay|mất đi|kết thúc|chấp nhận mất|giải phóng|nhẹ lòng|thanh thản|release)\b/gi,
+  // ──────── Phase 3 (giving/transform) ────────
+  Sacrifice:
+    /\b(cho đi|trao đi|hy sinh|nhường|tặng|dâng hiến|phép trừ|khan hiếm|tước đoạt|vơi đi|đong đếm)\b/gi,
+  Metamorphosis:
+    /\b(biến thái|lột xác|chuyển hóa|hóa bướm|kén|tan chảy|rũ bỏ|tái sinh|tái cấu trúc|metabola)\b/gi,
+  Bridge:
+    /\b(cầu nối|nối liền|hai bờ|bắc cầu|khoảng cách|chuyển giao|vượt qua|gắn kết sâu sắc|nối bờ)\b/gi,
+  Mirror:
+    /\b(soi gương|tấm gương|phản chiếu|phản gương|nhìn lại mình|nội tâm hóa|looking glass|gương)\b/gi,
+  Threshold:
+    /\b(ngưỡng cửa|bước qua|ranh giới|chuyển giao|nghi thức|thiêng liêng|thế giới bên kia|liên minh)\b/gi,
 };
 
 export const pickScene = (text: string): SceneType => {

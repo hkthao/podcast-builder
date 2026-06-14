@@ -6,7 +6,9 @@
   "scripts": {
     "remotion-studio": "remotion studio",
     "studio": "concurrently -n server,ui -c blue,magenta \"npm:studio:server\" \"npm:studio:ui\"",
-    "studio:server": "tsx watch server/index.ts",
+    "studio:server": "tsx watch --ignore='src/components/**' --ignore='src/scenes.ts' --ignore='src/ScenePreview.tsx' --ignore='src/Video.tsx' --ignore='src/Root.tsx' --ignore='src/index.ts' --ignore='ui/**' --ignore='public/**' --ignore='tmp/**' --ignore='input/**' --ignore='output/**' server/index.ts",
+    "studio:server:nowatch": "tsx server/index.ts",
+    "studio:nowatch": "concurrently -n server,ui -c blue,magenta \"npm:studio:server:nowatch\" \"npm:studio:ui\"",
     "studio:ui": "cd ui && npm run dev",
     "setup": "tsx scripts/setup-whisper.ts",
     "make": "tsx scripts/make.ts",
