@@ -50,11 +50,11 @@ const PROVIDER_META: Record<
       "Dùng cho AI viết bài (brainstorm ý tưởng, bài luận, kịch bản voiceover) qua model gpt-4o-mini/gpt-4o. Có thể dùng để đọc voiceover (giọng nova/shimmer) nhưng tiếng Việt không tự nhiên bằng Gemini.",
   },
   gemini: {
-    label: "Gemini (Google TTS)",
-    docsUrl: "https://console.cloud.google.com/apis/library/texttospeech.googleapis.com",
+    label: "Gemini",
+    docsUrl: "https://aistudio.google.com/apikey",
     placeholder: "AIzaSy...",
     description:
-      'Dùng cho AI đọc voiceover tiếng Việt (giọng Kore/Aoede/... rất tự nhiên). Lấy API key từ Google Cloud Console: bấm "Lấy API key" → Enable "Cloud Text-to-Speech API" → Credentials → Create API key. Cần bật billing trên project Google Cloud.',
+      'Dùng cho AI đọc voiceover tiếng Việt (giọng Kore/Aoede/... rất tự nhiên). Lấy API key MIỄN PHÍ tại Google AI Studio: bấm "Lấy API key" → Create API key. Không cần billing.',
   },
   anthropic: {
     label: "Anthropic Claude",

@@ -103,22 +103,12 @@ const GEMINI_TTS_VOICES = [
 
 type TtsProvider = "openai" | "gemini";
 
-const LANGUAGE_CODES = [
-  { value: "vi-VN", label: "Vietnamese (Vietnam)" },
-  { value: "en-US", label: "English (US)" },
-  { value: "en-GB", label: "English (UK)" },
-  { value: "ja-JP", label: "Japanese" },
-  { value: "ko-KR", label: "Korean" },
-  { value: "zh-CN", label: "Chinese (Simplified)" },
-  { value: "fr-FR", label: "French" },
-  { value: "de-DE", label: "German" },
-  { value: "es-ES", label: "Spanish" },
-  { value: "it-IT", label: "Italian" },
-];
-
 const GEMINI_TTS_MODELS = [
-  { value: "gemini-2.5-flash-tts", label: "Gemini 2.5 Flash TTS (recommend)" },
-  { value: "gemini-2.5-pro-tts", label: "Gemini 2.5 Pro TTS" },
+  {
+    value: "gemini-2.5-flash-preview-tts",
+    label: "Gemini 2.5 Flash TTS (recommend)",
+  },
+  { value: "gemini-2.5-pro-preview-tts", label: "Gemini 2.5 Pro TTS" },
 ];
 
 const DEFAULT_STYLE =
@@ -673,20 +663,19 @@ function AudioPanel({
   );
   const [ttsModel, setTtsModel] = usePersistedState<string>(
     `${stateKey}.tts-model`,
-    "gemini-2.5-flash-tts",
+    "gemini-2.5-flash-preview-tts",
   );
-  const [ttsLanguage, setTtsLanguage] = usePersistedState<string>(
+  // Rate/pitch/language: Cloud TTS-only, AI Studio endpoint không support.
+  // Giữ state để future restore khi service-account OAuth được implement.
+  const [ttsLanguage] = usePersistedState<string>(
     `${stateKey}.tts-language`,
     "vi-VN",
   );
-  const [ttsSpeakingRate, setTtsSpeakingRate] = usePersistedState<number>(
+  const [ttsSpeakingRate] = usePersistedState<number>(
     `${stateKey}.tts-rate`,
     1.0,
   );
-  const [ttsPitch, setTtsPitch] = usePersistedState<number>(
-    `${stateKey}.tts-pitch`,
-    0,
-  );
+  const [ttsPitch] = usePersistedState<number>(`${stateKey}.tts-pitch`, 0);
   const [ttsStyleInstruction, setTtsStyleInstruction] = usePersistedState<string>(
     `${stateKey}.tts-style`,
     DEFAULT_STYLE,
@@ -758,8 +747,7 @@ function AudioPanel({
             className="w-full inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
           >
             <span>
-              {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model, language,
-              rate, pitch, style)
+              {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model + style)
             </span>
             <ChevronDown
               className={cn(
@@ -770,72 +758,19 @@ function AudioPanel({
           </button>
           {advancedOpen && (
             <div className="mt-2 pt-2 space-y-2 text-xs">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div>
-                  <Label className="text-[10px]">Model</Label>
-                  <select
-                    value={ttsModel}
-                    onChange={(e) => setTtsModel(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
-                  >
-                    {GEMINI_TTS_MODELS.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-[10px]">Language</Label>
-                  <select
-                    value={ttsLanguage}
-                    onChange={(e) => setTtsLanguage(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
-                  >
-                    {LANGUAGE_CODES.map((l) => (
-                      <option key={l.value} value={l.value}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-[10px]">
-                    Rate
-                    <span className="ml-1 font-mono text-muted-foreground">
-                      {ttsSpeakingRate.toFixed(2)}×
-                    </span>
-                  </Label>
-                  <input
-                    type="range"
-                    min={0.25}
-                    max={2}
-                    step={0.05}
-                    value={ttsSpeakingRate}
-                    onChange={(e) =>
-                      setTtsSpeakingRate(Number(e.target.value))
-                    }
-                    className="mt-3 w-full accent-accent"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[10px]">
-                    Pitch
-                    <span className="ml-1 font-mono text-muted-foreground">
-                      {ttsPitch > 0 ? "+" : ""}
-                      {ttsPitch}
-                    </span>
-                  </Label>
-                  <input
-                    type="range"
-                    min={-20}
-                    max={20}
-                    step={1}
-                    value={ttsPitch}
-                    onChange={(e) => setTtsPitch(Number(e.target.value))}
-                    className="mt-3 w-full accent-accent"
-                  />
-                </div>
+              <div>
+                <Label className="text-[10px]">Model</Label>
+                <select
+                  value={ttsModel}
+                  onChange={(e) => setTtsModel(e.target.value)}
+                  className="mt-1 h-9 w-full md:w-1/2 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  {GEMINI_TTS_MODELS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <Label className="text-[10px]">
@@ -921,7 +856,7 @@ function AudioPanel({
           className="h-9 rounded-md border border-input bg-background px-2 text-xs"
           title="TTS provider"
         >
-          <option value="gemini">Gemini</option>
+          <option value="gemini">Gemini (recommend)</option>
           <option value="openai">OpenAI</option>
         </select>
         <select

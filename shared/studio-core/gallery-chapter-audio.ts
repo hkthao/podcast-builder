@@ -38,6 +38,8 @@ import {
   DEFAULT_SPEAKING_RATE,
   DEFAULT_STYLE_INSTRUCTION,
   generateGeminiTts,
+  GEMINI_PCM_CHANNELS,
+  GEMINI_PCM_SAMPLE_RATE,
   GEMINI_VOICES,
   type GeminiTtsModel,
   type GeminiVoice,
@@ -113,6 +115,36 @@ const ffprobeDurationMs = (filePath: string): number => {
   const sec = parseFloat(out.trim());
   if (!Number.isFinite(sec)) return 0;
   return Math.round(sec * 1000);
+};
+
+/**
+ * Gemini AI Studio TTS trả raw PCM (s16le, mono, 24kHz). Pipe vào ffmpeg
+ * cần báo format input vì PCM không có container header.
+ */
+const loudnormPcmToAac = async (
+  rawPcmPath: string,
+  outPath: string,
+): Promise<void> => {
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-f",
+    "s16le",
+    "-ar",
+    String(GEMINI_PCM_SAMPLE_RATE),
+    "-ac",
+    String(GEMINI_PCM_CHANNELS),
+    "-i",
+    rawPcmPath,
+    "-af",
+    "loudnorm=I=-16:TP=-1.5:LRA=11",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    outPath,
+  ]);
 };
 
 const loudnormAndReencode = async (
@@ -202,26 +234,23 @@ async function runGeminiTtsPipeline(
   }
 
   const chunks = chunkTextForGemini(input.transcript);
-  const mp3Buffers: Buffer[] = [];
+  const pcmBuffers: Buffer[] = [];
   for (const chunk of chunks) {
     const { audio } = await generateGeminiTts({
       text: chunk,
       voice: input.voice,
       model: input.model,
       apiKey,
-      audioEncoding: "MP3",
-      speakingRate: input.speakingRate,
-      pitch: input.pitch,
-      languageCode: input.languageCode,
       styleInstruction: input.styleInstruction,
+      // speakingRate/pitch/languageCode bị bỏ qua trên AI Studio endpoint
     });
-    mp3Buffers.push(audio);
+    pcmBuffers.push(audio);
   }
 
-  // MP3 frame-aligned concat ở file level — ffmpeg auto-detect khi loudnorm.
-  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.mp3`);
-  await fsp.writeFile(rawPath, Buffer.concat(mp3Buffers));
-  await loudnormAndReencode(rawPath, input.outPath);
+  // PCM int16 streams concat trực tiếp được (mỗi sample 2 byte, không header).
+  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.pcm`);
+  await fsp.writeFile(rawPath, Buffer.concat(pcmBuffers));
+  await loudnormPcmToAac(rawPath, input.outPath);
   await fsp.unlink(rawPath).catch(() => {
     /* ignore */
   });

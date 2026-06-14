@@ -1,21 +1,20 @@
 /**
- * Gemini TTS provider — Cloud TTS API endpoint (Phase 4b' v2).
+ * Gemini TTS provider — AI Studio endpoint (Phase 4b' v3).
  *
- * Endpoint: texttospeech.googleapis.com/v1beta1/text:synthesize
- * (KHÁC với AI Studio generativelanguage.googleapis.com — Cloud TTS API
- * cho phép tách `input.prompt` (style) và `input.text` (content) → tránh
- * noise như khi prepend style vào text trong AI Studio API.)
+ * Endpoint: generativelanguage.googleapis.com/v1beta/.../generateContent
  *
- * Auth: API key Google Cloud (cùng format AIzaSy..., cần enable Text-to-
- * Speech API trong Cloud Console). Env `GEMINI_API_KEY` (hoặc UI Settings).
+ * Cloud TTS API (texttospeech.googleapis.com) cho structured prompt/text
+ * + speakingRate/pitch nhưng REQUIRE OAuth2 (service account JSON), không
+ * accept API key — không phù hợp cho local studio dùng API key đơn giản.
  *
- * Audio output: MP3 (default) hoặc LINEAR16 PCM. Caller pipe vào ffmpeg
- * loudnorm + AAC re-encode.
- *
- * Voices: 30 prebuilt voices như AI Studio. Voice `Kore` mặc định.
- *
- * Bonus controls: speakingRate (0.25-4.0), pitch (-20 to 20), languageCode
- * (vi-VN, en-US…). Match Cloud TTS Studio UI 1-1.
+ * AI Studio endpoint:
+ *  - Accept API key (AIzaSy...) — user dán qua Settings
+ *  - Có 30 voice prebuilt (Kore/Aoede/...) — chất lượng giống Cloud TTS
+ *  - PCM 24kHz output base64-encoded
+ *  - Tách style/content qua `systemInstruction` field (separate từ user
+ *    content) — giảm noise so với prepend style vào text
+ *  - Không support speakingRate/pitch (Cloud TTS-only) → các field này
+ *    bị bỏ qua, dùng default voice tempo
  */
 
 /** 30 prebuilt voices của Gemini TTS. Source: ai.google.dev docs. */
@@ -54,23 +53,18 @@ export const GEMINI_VOICES = [
 export type GeminiVoice = (typeof GEMINI_VOICES)[number];
 
 export const GEMINI_TTS_MODELS = [
-  "gemini-2.5-flash-tts",
-  "gemini-2.5-pro-tts",
+  "gemini-2.5-flash-preview-tts",
+  "gemini-2.5-pro-preview-tts",
 ] as const;
 export type GeminiTtsModel = (typeof GEMINI_TTS_MODELS)[number];
 
 export const DEFAULT_GEMINI_VOICE: GeminiVoice = "Kore";
-export const DEFAULT_GEMINI_MODEL: GeminiTtsModel = "gemini-2.5-flash-tts";
+export const DEFAULT_GEMINI_MODEL: GeminiTtsModel =
+  "gemini-2.5-flash-preview-tts";
 
-/** Audio encoding output — MP3 đơn giản nhất cho ffmpeg downstream. */
-export const GEMINI_AUDIO_ENCODINGS = [
-  "MP3",
-  "LINEAR16",
-  "OGG_OPUS",
-  "MULAW",
-  "ALAW",
-] as const;
-export type GeminiAudioEncoding = (typeof GEMINI_AUDIO_ENCODINGS)[number];
+/** AI Studio output là PCM 24kHz mono — caller pipe vào ffmpeg s16le. */
+export const GEMINI_PCM_SAMPLE_RATE = 24000;
+export const GEMINI_PCM_CHANNELS = 1;
 
 /** Chunk limit Cloud TTS API. */
 export const GEMINI_CHUNK_LIMIT = 5000;
@@ -92,49 +86,64 @@ export type GeminiTtsRequest = {
   voice: GeminiVoice;
   model?: GeminiTtsModel;
   apiKey: string;
-  /** Style steering — Cloud TTS gửi vào `input.prompt` riêng. */
+  /**
+   * Style steering — AI Studio nhận qua `systemInstruction` field (separate
+   * từ user content) → giảm noise so với prepend vào text.
+   */
   styleInstruction?: string;
-  /** 0.25 → 4.0. Default 1.0 (tốc độ tự nhiên). */
+  /** Cloud TTS-only (không support trên AI Studio). Bỏ qua. */
   speakingRate?: number;
-  /** -20 → 20 semitones. Default 0. */
+  /** Cloud TTS-only. Bỏ qua. */
   pitch?: number;
-  /** BCP-47 code: vi-VN, en-US, ja-JP… */
+  /** Cloud TTS-only. Bỏ qua. */
   languageCode?: string;
-  /** Audio encoding. MP3 default — đơn giản cho ffmpeg auto-detect. */
-  audioEncoding?: GeminiAudioEncoding;
 };
 
-type CloudTtsResponse = {
-  audioContent?: string;
+type AiStudioResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        inlineData?: { mimeType?: string; data?: string };
+      }>;
+    };
+  }>;
   error?: { message?: string; code?: number };
 };
 
 /**
- * Gọi Cloud TTS API → trả audio Buffer (MP3 default, hoặc LINEAR16 PCM).
- * Caller pipe vào ffmpeg để loudnorm + re-encode AAC.
+ * Gọi AI Studio Gemini TTS → trả PCM Buffer (16-bit LE mono 24kHz).
+ * Caller cần ffmpeg `-f s16le -ar 24000 -ac 1` để decode.
  */
 export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
   audio: Buffer;
-  encoding: GeminiAudioEncoding;
+  /** Cho caller biết format input ffmpeg. */
+  encoding: "PCM_S16LE_24K";
 }> {
-  const encoding = input.audioEncoding ?? "MP3";
-  const url = `https://texttospeech.googleapis.com/v1beta1/text:synthesize?key=${input.apiKey}`;
+  const model = input.model ?? DEFAULT_GEMINI_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${input.apiKey}`;
+
+  // AI Studio TTS không support systemInstruction → prepend style + delimiter
+  // vào content. Style cần ngắn + có separator rõ để TTS không đọc.
+  const styleText = (input.styleInstruction ?? DEFAULT_STYLE_INSTRUCTION).trim();
+  // Pattern recommended bởi Google: instruction trên 1 dòng, separator " | ",
+  // sau đó content thật. Voice model thông minh đủ để hiểu prefix là cue.
+  const promptedText = styleText
+    ? `[Hướng dẫn đọc: ${styleText}]\n\n${input.text}`
+    : input.text;
 
   const body = {
-    audioConfig: {
-      audioEncoding: encoding,
-      speakingRate: input.speakingRate ?? DEFAULT_SPEAKING_RATE,
-      pitch: input.pitch ?? DEFAULT_PITCH,
-    },
-    input: {
-      // Cloud TTS: prompt + text tách riêng → TTS KHÔNG đọc prompt
-      prompt: input.styleInstruction ?? DEFAULT_STYLE_INSTRUCTION,
-      text: input.text,
-    },
-    voice: {
-      languageCode: input.languageCode ?? DEFAULT_LANGUAGE_CODE,
-      modelName: input.model ?? DEFAULT_GEMINI_MODEL,
-      name: input.voice,
+    contents: [
+      {
+        parts: [{ text: promptedText }],
+      },
+    ],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: input.voice },
+        },
+      },
     },
   };
 
@@ -147,26 +156,28 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(
-      `Cloud TTS API error ${res.status}: ${errText.slice(0, 500)}`,
+      `Gemini TTS API error ${res.status}: ${errText.slice(0, 500)}`,
     );
   }
 
-  const data = (await res.json()) as CloudTtsResponse;
+  const data = (await res.json()) as AiStudioResponse;
   if (data.error) {
     throw new Error(
-      `Cloud TTS API: ${data.error.message ?? "unknown error"} (code ${data.error.code ?? "?"})`,
+      `Gemini TTS API: ${data.error.message ?? "unknown error"} (code ${data.error.code ?? "?"})`,
     );
   }
 
-  if (!data.audioContent) {
+  const audioBase64 =
+    data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!audioBase64) {
     throw new Error(
-      `Cloud TTS response thiếu audioContent — ${JSON.stringify(data).slice(0, 300)}`,
+      `Gemini TTS response thiếu audio — ${JSON.stringify(data).slice(0, 300)}`,
     );
   }
 
   return {
-    audio: Buffer.from(data.audioContent, "base64"),
-    encoding,
+    audio: Buffer.from(audioBase64, "base64"),
+    encoding: "PCM_S16LE_24K",
   };
 }
 
