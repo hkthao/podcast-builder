@@ -295,11 +295,17 @@ function SourcesPanel({
               <option value="">— Không dùng brainstorm —</option>
               {brainstormSessions
                 .filter((s) => s.style === "podcast")
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.topic} ({s.ideas.length} idea)
-                  </option>
-                ))}
+                .map((s) => {
+                  const topic =
+                    s.topic.length > 60
+                      ? `${s.topic.slice(0, 60).trim()}…`
+                      : s.topic;
+                  return (
+                    <option key={s.id} value={s.id} title={s.topic}>
+                      {topic} ({s.ideas.length} idea)
+                    </option>
+                  );
+                })}
             </select>
             {isPodcast && (
               <select

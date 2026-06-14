@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Mic2,
   Music,
+  Plus,
   Image as ImageIcon,
   ShieldCheck,
   ShieldAlert,
@@ -73,6 +74,9 @@ export function Brainstorm() {
     "brainstorm.activeId",
     null,
   );
+  // Phase: chế độ "Mới" — user clear form để brainstorm session mới.
+  // Khi true, auto-select effect bên dưới KHÔNG snap lại sessions[0].
+  const [isNewMode, setIsNewMode] = useState(false);
 
   const sessionsQ = useQuery({
     queryKey: ["brainstorm-sessions", workspace],
@@ -107,19 +111,22 @@ export function Brainstorm() {
   }, [modelsQ.data, provider]);
 
   const sessions = sessionsQ.data?.sessions ?? [];
-  const activeSession =
-    activeId !== null
+  const activeSession = isNewMode
+    ? null
+    : activeId !== null
       ? (sessions.find((s) => s.id === activeId) ?? null)
       : (sessions[0] ?? null);
 
   // Auto-select latest session khi load lần đầu HOẶC activeId stale
-  // (vd session đã bị xoá, hoặc localStorage persist id từ máy khác)
+  // (vd session đã bị xoá, hoặc localStorage persist id từ máy khác).
+  // Trừ khi user bấm "Mới" → giữ form trống cho user nhập topic mới.
   useEffect(() => {
     if (sessions.length === 0) return;
+    if (isNewMode) return;
     if (!activeId || !sessions.some((s) => s.id === activeId)) {
       setActiveId(sessions[0].id);
     }
-  }, [sessions, activeId, setActiveId]);
+  }, [sessions, activeId, setActiveId, isNewMode]);
 
   const genMut = useMutation({
     mutationFn: () =>
@@ -136,8 +143,17 @@ export function Brainstorm() {
     onSuccess: (newSession) => {
       qc.invalidateQueries({ queryKey: ["brainstorm-sessions"] });
       setActiveId(newSession.id);
+      setIsNewMode(false);
     },
   });
+
+  const startNew = () => {
+    setTopic("");
+    setActiveId(null);
+    setIsNewMode(true);
+    // Scroll lên đầu để user thấy form input
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const pickMut = useMutation({
     mutationFn: (vars: { id: string; pickedIdx: number | null }) =>
@@ -193,7 +209,12 @@ export function Brainstorm() {
           <HistorySidebar
             sessions={sessions}
             activeId={activeSession?.id ?? null}
-            onSelect={setActiveId}
+            onSelect={(id) => {
+              setActiveId(id);
+              setIsNewMode(false);
+            }}
+            onNew={startNew}
+            isNewMode={isNewMode}
           />
         </aside>
 
@@ -389,10 +410,14 @@ function HistorySidebar({
   sessions,
   activeId,
   onSelect,
+  onNew,
+  isNewMode,
 }: {
   sessions: BrainstormSession[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onNew: () => void;
+  isNewMode: boolean;
 }) {
   const [q, setQ] = useState("");
   const [catFilter, setCatFilter] = useState<TopicCategory | null>(null);
@@ -420,9 +445,20 @@ function HistorySidebar({
       <div className="px-4 py-3 border-b bg-secondary/30 flex items-center gap-2">
         <History className="size-4" />
         <span className="font-medium text-sm">Lịch sử</span>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {filtered.length}/{sessions.length}
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onNew}
+          disabled={isNewMode}
+          className="ml-auto h-7 text-xs"
+          title="Bắt đầu brainstorm mới — clear topic + deselect"
+        >
+          <Plus className="size-3.5" />
+          Mới
+        </Button>
       </div>
       <div className="p-2 space-y-2 border-b">
         <div className="relative">
