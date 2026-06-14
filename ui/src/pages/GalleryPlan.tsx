@@ -747,7 +747,7 @@ function AudioPanel({
             className="w-full inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
           >
             <span>
-              {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model + style)
+              {advancedOpen ? "Thu gọn tuỳ chọn TTS" : "Tuỳ chọn TTS (model + style)"}
             </span>
             <ChevronDown
               className={cn(
@@ -757,13 +757,13 @@ function AudioPanel({
             />
           </button>
           {advancedOpen && (
-            <div className="mt-2 pt-2 space-y-2 text-xs">
-              <div>
-                <Label className="text-[10px]">Model</Label>
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-[100px_1fr] gap-2 items-center">
+                <Label className="text-xs text-muted-foreground">Model</Label>
                 <select
                   value={ttsModel}
                   onChange={(e) => setTtsModel(e.target.value)}
-                  className="mt-1 h-9 w-full md:w-1/2 rounded-md border border-input bg-background px-2 text-xs"
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
                 >
                   {GEMINI_TTS_MODELS.map((m) => (
                     <option key={m.value} value={m.value}>
@@ -772,30 +772,33 @@ function AudioPanel({
                   ))}
                 </select>
               </div>
-              <div>
-                <Label className="text-[10px]">
-                  Hướng dẫn phong cách đọc
-                  <span className="ml-1 text-muted-foreground font-normal">
-                    · AI chỉ DÙNG làm gợi ý giọng đọc, KHÔNG đọc đoạn này
-                    thành tiếng
-                  </span>
+              <div className="grid grid-cols-1 md:grid-cols-[100px_1fr] gap-2 items-start">
+                <Label className="text-xs text-muted-foreground md:pt-2">
+                  Phong cách
                 </Label>
-                <Textarea
-                  value={ttsStyleInstruction}
-                  onChange={(e) => setTtsStyleInstruction(e.target.value)}
-                  rows={2}
-                  className="mt-1 text-xs"
-                  placeholder='vd: "Read aloud in a warm tone. Giọng miền Bắc."'
-                />
-                {ttsStyleInstruction !== DEFAULT_STYLE && (
-                  <button
-                    type="button"
-                    onClick={() => setTtsStyleInstruction(DEFAULT_STYLE)}
-                    className="mt-1 text-[10px] text-accent hover:underline"
-                  >
-                    Reset default
-                  </button>
-                )}
+                <div>
+                  <Textarea
+                    value={ttsStyleInstruction}
+                    onChange={(e) => setTtsStyleInstruction(e.target.value)}
+                    rows={2}
+                    className="text-xs"
+                    placeholder='vd: "Đọc giọng trầm ấm, miền Bắc, chiêm nghiệm như narrator phim tài liệu nghệ thuật"'
+                  />
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-muted-foreground">
+                      AI chỉ DÙNG làm gợi ý — KHÔNG đọc đoạn này thành tiếng.
+                    </p>
+                    {ttsStyleInstruction !== DEFAULT_STYLE && (
+                      <button
+                        type="button"
+                        onClick={() => setTtsStyleInstruction(DEFAULT_STYLE)}
+                        className="text-[10px] text-accent hover:underline shrink-0"
+                      >
+                        Reset default
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
