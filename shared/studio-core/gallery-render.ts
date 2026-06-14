@@ -24,6 +24,7 @@ import {
   type GalleryChapterPlan,
 } from "./gallery-plan-store";
 import { prepareChapterRenderAudio } from "./gallery-bgm-mix";
+import { prefetchAssetsBatch } from "./gallery-asset-prefetch";
 import { getAsset } from "./gallery-asset-store";
 import { PATHS } from "./paths";
 import type { VisualBeat } from "../../gallery/src/visual-beat";
@@ -147,17 +148,38 @@ export async function buildChapterProps(
       sentenceStartMs,
       audioDurationMs,
     );
+
+    // Phase 4d.x: prefetch assets về local /tmp/ trước render để Remotion
+    // fetch từ localhost (tránh Wikimedia/Met CDN timeout/UA-block).
+    const assetsToFetch: Array<{ assetId: string; remoteUrl: string }> = [];
+    for (const b of chapter.visualBeats) {
+      if (!b.assetIdRef) continue;
+      const asset = getAsset(b.assetIdRef);
+      if (asset?.fullUrl) {
+        assetsToFetch.push({
+          assetId: asset.id,
+          remoteUrl: asset.fullUrl,
+        });
+      }
+    }
+    const localPathMap = await prefetchAssetsBatch(assetsToFetch);
+
     resolvedBeats = chapter.visualBeats.map((b, i) => {
       const range = ranges[i];
       const startFrame = Math.floor((range.startMs / 1000) * FPS);
       const endFrame = Math.floor((range.endMs / 1000) * FPS);
       const asset = b.assetIdRef ? getAsset(b.assetIdRef) : null;
+      // Use local cached URL nếu prefetch thành công, fallback remote
+      const localPath = asset ? localPathMap.get(asset.id) : undefined;
+      const assetUrl = localPath
+        ? `${audioUrlBase}${localPath}`
+        : (asset?.fullUrl ?? null);
       return {
         startFrame,
         durationFrames: Math.max(1, endFrame - startFrame),
         keyword: b.keyword,
         kenBurns: b.kenBurns,
-        assetUrl: asset?.fullUrl ?? null,
+        assetUrl,
         assetTitle: asset?.title ?? "",
         assetAuthor: asset?.author ?? "",
         assetYear: asset?.year ?? "",
