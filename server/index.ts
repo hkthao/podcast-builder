@@ -105,6 +105,7 @@ const serveStatic = (rootDir: string) =>
     const contentType =
       ext === "mp4" ? "video/mp4"
       : ext === "m4a" ? "audio/mp4"
+      : ext === "aac" ? "audio/aac"
       : ext === "mp3" ? "audio/mpeg"
       : ext === "wav" ? "audio/wav"
       : ext === "jpg" || ext === "jpeg" ? "image/jpeg"

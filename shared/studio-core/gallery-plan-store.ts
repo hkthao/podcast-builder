@@ -20,6 +20,10 @@ import {
   VisualBeatSchema,
   type VisualBeat,
 } from "../../gallery/src/visual-beat";
+import {
+  WordTimestampSchema,
+  type WordTimestamp,
+} from "../../gallery/src/word-timestamp";
 import { safeParseJson } from "../lib/safe-json";
 
 /**
@@ -31,12 +35,26 @@ export type GalleryPlanChapter = GalleryChapter & {
   transcript: string;
   /**
    * Phase 4a: visual beats sidecar — LLM gen kèm transcript trong 1 LLM call.
-   * Anchor bằng sentenceIdx → align với TTS word timestamps tại render (Phase 4b+).
+   * Anchor bằng sentenceIdx → align với TTS word timestamps tại render.
    * [] cho music chapter và cho chapter chưa gen.
    */
   visualBeats: VisualBeat[];
   /** Trạng thái review user: chưa gen / đang draft / đã approve. */
   status: "pending" | "draft" | "approved";
+  /**
+   * Phase 4b: filename audio TTS đã gen (cách filename dạng
+   * "gallery-{planId}-ch{idx}.aac" trong TMP_DIR). null = chưa gen.
+   * Music chapter có thể null (sẽ dùng BGM trong render thay vì TTS).
+   */
+  audioFilename: string | null;
+  /** Phase 4b: thời lượng audio file (ms) — ffprobe sau khi TTS xong. */
+  audioDurationMs: number | null;
+  /**
+   * Phase 4b: word-level timestamps từ Whisper ngược trên audio file.
+   * Render engine align beat.sentenceIdx với timestamp tại render time.
+   * [] khi chưa gen audio hoặc music chapter.
+   */
+  wordTimestamps: WordTimestamp[];
 };
 
 export type GalleryChapterPlan = {
@@ -76,10 +94,15 @@ const slugify = (s: string): string =>
 
 const rowToPlan = (r: DbRow): GalleryChapterPlan => {
   const chapters = JSON.parse(r.chapters_json) as Array<
-    GalleryPlanChapter & { visualBeats?: unknown }
+    GalleryPlanChapter & {
+      visualBeats?: unknown;
+      audioFilename?: unknown;
+      audioDurationMs?: unknown;
+      wordTimestamps?: unknown;
+    }
   >;
-  // Phase 4a: backfill visualBeats=[] cho plan tạo trước Phase 4a
   for (const ch of chapters) {
+    // Phase 4a: backfill visualBeats=[]
     if (!Array.isArray(ch.visualBeats)) {
       ch.visualBeats = [];
     } else {
@@ -89,6 +112,19 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
           return r.success ? r.data : null;
         })
         .filter((b): b is VisualBeat => b !== null);
+    }
+    // Phase 4b: backfill audio fields
+    if (typeof ch.audioFilename !== "string") ch.audioFilename = null;
+    if (typeof ch.audioDurationMs !== "number") ch.audioDurationMs = null;
+    if (!Array.isArray(ch.wordTimestamps)) {
+      ch.wordTimestamps = [];
+    } else {
+      ch.wordTimestamps = (ch.wordTimestamps as unknown[])
+        .map((w) => {
+          const r = WordTimestampSchema.safeParse(w);
+          return r.success ? r.data : null;
+        })
+        .filter((w): w is WordTimestamp => w !== null);
     }
   }
   return {
@@ -198,6 +234,9 @@ export async function createPlanFromIdea(input: {
     ...ch,
     transcript: "",
     visualBeats: [], // Phase 4a: empty cho đến khi gen
+    audioFilename: null, // Phase 4b
+    audioDurationMs: null,
+    wordTimestamps: [],
     // Music interlude không cần gen transcript → mark draft luôn cho user
     // approve nhanh; narration thì pending chờ gen.
     status: ch.kind === "music" ? "draft" : "pending",
@@ -474,4 +513,40 @@ export function countSentences(transcript: string): number {
     .split(/[.!?]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0).length;
+}
+
+// ────── Phase 4b: TTS + Whisper alignment ──────
+
+/** Tên file cố định theo (planId, chapterIdx) — flat trong TMP_DIR. */
+export const galleryChapterAudioFilename = (
+  planId: string,
+  chapterIdx: number,
+): string => `gallery-${planId}-ch${String(chapterIdx).padStart(2, "0")}.aac`;
+
+/**
+ * Save audio fields cho 1 chapter sau khi TTS + Whisper xong.
+ */
+export async function updateChapterAudio(
+  planId: string,
+  chapterIdx: number,
+  audio: {
+    audioFilename: string;
+    audioDurationMs: number;
+    wordTimestamps: WordTimestamp[];
+  },
+): Promise<GalleryChapterPlan | null> {
+  const plan = await getPlan(planId);
+  if (!plan) return null;
+  if (chapterIdx < 0 || chapterIdx >= plan.chapters.length) {
+    const err = new Error("chapterIdx out of range") as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+  const ch = plan.chapters[chapterIdx];
+  ch.audioFilename = audio.audioFilename;
+  ch.audioDurationMs = audio.audioDurationMs;
+  ch.wordTimestamps = audio.wordTimestamps;
+  plan.updatedAt = new Date().toISOString();
+  savePlan(plan);
+  return plan;
 }

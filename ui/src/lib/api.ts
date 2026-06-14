@@ -570,11 +570,21 @@ export type VisualBeat = {
   note: string;
 };
 
+export type WordTimestamp = {
+  word: string;
+  startMs: number;
+  endMs: number;
+};
+
 export type GalleryPlanChapter = GalleryChapter & {
   transcript: string;
   /** Phase 4a: visual beats sidecar — anchored bằng sentenceIdx. */
   visualBeats: VisualBeat[];
   status: "pending" | "draft" | "approved";
+  /** Phase 4b: TTS audio filename (trong /tmp/) + duration + word timestamps. */
+  audioFilename: string | null;
+  audioDurationMs: number | null;
+  wordTimestamps: WordTimestamp[];
 };
 
 export type GalleryChapterPlan = {
@@ -1129,6 +1139,16 @@ export const api = {
   ) =>
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/generate`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  genGalleryPlanChapterAudio: (
+    planId: string,
+    chapterIdx: number,
+    input: { voice?: string; ttsModel?: string; force?: boolean } = {},
+  ) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
       { method: "POST", body: JSON.stringify(input) },
     ),
 

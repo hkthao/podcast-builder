@@ -32,6 +32,8 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  Volume2,
+  Headphones,
 } from "lucide-react";
 import {
   api,
@@ -313,6 +315,13 @@ function ChapterCard({
     },
   });
 
+  // Phase 4b: TTS + Whisper alignment
+  const audioMut = useMutation({
+    mutationFn: (force: boolean) =>
+      api.genGalleryPlanChapterAudio(planId, chapterIdx, { force }),
+    onSuccess: (plan) => onMutate(plan),
+  });
+
   // Debounced autosave khi transcript dirty
   useEffect(() => {
     if (!dirty) return;
@@ -466,6 +475,14 @@ function ChapterCard({
             </div>
           </div>
 
+          {/* Phase 4b: audio TTS + Whisper alignment */}
+          <AudioPanel
+            chapter={chapter}
+            onGen={(force) => audioMut.mutate(force)}
+            genPending={audioMut.isPending}
+            genError={audioMut.error}
+          />
+
           {/* Phase 4a: visual beats editor */}
           <VisualBeatsEditor
             beats={chapter.visualBeats}
@@ -538,6 +555,114 @@ const KEN_BURNS_OPTIONS: KenBurnsMode[] = [
   "pan-down",
   "static",
 ];
+
+function AudioPanel({
+  chapter,
+  onGen,
+  genPending,
+  genError,
+}: {
+  chapter: GalleryPlanChapter;
+  onGen: (force: boolean) => void;
+  genPending: boolean;
+  genError: unknown;
+}) {
+  const hasAudio = chapter.audioFilename !== null;
+  const durSec = chapter.audioDurationMs
+    ? Math.round(chapter.audioDurationMs / 1000)
+    : 0;
+  const targetSec = chapter.minutes * 60;
+  const wordCount = chapter.wordTimestamps.length;
+
+  return (
+    <div className="mt-5 border-t pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <Headphones className="size-4" />
+          Audio + word timestamps
+          {hasAudio && (
+            <Badge variant="outline" className="text-[10px] gap-1 ml-1">
+              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+              {durSec}s · {wordCount} words
+            </Badge>
+          )}
+        </h4>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onGen(hasAudio)} // hasAudio → force re-gen
+          disabled={genPending || !chapter.transcript.trim()}
+          title={
+            !chapter.transcript.trim()
+              ? "Cần transcript trước khi gen audio"
+              : hasAudio
+                ? "Re-gen audio (overwrite file cũ)"
+                : "Gen TTS + Whisper alignment"
+          }
+        >
+          {genPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : hasAudio ? (
+            <RefreshCw className="size-3.5" />
+          ) : (
+            <Volume2 className="size-3.5" />
+          )}
+          {genPending
+            ? "Đang gen…"
+            : hasAudio
+              ? "Re-gen audio"
+              : "Gen audio + timestamps"}
+        </Button>
+      </div>
+
+      {genError !== null && genError !== undefined ? (
+        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(genError)}</span>
+        </div>
+      ) : null}
+
+      {hasAudio && (
+        <div className="mt-3 space-y-2">
+          <audio
+            controls
+            preload="metadata"
+            src={`/tmp/${encodeURIComponent(chapter.audioFilename!)}`}
+            className="w-full h-10"
+          />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono">
+              {durSec}s / target ~{targetSec}s
+            </span>
+            {durSec > 0 && (
+              <span className="ml-2">
+                ({wordCount > 0 ? Math.round((wordCount / durSec) * 60) : 0} từ/phút
+                {durSec < targetSec * 0.7 && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {" "}
+                    — ngắn hơn dự kiến
+                  </span>
+                )}
+                {durSec > targetSec * 1.3 && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {" "}
+                    — dài hơn dự kiến
+                  </span>
+                )}
+                )
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+      {genPending && !hasAudio && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          TTS ~20s, Whisper alignment ~20s. Tổng ~30-60s. Hold tight…
+        </p>
+      )}
+    </div>
+  );
+}
 
 function VisualBeatsEditor({
   beats,

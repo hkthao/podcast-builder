@@ -14,6 +14,7 @@ import {
   updatePlanChapters,
   type GalleryPlanChapter,
 } from "../gallery-plan-store";
+import { generateChapterAudio } from "../gallery-chapter-audio";
 import {
   getSession,
   isGallerySession,
@@ -200,6 +201,35 @@ galleryPlanRoutes.post("/:id/chapters/:idx/generate", async (c) => {
       chapterIdx: idx,
       provider: body.provider as LLMProvider,
       model: body.model.trim(),
+    });
+    return c.json(plan);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "NOT_FOUND" ? 404 : err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Phase 4b: TTS + loudnorm + Whisper alignment cho 1 chapter narration.
+ * Body: { voice?, ttsModel?, force? }. Sync (chờ 30-60s).
+ */
+galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
+  const id = c.req.param("id");
+  const idx = Number(c.req.param("idx"));
+  if (!Number.isInteger(idx) || idx < 0) {
+    return c.json({ error: "chapter idx không hợp lệ" }, 400);
+  }
+  const raw = await c.req.json().catch(() => ({}));
+  const body = raw as { voice?: string; ttsModel?: string; force?: boolean };
+  try {
+    const plan = await generateChapterAudio({
+      planId: id,
+      chapterIdx: idx,
+      voice: body.voice as Parameters<typeof generateChapterAudio>[0]["voice"],
+      ttsModel: body.ttsModel as Parameters<typeof generateChapterAudio>[0]["ttsModel"],
+      force: body.force ?? false,
     });
     return c.json(plan);
   } catch (e) {
