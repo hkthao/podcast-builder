@@ -585,6 +585,10 @@ export type GalleryPlanChapter = GalleryChapter & {
   audioFilename: string | null;
   audioDurationMs: number | null;
   wordTimestamps: WordTimestamp[];
+  /** Phase 4d: video MP4 filename (trong /tmp/) sau khi render qua Remotion. */
+  videoFilename: string | null;
+  videoDurationMs: number | null;
+  renderedAt: string | null;
 };
 
 export type GalleryChapterPlan = {
@@ -1160,6 +1164,17 @@ export const api = {
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
       { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  /** Phase 4d: render chapter qua Remotion. Sync, ~60-90s. */
+  renderGalleryPlanChapter: (planId: string, chapterIdx: number) =>
+    jsonFetch<{
+      plan: GalleryChapterPlan;
+      outputPath: string;
+      durationMs: number;
+    }>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/render`,
+      { method: "POST" },
     ),
 
   deleteGalleryPlan: (id: string) =>

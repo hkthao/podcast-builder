@@ -55,6 +55,15 @@ export type GalleryPlanChapter = GalleryChapter & {
    * [] khi chưa gen audio hoặc music chapter.
    */
   wordTimestamps: WordTimestamp[];
+  /**
+   * Phase 4d: filename video MP4 sau khi render qua Remotion. Dạng
+   * "gallery-{planId}-ch{idx}.mp4" trong TMP_DIR. null = chưa render.
+   */
+  videoFilename: string | null;
+  /** Phase 4d: thời lượng video (ms) — từ composition.durationInFrames / fps. */
+  videoDurationMs: number | null;
+  /** Phase 4d: ISO timestamp lần render cuối. null = chưa render. */
+  renderedAt: string | null;
 };
 
 export type GalleryChapterPlan = {
@@ -99,6 +108,9 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
       audioFilename?: unknown;
       audioDurationMs?: unknown;
       wordTimestamps?: unknown;
+      videoFilename?: unknown;
+      videoDurationMs?: unknown;
+      renderedAt?: unknown;
     }
   >;
   for (const ch of chapters) {
@@ -126,6 +138,10 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
         })
         .filter((w): w is WordTimestamp => w !== null);
     }
+    // Phase 4d: backfill video fields
+    if (typeof ch.videoFilename !== "string") ch.videoFilename = null;
+    if (typeof ch.videoDurationMs !== "number") ch.videoDurationMs = null;
+    if (typeof ch.renderedAt !== "string") ch.renderedAt = null;
   }
   return {
     id: r.id,
@@ -237,6 +253,9 @@ export async function createPlanFromIdea(input: {
     audioFilename: null, // Phase 4b
     audioDurationMs: null,
     wordTimestamps: [],
+    videoFilename: null, // Phase 4d
+    videoDurationMs: null,
+    renderedAt: null,
     // Music interlude không cần gen transcript → mark draft luôn cho user
     // approve nhanh; narration thì pending chờ gen.
     status: ch.kind === "music" ? "draft" : "pending",
@@ -522,6 +541,30 @@ export const galleryChapterAudioFilename = (
   planId: string,
   chapterIdx: number,
 ): string => `gallery-${planId}-ch${String(chapterIdx).padStart(2, "0")}.aac`;
+
+/**
+ * Phase 4d: Save video fields sau khi Remotion render xong.
+ */
+export async function updateChapterVideo(
+  planId: string,
+  chapterIdx: number,
+  video: { videoFilename: string; videoDurationMs: number },
+): Promise<GalleryChapterPlan | null> {
+  const plan = await getPlan(planId);
+  if (!plan) return null;
+  if (chapterIdx < 0 || chapterIdx >= plan.chapters.length) {
+    const err = new Error("chapterIdx out of range") as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+  const ch = plan.chapters[chapterIdx];
+  ch.videoFilename = video.videoFilename;
+  ch.videoDurationMs = video.videoDurationMs;
+  ch.renderedAt = new Date().toISOString();
+  plan.updatedAt = ch.renderedAt;
+  savePlan(plan);
+  return plan;
+}
 
 /**
  * Save audio fields cho 1 chapter sau khi TTS + Whisper xong.

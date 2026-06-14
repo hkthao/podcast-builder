@@ -15,6 +15,7 @@ import {
   type GalleryPlanChapter,
 } from "../gallery-plan-store";
 import { generateChapterAudio } from "../gallery-chapter-audio";
+import { renderChapter } from "../gallery-render";
 import {
   getSession,
   isGallerySession,
@@ -248,6 +249,43 @@ galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
       force: body.force ?? false,
     });
     return c.json(plan);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "NOT_FOUND" ? 404 : err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Phase 4d: render 1 chapter thành MP4 qua Remotion. Sync, ~60-90s/chapter.
+ * Body optional. Audio URL base lấy từ Host header (cùng host studio server).
+ */
+galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
+  const id = c.req.param("id");
+  const idx = Number(c.req.param("idx"));
+  if (!Number.isInteger(idx) || idx < 0) {
+    return c.json({ error: "chapter idx không hợp lệ" }, 400);
+  }
+  // Audio URL base — Remotion bundler fetch audio file qua HTTP từ studio server.
+  // Dùng env STUDIO_PORT (default 3001) + localhost vì bundle chạy local.
+  const port = process.env.STUDIO_PORT ?? "3001";
+  const audioUrlBase = `http://127.0.0.1:${port}`;
+  try {
+    const result = await renderChapter({
+      planId: id,
+      chapterIdx: idx,
+      audioUrlBase,
+    });
+    // Return full updated plan để UI refresh state
+    const plan = await import("../gallery-plan-store").then((m) =>
+      m.getPlan(id),
+    );
+    return c.json({
+      plan,
+      outputPath: result.outputPath,
+      durationMs: result.durationMs,
+    });
   } catch (e) {
     const err = e as Error & { code?: string };
     const status =

@@ -18,7 +18,11 @@ import path from "node:path";
 import fs from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
-import { getPlan, type GalleryChapterPlan } from "./gallery-plan-store";
+import {
+  getPlan,
+  updateChapterVideo,
+  type GalleryChapterPlan,
+} from "./gallery-plan-store";
 import { getAsset } from "./gallery-asset-store";
 import { PATHS } from "./paths";
 import type { VisualBeat } from "../../gallery/src/visual-beat";
@@ -230,8 +234,16 @@ export async function renderChapter(input: {
     },
   });
 
+  const durationMs = Math.round((composition.durationInFrames / FPS) * 1000);
+
+  // Phase 4d.2: persist video filename + duration vào DB
+  await updateChapterVideo(plan.id, input.chapterIdx, {
+    videoFilename: outFilename,
+    videoDurationMs: durationMs,
+  });
+
   return {
     outputPath: outPath,
-    durationMs: Math.round((composition.durationInFrames / FPS) * 1000),
+    durationMs,
   };
 }

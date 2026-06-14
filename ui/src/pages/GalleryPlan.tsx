@@ -34,6 +34,8 @@ import {
   ChevronDown,
   Volume2,
   Headphones,
+  Video as VideoIcon,
+  Film,
 } from "lucide-react";
 import {
   api,
@@ -425,6 +427,12 @@ function ChapterCard({
     onSuccess: (plan) => onMutate(plan),
   });
 
+  // Phase 4d.2: Remotion render
+  const renderMut = useMutation({
+    mutationFn: () => api.renderGalleryPlanChapter(planId, chapterIdx),
+    onSuccess: (res) => onMutate(res.plan),
+  });
+
   // Debounced autosave khi transcript dirty
   useEffect(() => {
     if (!dirty) return;
@@ -594,6 +602,14 @@ function ChapterCard({
             onSave={(beats) => saveMut.mutate({ visualBeats: beats })}
             saving={saveMut.isPending}
           />
+
+          {/* Phase 4d.2: video render */}
+          <VideoPanel
+            chapter={chapter}
+            onRender={() => renderMut.mutate()}
+            renderPending={renderMut.isPending}
+            renderError={renderMut.error}
+          />
         </div>
       )}
 
@@ -761,6 +777,125 @@ function AudioPanel({
       {genPending && !hasAudio && (
         <p className="mt-2 text-xs text-muted-foreground">
           TTS ~20s, Whisper alignment ~20s. Tổng ~30-60s. Hold tight…
+        </p>
+      )}
+    </div>
+  );
+}
+
+function VideoPanel({
+  chapter,
+  onRender,
+  renderPending,
+  renderError,
+}: {
+  chapter: GalleryPlanChapter;
+  onRender: () => void;
+  renderPending: boolean;
+  renderError: unknown;
+}) {
+  const hasVideo = chapter.videoFilename !== null;
+  const hasAudio = chapter.audioFilename !== null;
+  const beatsCount = chapter.visualBeats.length;
+  const beatsWithAsset = chapter.visualBeats.filter(
+    (b) => b.assetIdRef !== null,
+  ).length;
+  const durSec = chapter.videoDurationMs
+    ? Math.round(chapter.videoDurationMs / 1000)
+    : 0;
+
+  // Render điều kiện: phải có audio + ít nhất 1 beat (kể cả chưa attach asset →
+  // placeholder). Music chapter chưa render được (cần BGM Phase 4e).
+  const canRender = hasAudio && beatsCount > 0;
+  const disableReason = !hasAudio
+    ? "Cần gen audio trước"
+    : beatsCount === 0
+      ? "Cần ít nhất 1 visual beat"
+      : null;
+
+  return (
+    <div className="mt-5 border-t pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <Film className="size-4" />
+          Video render
+          {hasVideo && (
+            <Badge variant="outline" className="text-[10px] gap-1 ml-1">
+              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+              {durSec}s · 1920×1080 @ 24fps
+            </Badge>
+          )}
+          {beatsCount > 0 && (
+            <Badge variant="outline" className="text-[10px] ml-1">
+              {beatsWithAsset}/{beatsCount} beat có asset
+            </Badge>
+          )}
+        </h4>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRender}
+          disabled={renderPending || !canRender}
+          title={disableReason ?? (hasVideo ? "Re-render" : "Render MP4")}
+        >
+          {renderPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : hasVideo ? (
+            <RefreshCw className="size-3.5" />
+          ) : (
+            <VideoIcon className="size-3.5" />
+          )}
+          {renderPending
+            ? "Đang render…"
+            : hasVideo
+              ? "Re-render"
+              : "Render video"}
+        </Button>
+      </div>
+
+      {disableReason && !hasVideo && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          <AlertCircle className="inline size-3 mr-1" />
+          {disableReason}
+        </p>
+      )}
+
+      {renderError !== null && renderError !== undefined ? (
+        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(renderError)}</span>
+        </div>
+      ) : null}
+
+      {hasVideo && (
+        <div className="mt-3 space-y-2">
+          <video
+            controls
+            preload="metadata"
+            src={`/tmp/${encodeURIComponent(chapter.videoFilename!)}`}
+            className="w-full rounded-md border bg-black aspect-video"
+          />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono">{durSec}s</span>
+            {chapter.renderedAt && (
+              <span className="ml-2">
+                · render {new Date(chapter.renderedAt).toLocaleString("vi-VN")}
+              </span>
+            )}
+            {beatsWithAsset < beatsCount && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                · {beatsCount - beatsWithAsset} beat hiện placeholder (chưa
+                attach asset)
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {renderPending && !hasVideo && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Bundle Remotion ~5s, render ~3x realtime. Chapter 4 phút → ~60-90s.
+          Hold tight…
         </p>
       )}
     </div>
