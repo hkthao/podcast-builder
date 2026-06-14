@@ -116,6 +116,36 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_errors_id
       ON server_errors(id DESC);
   `);
+
+  // Gallery asset library — Phase 26a cross-episode reuse (link-only)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gallery_assets (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      author TEXT,
+      year TEXT,
+      thumb_url TEXT NOT NULL,
+      full_url TEXT NOT NULL,
+      source_page TEXT NOT NULL,
+      license TEXT NOT NULL,
+      license_status TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      duration_ms INTEGER,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      saved_at TEXT NOT NULL,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      used_in_episodes_json TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX IF NOT EXISTS idx_gallery_assets_saved
+      ON gallery_assets(saved_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_gallery_assets_provider
+      ON gallery_assets(provider);
+    CREATE INDEX IF NOT EXISTS idx_gallery_assets_kind
+      ON gallery_assets(kind);
+  `);
 }
 
 export function getDbPath(): string {

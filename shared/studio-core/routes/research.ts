@@ -7,7 +7,18 @@
  */
 import { Hono } from "hono";
 import { PROVIDERS, PROVIDERS_BY_ID } from "../asset-sources";
-import type { AssetKind, AssetResult } from "../asset-sources/types";
+import type { AssetKind, AssetResult, LicenseStatus } from "../asset-sources/types";
+import {
+  deleteAsset,
+  getAsset,
+  linkToEpisode,
+  listAssets,
+  saveAsset,
+  setTags,
+  togglePin,
+  unlinkFromEpisode,
+  type LibraryFilters,
+} from "../gallery-asset-store";
 
 export const researchRoutes = new Hono();
 
@@ -111,6 +122,130 @@ researchRoutes.get("/search", async (c) => {
     page,
     pageSize,
   });
+});
+
+// ──────────── Library: persisted gallery_assets table ────────────
+
+/** Lưu AssetResult vào library (idempotent theo id). Optional tags. */
+researchRoutes.post("/save", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { asset, tags } = body as { asset?: AssetResult; tags?: string[] };
+  if (!asset || typeof asset !== "object") {
+    return c.json({ error: "Thiếu field 'asset' (AssetResult)" }, 400);
+  }
+  // Sanity-check required fields
+  const required: Array<keyof AssetResult> = [
+    "id",
+    "provider",
+    "kind",
+    "title",
+    "thumbUrl",
+    "fullUrl",
+    "sourcePage",
+    "license",
+    "licenseStatus",
+  ];
+  for (const f of required) {
+    if (typeof (asset as Record<string, unknown>)[f] !== "string") {
+      return c.json({ error: `Field 'asset.${f}' thiếu hoặc không phải string` }, 400);
+    }
+  }
+  try {
+    const saved = saveAsset(asset, Array.isArray(tags) ? tags : []);
+    return c.json(saved, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+researchRoutes.get("/library", (c) => {
+  const filters: LibraryFilters = {};
+  const q = c.req.query("q");
+  if (q) filters.q = q;
+  const kind = c.req.query("kind");
+  if (kind === "image" || kind === "video" || kind === "audio") filters.kind = kind;
+  const provider = c.req.query("provider");
+  if (provider) filters.provider = provider;
+  const ls = c.req.query("licenseStatus");
+  if (ls === "safe" || ls === "check" || ls === "blocked")
+    filters.licenseStatus = ls as LicenseStatus;
+  const tag = c.req.query("tag");
+  if (tag) filters.tag = tag;
+  const pinned = c.req.query("pinned");
+  if (pinned === "true") filters.pinned = true;
+  else if (pinned === "false") filters.pinned = false;
+  return c.json({ assets: listAssets(filters) });
+});
+
+researchRoutes.get("/library/:id", (c) => {
+  const asset = getAsset(c.req.param("id"));
+  if (!asset) return c.json({ error: "Not found" }, 404);
+  return c.json(asset);
+});
+
+researchRoutes.delete("/library/:id", (c) => {
+  const ok = deleteAsset(c.req.param("id"));
+  if (!ok) return c.json({ error: "Not found" }, 404);
+  return c.json({ deleted: true });
+});
+
+researchRoutes.put("/library/:id/tags", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { tags } = body as { tags?: string[] };
+  if (!Array.isArray(tags)) {
+    return c.json({ error: "Field 'tags' phải là array" }, 400);
+  }
+  const updated = setTags(c.req.param("id"), tags);
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json(updated);
+});
+
+researchRoutes.put("/library/:id/pin", (c) => {
+  const updated = togglePin(c.req.param("id"));
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json(updated);
+});
+
+researchRoutes.post("/library/:id/link", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { episodeName } = body as { episodeName?: string };
+  if (typeof episodeName !== "string" || !episodeName) {
+    return c.json({ error: "Thiếu episodeName" }, 400);
+  }
+  const updated = linkToEpisode(c.req.param("id"), episodeName);
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json(updated);
+});
+
+researchRoutes.post("/library/:id/unlink", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { episodeName } = body as { episodeName?: string };
+  if (typeof episodeName !== "string" || !episodeName) {
+    return c.json({ error: "Thiếu episodeName" }, 400);
+  }
+  const updated = unlinkFromEpisode(c.req.param("id"), episodeName);
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json(updated);
 });
 
 /** Single-provider search — dùng cho dev/debug specific provider. */
