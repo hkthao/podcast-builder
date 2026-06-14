@@ -112,7 +112,7 @@ const GEMINI_TTS_MODELS = [
 ];
 
 const DEFAULT_STYLE =
-  "Đọc giọng trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ. Giọng miền Bắc, phong cách documentary nghệ thuật.";
+  "Hồ sơ âm thanh — narrator phim tài liệu nghệ thuật: giọng nam miền Bắc, trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ, pacing chậm rãi như Khan Academy Smarthistory";
 
 export function GalleryPlanPage() {
   const { id } = useParams<{ id: string }>();
@@ -780,13 +780,22 @@ function AudioPanel({
                   <Textarea
                     value={ttsStyleInstruction}
                     onChange={(e) => setTtsStyleInstruction(e.target.value)}
-                    rows={2}
+                    rows={3}
                     className="text-xs"
-                    placeholder='vd: "Đọc giọng trầm ấm, miền Bắc, chiêm nghiệm như narrator phim tài liệu nghệ thuật"'
+                    placeholder='vd: "Giọng nam miền Bắc, trầm ấm, chiêm nghiệm như narrator phim tài liệu"'
                   />
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-muted-foreground">
-                      AI chỉ DÙNG làm gợi ý — KHÔNG đọc đoạn này thành tiếng.
+                  <div className="mt-1 flex items-start justify-between gap-2">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      Gemini AI hiểu đoạn này là "ghi chú đạo diễn" → KHÔNG đọc
+                      thành tiếng, chỉ áp dụng phong cách. Có thể chèn audio
+                      tag inline trong <strong>transcript</strong> để control
+                      biểu cảm:{" "}
+                      <code className="font-mono text-[10px]">[whispers]</code>{" "}
+                      thì thầm,{" "}
+                      <code className="font-mono text-[10px]">[sighs]</code>{" "}
+                      thở dài,{" "}
+                      <code className="font-mono text-[10px]">[laughs]</code>{" "}
+                      cười.
                     </p>
                     {ttsStyleInstruction !== DEFAULT_STYLE && (
                       <button

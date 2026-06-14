@@ -74,12 +74,19 @@ export const DEFAULT_SPEAKING_RATE = 1.0;
 export const DEFAULT_PITCH = 0;
 
 /**
- * Style instruction — Cloud TTS API truyền vào `input.prompt` riêng với
- * `input.text` nên TTS KHÔNG đọc đoạn này. Tune cho documentary art VN
- * với accent miền Bắc.
+ * Style instruction — Gemini TTS hiểu bracketed "director's notes" ngay
+ * trong prompt (per Gemini docs). Pattern:
+ *   [Style descriptor at start] + actual text
+ *
+ * Có thể chèn audio tags inline trong text để control biểu cảm:
+ *   [whispers] — thì thầm
+ *   [sighs]    — thở dài
+ *   [laughs]   — cười
+ *
+ * Default tune cho documentary art VN, giọng miền Bắc trầm ấm.
  */
 export const DEFAULT_STYLE_INSTRUCTION =
-  "Đọc giọng trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ. Giọng miền Bắc, phong cách documentary nghệ thuật.";
+  "Hồ sơ âm thanh — narrator phim tài liệu nghệ thuật: giọng nam miền Bắc, trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ, pacing chậm rãi như Khan Academy Smarthistory";
 
 export type GeminiTtsRequest = {
   text: string;
@@ -124,11 +131,15 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
 
   // AI Studio TTS không support systemInstruction → prepend style + delimiter
   // vào content. Style cần ngắn + có separator rõ để TTS không đọc.
-  const styleText = (input.styleInstruction ?? DEFAULT_STYLE_INSTRUCTION).trim();
-  // Pattern recommended bởi Google: instruction trên 1 dòng, separator " | ",
-  // sau đó content thật. Voice model thông minh đủ để hiểu prefix là cue.
+  const styleText = (
+    input.styleInstruction ?? DEFAULT_STYLE_INSTRUCTION
+  ).trim();
+  // Pattern per Gemini docs: "[director's note]\n\nactual text". Gemini hiểu
+  // bracketed prefix là cue âm thanh, không đọc thành tiếng. User có thể chèn
+  // audio tags inline như [whispers], [sighs], [laughs] trong text để control
+  // biểu cảm giữa câu.
   const promptedText = styleText
-    ? `[Hướng dẫn đọc: ${styleText}]\n\n${input.text}`
+    ? `[${styleText}]\n\n${input.text}`
     : input.text;
 
   const body = {
