@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import chokidar, { type FSWatcher } from "chokidar";
-import { PATHS } from "./episode-store";
+import { PATHS } from "./paths";
 
 /**
  * Event bus broadcast cho UI qua SSE.
