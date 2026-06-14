@@ -12,7 +12,7 @@
  *   - Nếu essay standalone (không brainstormRef) → id = essay.id, theo essayId
  *   - Nếu episode standalone (upload trực tiếp, không qua essay) → id = episode.name
  */
-import { listSessions, type BrainstormSession } from "./brainstorm-store";
+import { listSessions, type BrainstormSession, type Style } from "./brainstorm-store";
 import { listEssays, type Essay } from "./essay-store";
 import { listEpisodes, type EpisodeSummary } from "./episode-store";
 import { listReferences } from "./reference-store";
@@ -90,11 +90,13 @@ const maxIso = (...isos: Array<string | null | undefined>): string => {
   return valid.sort().pop()!;
 };
 
-export async function buildWorkflowChains(): Promise<WorkflowChain[]> {
+export async function buildWorkflowChains(
+  filter: { style?: Style } = {},
+): Promise<WorkflowChain[]> {
   const [brainstorms, essays, episodes, refs] = await Promise.all([
-    listSessions(),
-    listEssays(),
-    listEpisodes(),
+    listSessions(filter.style ? { style: filter.style } : {}),
+    listEssays(filter.style ? { style: filter.style } : {}),
+    listEpisodes(filter.style ? { style: filter.style } : {}),
     listReferences({}),
   ]);
 

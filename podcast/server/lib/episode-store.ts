@@ -133,7 +133,9 @@ const loadSummary = async (
 };
 
 /** List tất cả episode (mỗi `input/<name>.json` = 1 episode). Sort by mtime desc. */
-export async function listEpisodes(): Promise<EpisodeSummary[]> {
+export async function listEpisodes(
+  filter: { style?: EpisodeConfig["style"] } = {},
+): Promise<EpisodeSummary[]> {
   let entries: string[];
   try {
     entries = await fs.readdir(INPUT_DIR);
@@ -147,8 +149,11 @@ export async function listEpisodes(): Promise<EpisodeSummary[]> {
   const summaries = (
     await Promise.all(names.map((n) => loadSummary(n)))
   ).filter((s): s is EpisodeSummary => s !== null);
-  summaries.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return summaries;
+  const filtered = filter.style
+    ? summaries.filter((s) => s.config.style === filter.style)
+    : summaries;
+  filtered.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return filtered;
 }
 
 export async function getEpisode(
@@ -192,7 +197,11 @@ const slugify = (s: string): string => {
     .replace(/-{2,}/g, "-");
 };
 
-const buildTemplate = (name: string): EpisodeConfig => ({
+const buildTemplate = (
+  name: string,
+  style: EpisodeConfig["style"] = "podcast",
+): EpisodeConfig => ({
+  style,
   title: name,
   hook: null,
   episodeNumber: 1,
@@ -316,7 +325,11 @@ export async function deleteCover(name: string): Promise<EpisodeSummary> {
 export async function uploadAudio(
   originalName: string,
   buffer: Uint8Array,
-  options: { essayId?: string; cover?: { originalName: string; buffer: Uint8Array } } = {},
+  options: {
+    essayId?: string;
+    cover?: { originalName: string; buffer: Uint8Array };
+    style?: EpisodeConfig["style"];
+  } = {},
 ): Promise<EpisodeSummary> {
   const ext = (originalName.split(".").pop() ?? "").toLowerCase();
   if (!AUDIO_EXTS.includes(ext as (typeof AUDIO_EXTS)[number])) {
@@ -350,9 +363,10 @@ export async function uploadAudio(
 
   // Tạo template JSON nếu chưa có. Khi có essay → prefill title/hook/essayId.
   if (!(await exists(configPath))) {
-    const template = buildTemplate(slug);
-    // Auto next episodeNumber = max(existing) + 1
-    const all = await listEpisodes();
+    const style = options.style ?? "podcast";
+    const template = buildTemplate(slug, style);
+    // Auto next episodeNumber = max(existing) + 1 trong CÙNG workspace style
+    const all = await listEpisodes({ style });
     const maxNum = all.reduce(
       (m, e) => Math.max(m, e.config.episodeNumber),
       0,

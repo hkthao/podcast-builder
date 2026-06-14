@@ -28,7 +28,11 @@ export type EpisodeStatus =
   | "rendered"
   | "outdated";
 
+/** Workspace style — Phase 2 team split. */
+export type Style = "podcast" | "gallery";
+
 export type EpisodeConfig = {
+  style: Style;
   title: string;
   hook: string | null;
   episodeNumber: number;
@@ -263,6 +267,8 @@ export type BrainstormSession = {
   categories: TopicCategory[];
   provider?: LLMProvider;
   model?: string;
+  /** Phase 2: workspace style — default "podcast" cho legacy. */
+  style: Style;
 };
 
 export type EssayBrainstormRef = {
@@ -305,6 +311,8 @@ export type Essay = {
   model: string;
   createdAt: string;
   updatedAt: string;
+  /** Phase 2: workspace style — default "podcast" cho legacy. */
+  style: Style;
 };
 
 export type EssayStreamEvent =
@@ -483,9 +491,14 @@ export type ResearchSearchResponse = {
   pageSize: number;
 };
 
+const styleQuery = (style?: Style): string =>
+  style ? `?style=${style}` : "";
+
 export const api = {
-  listEpisodes: () =>
-    jsonFetch<{ episodes: EpisodeSummary[] }>("/api/episodes"),
+  listEpisodes: (style?: Style) =>
+    jsonFetch<{ episodes: EpisodeSummary[] }>(
+      `/api/episodes${styleQuery(style)}`,
+    ),
 
   getEpisode: (name: string) =>
     jsonFetch<EpisodeSummary>(`/api/episodes/${encodeURIComponent(name)}`),
@@ -623,8 +636,10 @@ export const api = {
       { method: "POST", body: JSON.stringify({ episodeName }) },
     ),
 
-  listBrainstorm: () =>
-    jsonFetch<{ sessions: BrainstormSession[] }>("/api/brainstorm"),
+  listBrainstorm: (style?: Style) =>
+    jsonFetch<{ sessions: BrainstormSession[] }>(
+      `/api/brainstorm${styleQuery(style)}`,
+    ),
 
   getBrainstorm: (id: string) =>
     jsonFetch<BrainstormSession>(
@@ -637,6 +652,7 @@ export const api = {
     count?: number;
     provider?: LLMProvider;
     model?: string;
+    style?: Style;
   }) =>
     jsonFetch<BrainstormSession>("/api/brainstorm", {
       method: "POST",
@@ -662,8 +678,8 @@ export const api = {
   clearServerErrors: () =>
     jsonFetch<{ ok: boolean }>("/api/health/errors", { method: "DELETE" }),
 
-  listWorkflow: () =>
-    jsonFetch<{ chains: WorkflowChain[] }>("/api/workflow"),
+  listWorkflow: (style?: Style) =>
+    jsonFetch<{ chains: WorkflowChain[] }>(`/api/workflow${styleQuery(style)}`),
 
   getKnowledgeGraph: () => jsonFetch<KnowledgeGraph>("/api/knowledge"),
 
@@ -678,7 +694,8 @@ export const api = {
       { method: "POST" },
     ),
 
-  listEssays: () => jsonFetch<{ essays: Essay[] }>("/api/essay"),
+  listEssays: (style?: Style) =>
+    jsonFetch<{ essays: Essay[] }>(`/api/essay${styleQuery(style)}`),
   getEssay: (id: string) =>
     jsonFetch<Essay>(`/api/essay/${encodeURIComponent(id)}`),
   saveEssay: (
@@ -730,6 +747,7 @@ export const api = {
       brainstormRef?: EssayBrainstormRef;
       provider: LLMProvider;
       model: string;
+      style?: Style;
     },
     onEvent: (ev: EssayStreamEvent) => void,
   ): (() => void) => {
@@ -835,12 +853,13 @@ export const api = {
 
   uploadAudio: async (
     file: File,
-    options: { essayId?: string; cover?: File } = {},
+    options: { essayId?: string; cover?: File; style?: Style } = {},
   ): Promise<EpisodeSummary> => {
     const form = new FormData();
     form.append("audio", file);
     if (options.essayId) form.append("essayId", options.essayId);
     if (options.cover) form.append("cover", options.cover);
+    if (options.style) form.append("style", options.style);
     const res = await fetch("/api/episodes/upload", {
       method: "POST",
       body: form,

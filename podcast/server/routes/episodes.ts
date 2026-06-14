@@ -24,7 +24,10 @@ import {
 export const episodesRoutes = new Hono();
 
 episodesRoutes.get("/", async (c) => {
-  const episodes = await listEpisodes();
+  const styleParam = c.req.query("style");
+  const style =
+    styleParam === "gallery" || styleParam === "podcast" ? styleParam : undefined;
+  const episodes = await listEpisodes(style ? { style } : {});
   return c.json({ episodes });
 });
 
@@ -54,6 +57,12 @@ episodesRoutes.post("/upload", async (c) => {
     typeof body["essayId"] === "string" && body["essayId"]
       ? (body["essayId"] as string)
       : undefined;
+  // Optional: style — "podcast" (default) hoặc "gallery"
+  const styleField = body["style"];
+  const style =
+    styleField === "gallery" || styleField === "podcast"
+      ? (styleField as "podcast" | "gallery")
+      : "podcast";
   // Optional: cover image trong cùng request
   const coverFile = body["cover"];
   let cover: { originalName: string; buffer: Uint8Array } | undefined;
@@ -75,7 +84,7 @@ episodesRoutes.post("/upload", async (c) => {
   }
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
-    const summary = await uploadAudio(file.name, buf, { essayId, cover });
+    const summary = await uploadAudio(file.name, buf, { essayId, cover, style });
     return c.json(summary, 201);
   } catch (e) {
     const err = e as Error & { code?: string };

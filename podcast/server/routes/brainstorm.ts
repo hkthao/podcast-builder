@@ -10,7 +10,10 @@ import {
 export const brainstormRoutes = new Hono();
 
 brainstormRoutes.get("/", async (c) => {
-  const sessions = await listSessions();
+  const styleParam = c.req.query("style");
+  const style =
+    styleParam === "gallery" || styleParam === "podcast" ? styleParam : undefined;
+  const sessions = await listSessions(style ? { style } : {});
   return c.json({ sessions });
 });
 
@@ -34,12 +37,16 @@ brainstormRoutes.post("/", async (c) => {
     count?: number;
     provider?: string;
     model?: string;
+    style?: string;
   };
   if (typeof body.topic !== "string" || typeof body.tone !== "string") {
     return c.json({ error: "Cần field 'topic' và 'tone' (string)" }, 400);
   }
   if (body.provider && body.provider !== "openai" && body.provider !== "ollama") {
     return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
+  }
+  if (body.style && body.style !== "podcast" && body.style !== "gallery") {
+    return c.json({ error: "style phải là 'podcast' hoặc 'gallery'" }, 400);
   }
   try {
     const session = await generateAndSave({
@@ -48,6 +55,7 @@ brainstormRoutes.post("/", async (c) => {
       count: typeof body.count === "number" ? body.count : undefined,
       provider: body.provider as "openai" | "ollama" | undefined,
       model: typeof body.model === "string" ? body.model : undefined,
+      style: body.style as "podcast" | "gallery" | undefined,
     });
     return c.json(session, 201);
   } catch (e) {

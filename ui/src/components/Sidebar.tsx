@@ -34,13 +34,13 @@ import {
 import { useWorkspace, type Workspace } from "@/lib/workspace";
 
 export function Sidebar() {
-  const { data } = useQuery({
-    queryKey: ["episodes"],
-    queryFn: () => api.listEpisodes(),
-  });
   const location = useLocation();
   const navigate = useNavigate();
   const { workspace, setWorkspace } = useWorkspace();
+  const { data } = useQuery({
+    queryKey: ["episodes", workspace],
+    queryFn: () => api.listEpisodes(workspace),
+  });
   const [pinned, setPinned] = usePersistedState<string[]>(
     "sidebar.pinned",
     [],

@@ -13,7 +13,15 @@ export const SceneOverrideSchema = z.object({
   sceneType: SceneTypeSchema.optional(),
 });
 
+/** Video style — Phase 2 team split. Mặc định "podcast" để backward-compat. */
+export const StyleSchema = z.enum(["podcast", "gallery"]).default("podcast");
+
 export const EpisodeConfigSchema = z.object({
+  /**
+   * Video style — quyết định composition Remotion + workspace filter.
+   * "podcast" = sticker SVG 9:16, "gallery" = real photos + Ken Burns.
+   */
+  style: StyleSchema,
   title: z.string().min(1, "title không được để trống"),
   hook: z.string().nullable().default(null),
   episodeNumber: z.number().int().positive(),
@@ -54,7 +62,11 @@ export const EpisodeConfigSchema = z.object({
 
 export type EpisodeConfig = z.infer<typeof EpisodeConfigSchema>;
 
-export const buildEpisodeTemplate = (name: string): EpisodeConfig => ({
+export const buildEpisodeTemplate = (
+  name: string,
+  style: EpisodeConfig["style"] = "podcast",
+): EpisodeConfig => ({
+  style,
   title: name,
   hook: null,
   episodeNumber: 1,

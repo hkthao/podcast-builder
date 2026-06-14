@@ -30,7 +30,10 @@ import {
 export const essayRoutes = new Hono();
 
 essayRoutes.get("/", async (c) => {
-  const essays = await listEssays();
+  const styleParam = c.req.query("style");
+  const style =
+    styleParam === "gallery" || styleParam === "podcast" ? styleParam : undefined;
+  const essays = await listEssays(style ? { style } : {});
   return c.json({ essays });
 });
 
@@ -139,6 +142,7 @@ essayRoutes.post("/stream", async (c) => {
     brainstormRef?: EssayBrainstormRef;
     provider?: string;
     model?: string;
+    style?: string;
   };
   if (typeof body.title !== "string" || body.title.trim().length === 0) {
     return c.json({ error: "Thiếu title" }, 400);
@@ -152,12 +156,16 @@ essayRoutes.post("/stream", async (c) => {
   if (typeof body.model !== "string" || body.model.trim().length === 0) {
     return c.json({ error: "Thiếu model" }, 400);
   }
+  if (body.style && body.style !== "podcast" && body.style !== "gallery") {
+    return c.json({ error: "style phải là 'podcast' hoặc 'gallery'" }, 400);
+  }
 
   const title = body.title.trim();
   const outline = body.outline?.trim() || null;
   const provider = body.provider as LLMProvider;
   const model = body.model.trim();
   const brainstormRef = body.brainstormRef ?? null;
+  const style = (body.style as "podcast" | "gallery" | undefined) ?? "podcast";
 
   const id = newEssayId(title);
   const now = new Date().toISOString();
@@ -180,6 +188,7 @@ essayRoutes.post("/stream", async (c) => {
     model,
     createdAt: now,
     updatedAt: now,
+    style,
   };
 
   return streamSSE(c, async (stream) => {

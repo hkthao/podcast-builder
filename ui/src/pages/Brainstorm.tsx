@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
+import { useWorkspace } from "@/lib/workspace";
 
 const TONES = [
   "Triết học suy ngẫm",
@@ -42,6 +43,7 @@ const TONES = [
 
 export function Brainstorm() {
   const qc = useQueryClient();
+  const { workspace } = useWorkspace();
   // Persist form state qua localStorage để reload không mất draft
   const [topic, setTopic] = usePersistedState("brainstorm.topic", "");
   const [tone, setTone] = usePersistedState("brainstorm.tone", TONES[0]);
@@ -60,8 +62,8 @@ export function Brainstorm() {
   );
 
   const sessionsQ = useQuery({
-    queryKey: ["brainstorm-sessions"],
-    queryFn: () => api.listBrainstorm(),
+    queryKey: ["brainstorm-sessions", workspace],
+    queryFn: () => api.listBrainstorm(workspace),
   });
 
   const modelsQ = useQuery({
@@ -108,7 +110,14 @@ export function Brainstorm() {
 
   const genMut = useMutation({
     mutationFn: () =>
-      api.createBrainstorm({ topic, tone, count, provider, model }),
+      api.createBrainstorm({
+        topic,
+        tone,
+        count,
+        provider,
+        model,
+        style: workspace,
+      }),
     onSuccess: (newSession) => {
       qc.invalidateQueries({ queryKey: ["brainstorm-sessions"] });
       setActiveId(newSession.id);

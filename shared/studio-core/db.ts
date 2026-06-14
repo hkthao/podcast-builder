@@ -40,11 +40,24 @@ function initSchema(db: Database.Database): void {
       provider TEXT,
       model TEXT,
       created_at TEXT NOT NULL,
-      ideas_json TEXT NOT NULL
+      ideas_json TEXT NOT NULL,
+      style TEXT NOT NULL DEFAULT 'podcast'
     );
     CREATE INDEX IF NOT EXISTS idx_brainstorm_created
       ON brainstorm_sessions(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_brainstorm_style
+      ON brainstorm_sessions(style);
   `);
+  // Migration cho DB cũ — backfill style cho rows hiện tại
+  const bsCols = db
+    .prepare("PRAGMA table_info(brainstorm_sessions)")
+    .all() as Array<{ name: string }>;
+  if (!bsCols.some((c) => c.name === "style")) {
+    db.exec(
+      `ALTER TABLE brainstorm_sessions ADD COLUMN style TEXT NOT NULL DEFAULT 'podcast'`,
+    );
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_brainstorm_style ON brainstorm_sessions(style)`);
+  }
 
   // Essays
   db.exec(`
@@ -59,10 +72,13 @@ function initSchema(db: Database.Database): void {
       model TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      suggested_refs_json TEXT
+      suggested_refs_json TEXT,
+      style TEXT NOT NULL DEFAULT 'podcast'
     );
     CREATE INDEX IF NOT EXISTS idx_essays_updated
       ON essays(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_essays_style
+      ON essays(style);
   `);
   // Migration cho DB cũ chưa có columns mới
   const cols = db
@@ -76,11 +92,15 @@ function initSchema(db: Database.Database): void {
     ["quotes_json", "TEXT"],
     ["blog_md", "TEXT"],
     ["newsletter_md", "TEXT"],
+    ["style", "TEXT NOT NULL DEFAULT 'podcast'"],
   ];
   for (const [name, type] of extras) {
     if (!colNames.has(name)) {
       db.exec(`ALTER TABLE essays ADD COLUMN ${name} ${type}`);
     }
+  }
+  if (!colNames.has("style")) {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_essays_style ON essays(style)`);
   }
 
   // References library (table name `reference_items` để tránh từ khóa SQL "references")

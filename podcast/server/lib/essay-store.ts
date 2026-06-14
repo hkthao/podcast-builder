@@ -14,6 +14,9 @@ export type EssayBrainstormRef = {
   ideaIdx: number;
 };
 
+/** Phase 2: workspace style — mirror brainstorm/episode Style. */
+export type Style = "podcast" | "gallery";
+
 export type ShortsScript = {
   duration: number; // target seconds
   hook: string;
@@ -50,6 +53,8 @@ export type Essay = {
   model: string;
   createdAt: string;
   updatedAt: string;
+  /** Phase 2: workspace style — default "podcast" cho legacy. */
+  style: Style;
 };
 
 
@@ -82,6 +87,7 @@ type DbRow = {
   model: string;
   created_at: string;
   updated_at: string;
+  style: string;
 };
 
 const rowToEssay = (r: DbRow): Essay => ({
@@ -111,12 +117,20 @@ const rowToEssay = (r: DbRow): Essay => ({
   model: r.model,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+  style: (r.style === "gallery" ? "gallery" : "podcast") as Style,
 });
 
-export async function listEssays(): Promise<Essay[]> {
-  const rows = getDb()
-    .prepare("SELECT * FROM essays ORDER BY updated_at DESC")
-    .all() as DbRow[];
+export async function listEssays(
+  filter: { style?: Style } = {},
+): Promise<Essay[]> {
+  let sql = "SELECT * FROM essays";
+  const params: string[] = [];
+  if (filter.style) {
+    sql += " WHERE style = ?";
+    params.push(filter.style);
+  }
+  sql += " ORDER BY updated_at DESC";
+  const rows = getDb().prepare(sql).all(...params) as DbRow[];
   return rows.map(rowToEssay);
 }
 
@@ -143,8 +157,8 @@ export async function saveEssay(essay: Essay): Promise<void> {
          (id, title, outline, content, nlm_prompt, brainstorm_ref_json,
           suggested_refs_json, shorts_scripts_json, fb_posts_json, quotes_json,
           blog_md, newsletter_md,
-          provider, model, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          provider, model, created_at, updated_at, style)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       essay.id,
@@ -165,6 +179,7 @@ export async function saveEssay(essay: Essay): Promise<void> {
       essay.model,
       essay.createdAt,
       essay.updatedAt,
+      essay.style ?? "podcast",
     );
 }
 

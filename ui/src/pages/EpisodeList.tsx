@@ -7,17 +7,19 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 
 export function EpisodeList() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { workspace } = useWorkspace();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["episodes"],
-    queryFn: () => api.listEpisodes(),
+    queryKey: ["episodes", workspace],
+    queryFn: () => api.listEpisodes(workspace),
   });
 
   const upload = useMutation({
-    mutationFn: (file: File) => api.uploadAudio(file),
+    mutationFn: (file: File) => api.uploadAudio(file, { style: workspace }),
     onSuccess: (ep) => {
       qc.invalidateQueries({ queryKey: ["episodes"] });
       navigate(`/episodes/${encodeURIComponent(ep.name)}`);

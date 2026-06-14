@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 
 type LocationState = {
   prefillTitle?: string;
@@ -52,6 +53,7 @@ export function EssayPage() {
   const qc = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
+  const { workspace } = useWorkspace();
   const state = (location.state ?? null) as LocationState | null;
 
   const [title, setTitle] = useState("");
@@ -75,8 +77,8 @@ export function EssayPage() {
   const saveTimer = useRef<number | null>(null);
 
   const essaysQ = useQuery({
-    queryKey: ["essays"],
-    queryFn: () => api.listEssays(),
+    queryKey: ["essays", workspace],
+    queryFn: () => api.listEssays(workspace),
   });
 
   const modelsQ = useQuery({
@@ -200,6 +202,7 @@ export function EssayPage() {
         brainstormRef: brainstormRef ?? undefined,
         provider,
         model,
+        style: workspace,
       },
       onEvent,
     );

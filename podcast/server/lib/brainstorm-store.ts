@@ -109,6 +109,9 @@ export const TOPIC_CATEGORIES = [
 ] as const;
 export type TopicCategory = (typeof TOPIC_CATEGORIES)[number];
 
+/** Video style — Phase 2 team split. */
+export type Style = "podcast" | "gallery";
+
 export type BrainstormSession = {
   id: string;
   topic: string;
@@ -121,6 +124,8 @@ export type BrainstormSession = {
   /** Provider+model dùng để gen. Optional cho session cũ. */
   provider?: LLMProvider;
   model?: string;
+  /** Phase 2: workspace style. Default "podcast" cho row cũ. */
+  style: Style;
 };
 
 const slugify = (s: string): string =>
@@ -143,6 +148,7 @@ type DbRow = {
   model: string | null;
   created_at: string;
   ideas_json: string;
+  style: string;
 };
 
 const rowToSession = (r: DbRow): BrainstormSession => {
@@ -156,6 +162,7 @@ const rowToSession = (r: DbRow): BrainstormSession => {
     model: r.model ?? undefined,
     createdAt: r.created_at,
     ideas: JSON.parse(r.ideas_json) as BrainstormIdea[],
+    style: (r.style === "gallery" ? "gallery" : "podcast") as Style,
   };
   return normalizeSession(s);
 };
@@ -164,8 +171,8 @@ const saveSession = (s: BrainstormSession): void => {
   getDb()
     .prepare(
       `INSERT OR REPLACE INTO brainstorm_sessions
-        (id, topic, tone, picked_idx, categories_json, provider, model, created_at, ideas_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, topic, tone, picked_idx, categories_json, provider, model, created_at, ideas_json, style)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       s.id,
@@ -177,16 +184,22 @@ const saveSession = (s: BrainstormSession): void => {
       s.model ?? null,
       s.createdAt,
       JSON.stringify(s.ideas),
+      s.style ?? "podcast",
     );
 };
 
-export async function listSessions(): Promise<BrainstormSession[]> {
+export async function listSessions(
+  filter: { style?: Style } = {},
+): Promise<BrainstormSession[]> {
   const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT * FROM brainstorm_sessions ORDER BY created_at DESC",
-    )
-    .all() as DbRow[];
+  let sql = "SELECT * FROM brainstorm_sessions";
+  const params: string[] = [];
+  if (filter.style) {
+    sql += " WHERE style = ?";
+    params.push(filter.style);
+  }
+  sql += " ORDER BY created_at DESC";
+  const rows = db.prepare(sql).all(...params) as DbRow[];
   return rows.map(rowToSession);
 }
 
@@ -214,6 +227,10 @@ const normalizeSession = (s: BrainstormSession): BrainstormSession => {
     s.categories = s.categories.filter((c): c is TopicCategory =>
       (TOPIC_CATEGORIES as readonly string[]).includes(c),
     );
+  }
+  // Phase 2: backfill style default "podcast"
+  if (s.style !== "podcast" && s.style !== "gallery") {
+    s.style = "podcast";
   }
   // Backfill cho idea legacy (trước v2)
   for (const idea of s.ideas) {
@@ -396,6 +413,8 @@ export type GenerateInput = {
   count?: number;
   provider?: LLMProvider;
   model?: string;
+  /** Phase 2: workspace style — default "podcast". */
+  style?: Style;
 };
 
 /**
@@ -422,7 +441,8 @@ export async function generateAndSave(
   }
 
   // Pass danh sách topic đã có để LLM diversify (Phase C dedup)
-  const existing = await listSessions();
+  // Phase 2: chỉ so trong cùng workspace style để mỗi team có history riêng
+  const existing = await listSessions({ style: input.style ?? "podcast" });
   const existingTopics = existing
     .slice(0, 30) // 30 session gần nhất là đủ context
     .map((s) => s.topic);
@@ -538,6 +558,7 @@ export async function generateAndSave(
     categories,
     provider,
     model,
+    style: input.style ?? "podcast",
   };
   saveSession(session);
   return session;

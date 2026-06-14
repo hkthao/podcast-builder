@@ -17,11 +17,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 
 export function WorkflowPage() {
+  const { workspace } = useWorkspace();
   const q = useQuery({
-    queryKey: ["workflow"],
-    queryFn: () => api.listWorkflow(),
+    queryKey: ["workflow", workspace],
+    queryFn: () => api.listWorkflow(workspace),
     refetchInterval: 5000,
   });
 
