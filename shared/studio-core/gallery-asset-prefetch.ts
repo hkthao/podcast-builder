@@ -132,14 +132,33 @@ export async function prefetchAsset(input: {
 
   await fsp.mkdir(PREFETCH_DIR, { recursive: true });
 
-  // Wikimedia yêu cầu User-Agent identifiable
-  const res = await fetch(input.remoteUrl, {
-    headers: { "User-Agent": USER_AGENT },
-    redirect: "follow",
-  });
-  if (!res.ok) {
+  // Wikimedia rate-limit 200 req/min/IP → retry 429 với exponential backoff.
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(input.remoteUrl, {
+      headers: { "User-Agent": USER_AGENT },
+      redirect: "follow",
+    });
+    if (res.ok) break;
+    if (res.status === 429 || res.status === 503) {
+      // Honor Retry-After nếu có, default exp backoff 1s/2s/4s
+      const retryAfter = Number(res.headers.get("retry-after")) || 0;
+      const delayMs = retryAfter
+        ? retryAfter * 1000
+        : Math.min(8000, 1000 * 2 ** attempt);
+      console.warn(
+        `[gallery-prefetch] ${res.status} rate-limited, retry ${attempt + 1}/3 sau ${delayMs}ms`,
+      );
+      await sleep(delayMs);
+      continue;
+    }
+    // Other errors → break, throw bên dưới
+    break;
+  }
+  if (!res || !res.ok) {
     throw new Error(
-      `Asset prefetch failed ${res.status}: ${input.remoteUrl.slice(0, 200)}`,
+      `Asset prefetch failed ${res?.status ?? "no-response"}: ${input.remoteUrl.slice(0, 200)}`,
     );
   }
   const arrayBuf = await res.arrayBuffer();
@@ -172,14 +191,18 @@ export async function prefetchAsset(input: {
 }
 
 /**
- * Prefetch nhiều asset song song (limit concurrency 4 để không spam CDN).
+ * Prefetch nhiều asset SEQUENTIALLY với delay giữa requests — Wikimedia
+ * rate-limit 200 req/min/IP nên concurrency cao = 429. Concurrency 1 + 250ms
+ * delay = ~4 req/s = tránh rate-limit. Tổng thời gian cho ~30 asset = 7-8s
+ * (downloads thực + delay).
+ *
  * Trả Map<assetId, localPath> — caller dùng để swap remote URL.
  */
 export async function prefetchAssetsBatch(
   assets: Array<{ assetId: string; remoteUrl: string }>,
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
-  const CONCURRENCY = 4;
+  const DELAY_MS = 250;
 
   // Dedup theo assetId
   const unique = new Map<string, { assetId: string; remoteUrl: string }>();
@@ -188,23 +211,19 @@ export async function prefetchAssetsBatch(
   }
   const list = [...unique.values()];
 
-  // Run in batches of CONCURRENCY
-  for (let i = 0; i < list.length; i += CONCURRENCY) {
-    const batch = list.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(
-      batch.map((a) => prefetchAsset(a)),
-    );
-    for (let j = 0; j < batch.length; j++) {
-      const r = results[j];
-      const a = batch[j];
-      if (r.status === "fulfilled") {
-        result.set(a.assetId, r.value.localPath);
-      } else {
-        // Log error nhưng không throw — beat sẽ fallback render placeholder
-        console.warn(
-          `[gallery-prefetch] Failed ${a.assetId}: ${r.reason?.message ?? r.reason}`,
-        );
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    try {
+      const r = await prefetchAsset(a);
+      result.set(a.assetId, r.localPath);
+      // Delay chỉ khi vừa download (cache hit không cần delay)
+      if (!r.fromCache && i < list.length - 1) {
+        await new Promise<void>((res) => setTimeout(res, DELAY_MS));
       }
+    } catch (e) {
+      console.warn(
+        `[gallery-prefetch] Failed ${a.assetId}: ${(e as Error).message}`,
+      );
     }
   }
 
