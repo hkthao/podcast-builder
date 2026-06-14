@@ -677,11 +677,11 @@ function ChapterCard({
               </span>
             </Label>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Per-chapter LLM picker — compact inline */}
+              {/* Per-chapter LLM picker — compact inline (h-9 = Button sm) */}
               <select
                 value={provider}
                 onChange={(e) => setProvider(e.target.value as LLMProvider)}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs"
                 title="LLM provider"
               >
                 <option
@@ -704,7 +704,7 @@ function ChapterCard({
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs max-w-[180px]"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs max-w-[180px]"
                 title="LLM model"
               >
                 {(modelsData?.[provider] ?? []).map((m) => (
@@ -1659,7 +1659,7 @@ function CopyChip({ text }: { text: string }) {
     <Button
       size="sm"
       variant="ghost"
-      className="h-7 px-2"
+      className="h-9 px-2"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
