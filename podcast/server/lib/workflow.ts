@@ -12,7 +12,12 @@
  *   - Nếu essay standalone (không brainstormRef) → id = essay.id, theo essayId
  *   - Nếu episode standalone (upload trực tiếp, không qua essay) → id = episode.name
  */
-import { listSessions, type BrainstormSession, type Style } from "./brainstorm-store";
+import {
+  listSessions,
+  isPodcastSession,
+  type BrainstormSession,
+  type Style,
+} from "./brainstorm-store";
 import { listEssays, type Essay } from "./essay-store";
 import { listEpisodes, type EpisodeSummary } from "./episode-store";
 import { listReferences } from "./reference-store";
@@ -66,9 +71,11 @@ export type WorkflowChain = {
 };
 
 const computeTopScore = (bs: BrainstormSession): number | null => {
+  // Phase 3a: scores chỉ có ở podcast ideas (5 chiều 1-10). Gallery không score.
+  if (!isPodcastSession(bs)) return null;
   const ideas = bs.ideas.filter((i) => i.scores);
   if (ideas.length === 0) return null;
-  const avg = (s: BrainstormSession["ideas"][number]["scores"]) =>
+  const avg = (s: (typeof ideas)[number]["scores"]) =>
     (s.universal + s.emotional + s.philosophical + s.aiRelevance + s.originality) /
     5;
   // Picked idea ưu tiên, fallback max avg

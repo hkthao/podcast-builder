@@ -45,10 +45,8 @@ function initSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_brainstorm_created
       ON brainstorm_sessions(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_brainstorm_style
-      ON brainstorm_sessions(style);
   `);
-  // Migration cho DB cũ — backfill style cho rows hiện tại
+  // Migration cho DB cũ — ALTER TABLE phải chạy TRƯỚC khi tạo index trên column mới
   const bsCols = db
     .prepare("PRAGMA table_info(brainstorm_sessions)")
     .all() as Array<{ name: string }>;
@@ -56,8 +54,10 @@ function initSchema(db: Database.Database): void {
     db.exec(
       `ALTER TABLE brainstorm_sessions ADD COLUMN style TEXT NOT NULL DEFAULT 'podcast'`,
     );
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_brainstorm_style ON brainstorm_sessions(style)`);
   }
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_brainstorm_style ON brainstorm_sessions(style)`,
+  );
 
   // Essays
   db.exec(`
@@ -77,10 +77,8 @@ function initSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_essays_updated
       ON essays(updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_essays_style
-      ON essays(style);
   `);
-  // Migration cho DB cũ chưa có columns mới
+  // Migration cho DB cũ chưa có columns mới — ALTER TABLE TRƯỚC khi tạo index.
   const cols = db
     .prepare("PRAGMA table_info(essays)")
     .all() as Array<{ name: string }>;
@@ -99,9 +97,7 @@ function initSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE essays ADD COLUMN ${name} ${type}`);
     }
   }
-  if (!colNames.has("style")) {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_essays_style ON essays(style)`);
-  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_essays_style ON essays(style)`);
 
   // References library (table name `reference_items` để tránh từ khóa SQL "references")
   db.exec(`

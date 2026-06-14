@@ -8,7 +8,7 @@
  * Extraction strategy: curated concept list + case-insensitive substring
  * match trên text fields (outline + observation + storyBank + historicalExamples).
  */
-import { listSessions } from "./brainstorm-store";
+import { listSessions, isPodcastSession } from "./brainstorm-store";
 
 const CONCEPTS: Array<{ name: string; aliases?: string[]; group: string }> = [
   // Triết gia
@@ -107,7 +107,11 @@ export async function buildKnowledgeGraph(): Promise<{
   groups: Record<string, KnowledgeEntry[]>;
   total: number;
 }> {
-  const sessions = await listSessions();
+  // Phase 3a: knowledge graph chỉ áp dụng podcast ideas (có philosophical fields).
+  // Gallery ideas có schema khác (chapters/keyWorks) — không qua CONCEPTS này.
+  const sessions = (await listSessions({ style: "podcast" })).filter(
+    isPodcastSession,
+  );
   const groups: Record<string, KnowledgeEntry[]> = {};
 
   for (const concept of CONCEPTS) {

@@ -4,7 +4,7 @@
  *
  * Phase D part 2: tái dùng visual ẩn dụ thay vì nghĩ lại từ đầu mỗi tập.
  */
-import { listSessions, type TopicCategory } from "./brainstorm-store";
+import { listSessions, isPodcastSession, type TopicCategory } from "./brainstorm-store";
 
 export type VisualEntry = {
   metaphor: string;
@@ -43,7 +43,10 @@ const extractMetaphors = (outline: string): string[] => {
 };
 
 export async function buildVisualLibrary(): Promise<VisualLibrary> {
-  const sessions = await listSessions();
+  // Phase 3a: visual library extract từ outline mục #12 — chỉ podcast có.
+  const sessions = (await listSessions({ style: "podcast" })).filter(
+    isPodcastSession,
+  );
   const all: VisualEntry[] = [];
 
   for (const session of sessions) {
