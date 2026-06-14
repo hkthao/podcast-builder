@@ -17,7 +17,49 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { PATHS } from "./paths";
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Max bytes trước khi resize. Wikimedia full-res có thể 50-100MB JPG → Remotion
+ * Chromium fail load image quá to. Resize xuống ≤ MAX_WIDTH preserve aspect.
+ */
+const RESIZE_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_WIDTH = 2400; // > 1920 (composition width) để giữ pan/zoom quality
+
+const resizeImage = async (filePath: string): Promise<void> => {
+  const tmpOut = `${filePath}.resized.jpg`;
+  // Try sips (macOS built-in) ưu tiên — handle ảnh huge 50-100MB tốt hơn
+  // ffmpeg (ffmpeg mjpeg decoder reject ảnh dimension > ~32k px).
+  try {
+    await execFileAsync("sips", [
+      "-Z",
+      String(MAX_WIDTH), // -Z fit dimension trong bounding box, preserve aspect
+      filePath,
+      "--out",
+      tmpOut,
+    ]);
+    await fsp.rename(tmpOut, filePath);
+    return;
+  } catch {
+    // Fall back ffmpeg cho non-macOS environments (Linux/Windows server)
+  }
+
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    filePath,
+    "-vf",
+    `scale='min(${MAX_WIDTH},iw)':-1:flags=lanczos`,
+    "-q:v",
+    "3",
+    tmpOut,
+  ]);
+  await fsp.rename(tmpOut, filePath);
+};
 
 const PREFETCH_DIR = PATHS.TMP_DIR;
 const USER_AGENT =
@@ -69,6 +111,16 @@ export async function prefetchAsset(input: {
   if (fs.existsSync(filePath)) {
     const stat = await fsp.stat(filePath);
     if (stat.size > 100) {
+      // Nếu cached file quá lớn (legacy từ trước khi có resize) → resize tại chỗ
+      if (stat.size > RESIZE_THRESHOLD_BYTES) {
+        try {
+          await resizeImage(filePath);
+        } catch (e) {
+          console.warn(
+            `[gallery-prefetch] Cache resize fail ${filename}: ${(e as Error).message}`,
+          );
+        }
+      }
       return {
         filename,
         localPath: `/tmp/${filename}`,
@@ -97,6 +149,20 @@ export async function prefetchAsset(input: {
     );
   }
   await fsp.writeFile(filePath, Buffer.from(arrayBuf));
+
+  // Resize nếu file lớn — Remotion Chromium fail load image > ~20MB hoặc
+  // texture quá to. Wikimedia full-res có thể 50-100MB → ffmpeg scale.
+  if (arrayBuf.byteLength > RESIZE_THRESHOLD_BYTES) {
+    try {
+      await resizeImage(filePath);
+    } catch (e) {
+      // Resize fail → keep original, warning. Remotion có thể vẫn fail nhưng
+      // ít nhất prefetch không block.
+      console.warn(
+        `[gallery-prefetch] Resize fail cho ${filename}: ${(e as Error).message}`,
+      );
+    }
+  }
 
   return {
     filename,
