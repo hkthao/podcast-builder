@@ -141,7 +141,18 @@ export function Brainstorm() {
         style: workspace,
       }),
     onSuccess: (newSession) => {
-      qc.invalidateQueries({ queryKey: ["brainstorm-sessions"] });
+      // Inject newSession vào cache đồng bộ — invalidateQueries refetch
+      // async, trong cửa sổ này `sessions` cũ chưa chứa newSession.id nên
+      // auto-select effect bên trên sẽ snap về sessions[0] cũ. setQueryData
+      // sync hoá để render kế tiếp đã có newSession ở đầu list.
+      qc.setQueryData<{ sessions: BrainstormSession[] }>(
+        ["brainstorm-sessions", workspace],
+        (prev) => ({
+          sessions: prev
+            ? [newSession, ...prev.sessions.filter((s) => s.id !== newSession.id)]
+            : [newSession],
+        }),
+      );
       setActiveId(newSession.id);
       setIsNewMode(false);
     },
