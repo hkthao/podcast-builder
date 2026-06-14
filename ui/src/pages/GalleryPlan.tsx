@@ -38,6 +38,7 @@ import {
   Film,
   Download,
   FileText,
+  Upload,
 } from "lucide-react";
 import {
   api,
@@ -296,6 +297,17 @@ export function GalleryPlanPage() {
           </div>
         </div>
       </Card>
+
+      {/* Phase 4e.x: BGM uploader */}
+      <BgmPanel
+        plan={plan}
+        onMutate={(updated) =>
+          qc.setQueryData<GalleryChapterPlan>(
+            ["gallery-plan", plan.id],
+            updated,
+          )
+        }
+      />
 
       {/* Phase 4b': TTS provider + voice picker (cho audio gen) */}
       <Card className="p-4 mb-6">
@@ -1625,5 +1637,125 @@ function ExportPanel({
   );
 }
 
-// FileText/Download icon imports (centralized at top of file)
+// ─── Phase 4e.x: Plan-level BGM uploader ─────────────────────────────
+
+const BGM_ACCEPT = ".mp3,.m4a,.wav,.aac,audio/*";
+
+function BgmPanel({
+  plan,
+  onMutate,
+}: {
+  plan: GalleryChapterPlan;
+  onMutate: (plan: GalleryChapterPlan) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => api.uploadGalleryPlanBgm(plan.id, file),
+    onSuccess: (updated) => onMutate(updated),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteGalleryPlanBgm(plan.id),
+    onSuccess: (updated) => onMutate(updated),
+  });
+
+  const hasBgm = plan.bgmFilename !== null;
+  const bgmUrl = hasBgm
+    ? `/tmp/${encodeURIComponent(plan.bgmFilename!)}`
+    : null;
+
+  return (
+    <Card className="p-4 mb-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            <Music className="size-4" />
+            Nhạc nền (BGM)
+            {hasBgm ? (
+              <Badge variant="outline" className="text-[10px] gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
+                <CheckCircle2 className="size-3" />
+                {plan.bgmFilename!.split("-bgm.")[1]?.toUpperCase() ??
+                  "uploaded"}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">
+                Chưa upload
+              </Badge>
+            )}
+          </h4>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            {hasBgm
+              ? "Auto-mix với voice ở -20dB cho narration. Music chapter dùng full volume + loop."
+              : "Upload nhạc nền (mp3/m4a/wav). Có BGM thì narration sẽ có ambient + music chapter sẽ phát nhạc thay vì silent."}
+          </p>
+        </div>
+      </div>
+
+      {hasBgm && bgmUrl && (
+        <audio
+          controls
+          preload="metadata"
+          src={bgmUrl}
+          className="w-full h-10 mt-3"
+        />
+      )}
+
+      {uploadMut.isError && (
+        <p className="mt-2 text-xs text-destructive">
+          <AlertCircle className="inline size-3" /> {String(uploadMut.error)}
+        </p>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={BGM_ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) uploadMut.mutate(f);
+          e.target.value = "";
+        }}
+      />
+
+      {/* Footer actions — outline + căn phải */}
+      <div className="mt-3 pt-3 border-t flex items-center justify-end gap-2">
+        {hasBgm && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (window.confirm("Xoá BGM khỏi plan?")) {
+                deleteMut.mutate();
+              }
+            }}
+            disabled={deleteMut.isPending}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            {deleteMut.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="size-3.5" />
+            )}
+            Xoá BGM
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadMut.isPending}
+        >
+          {uploadMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Upload className="size-3.5" />
+          )}
+          {hasBgm ? "Đổi BGM" : "Upload BGM"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
 

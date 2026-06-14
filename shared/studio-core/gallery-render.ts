@@ -23,6 +23,7 @@ import {
   updateChapterVideo,
   type GalleryChapterPlan,
 } from "./gallery-plan-store";
+import { prepareChapterRenderAudio } from "./gallery-bgm-mix";
 import { getAsset } from "./gallery-asset-store";
 import { PATHS } from "./paths";
 import type { VisualBeat } from "../../gallery/src/visual-beat";
@@ -120,8 +121,18 @@ export async function buildChapterProps(
   }
 
   const audioDurationMs = chapter.audioDurationMs ?? 0;
-  const audioUrl = chapter.audioFilename
-    ? `${audioUrlBase}/tmp/${encodeURIComponent(chapter.audioFilename)}`
+
+  // Phase 4e.x: prepare audio (mix với BGM nếu plan có, hoặc music chapter BGM segment)
+  const audioPrep = await prepareChapterRenderAudio({
+    planId: plan.id,
+    chapterIdx,
+    chapterKind: chapter.kind,
+    voiceFilename: chapter.audioFilename,
+    chapterMinutes: chapter.minutes,
+    bgmFilename: plan.bgmFilename,
+  });
+  const audioUrl = audioPrep.filename
+    ? `${audioUrlBase}/tmp/${encodeURIComponent(audioPrep.filename)}`
     : null;
 
   let resolvedBeats: ResolvedBeat[] = [];

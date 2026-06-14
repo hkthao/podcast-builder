@@ -81,6 +81,12 @@ export type GalleryChapterPlan = {
   outputFilename: string | null;
   outputDurationMs: number | null;
   exportedAt: string | null;
+  /**
+   * Phase 4e.x: filename nhạc nền plan-level. mp3/m4a/wav trong TMP_DIR.
+   * Narration chapter mix với voice ở volume thấp; music chapter dùng full
+   * volume + loop tới hết duration.
+   */
+  bgmFilename: string | null;
 };
 
 type DbRow = {
@@ -96,6 +102,7 @@ type DbRow = {
   output_filename: string | null;
   output_duration_ms: number | null;
   exported_at: string | null;
+  bgm_filename: string | null;
 };
 
 const slugify = (s: string): string =>
@@ -163,6 +170,7 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
     outputFilename: r.output_filename,
     outputDurationMs: r.output_duration_ms,
     exportedAt: r.exported_at,
+    bgmFilename: r.bgm_filename,
   };
 };
 
@@ -172,8 +180,8 @@ const savePlan = (p: GalleryChapterPlan): void => {
       `INSERT OR REPLACE INTO gallery_chapter_plans
         (id, brainstorm_id, idea_idx, idea_snapshot_json, chapters_json,
          provider, model, created_at, updated_at,
-         output_filename, output_duration_ms, exported_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         output_filename, output_duration_ms, exported_at, bgm_filename)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       p.id,
@@ -188,8 +196,42 @@ const savePlan = (p: GalleryChapterPlan): void => {
       p.outputFilename,
       p.outputDurationMs,
       p.exportedAt,
+      p.bgmFilename,
     );
 };
+
+/** Phase 4e.x: filename cố định cho BGM file uploaded. */
+export const galleryPlanBgmFilename = (
+  planId: string,
+  ext: string,
+): string => `gallery-${planId}-bgm.${ext.toLowerCase().replace(/^\./, "")}`;
+
+/**
+ * Phase 4e.x: set BGM filename cho plan. File phải đã được lưu trong TMP_DIR
+ * trước khi gọi (route handler responsibility).
+ */
+export async function setPlanBgm(
+  planId: string,
+  filename: string,
+): Promise<GalleryChapterPlan | null> {
+  const plan = await getPlan(planId);
+  if (!plan) return null;
+  plan.bgmFilename = filename;
+  plan.updatedAt = new Date().toISOString();
+  savePlan(plan);
+  return plan;
+}
+
+export async function clearPlanBgm(
+  planId: string,
+): Promise<GalleryChapterPlan | null> {
+  const plan = await getPlan(planId);
+  if (!plan) return null;
+  plan.bgmFilename = null;
+  plan.updatedAt = new Date().toISOString();
+  savePlan(plan);
+  return plan;
+}
 
 /**
  * Phase 4e: persist plan-level final output sau khi concat xong.
@@ -305,6 +347,7 @@ export async function createPlanFromIdea(input: {
     outputFilename: null,
     outputDurationMs: null,
     exportedAt: null,
+    bgmFilename: null,
   };
   savePlan(plan);
   return plan;

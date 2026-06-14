@@ -4,12 +4,15 @@
  */
 import { Hono } from "hono";
 import {
+  clearPlanBgm,
   createPlanFromIdea,
   deletePlan,
   findPlanBySource,
+  galleryPlanBgmFilename,
   generateChapterTranscript,
   getPlan,
   listPlans,
+  setPlanBgm,
   updateChapter,
   updatePlanChapters,
   type GalleryPlanChapter,
@@ -17,6 +20,9 @@ import {
 import { generateChapterAudio } from "../gallery-chapter-audio";
 import { renderChapter } from "../gallery-render";
 import { exportPlan } from "../gallery-concat";
+import { PATHS } from "../paths";
+import path from "node:path";
+import fs from "node:fs/promises";
 import {
   getSession,
   isGallerySession,
@@ -318,6 +324,64 @@ galleryPlanRoutes.post("/:id/export", async (c) => {
       err.code === "NOT_FOUND" ? 404 : err.code === "VALIDATION" ? 400 : 500;
     return c.json({ error: err.message }, status);
   }
+});
+
+/**
+ * Phase 4e.x: upload BGM file (mp3/m4a/wav) cho plan. Multipart, field "bgm".
+ */
+const BGM_EXTS = ["mp3", "m4a", "wav", "aac"] as const;
+galleryPlanRoutes.post("/:id/bgm", async (c) => {
+  const id = c.req.param("id");
+  const plan = await getPlan(id);
+  if (!plan) return c.json({ error: "Plan not found" }, 404);
+
+  const body = await c.req.parseBody();
+  const file = body["bgm"];
+  if (!file || typeof file === "string" || !(file instanceof File)) {
+    return c.json({ error: "Thiếu field 'bgm' (file)" }, 400);
+  }
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!BGM_EXTS.includes(ext as (typeof BGM_EXTS)[number])) {
+    return c.json(
+      {
+        error: `Ext không hỗ trợ: .${ext}`,
+        accepted: BGM_EXTS.map((e) => `.${e}`),
+      },
+      400,
+    );
+  }
+
+  // Xoá BGM cũ (mọi ext) trước khi ghi mới
+  if (plan.bgmFilename) {
+    const oldPath = path.join(PATHS.TMP_DIR, plan.bgmFilename);
+    await fs.unlink(oldPath).catch(() => {
+      /* ignore */
+    });
+  }
+
+  const filename = galleryPlanBgmFilename(id, ext);
+  const filePath = path.join(PATHS.TMP_DIR, filename);
+  await fs.mkdir(PATHS.TMP_DIR, { recursive: true });
+  const buf = Buffer.from(await file.arrayBuffer());
+  await fs.writeFile(filePath, buf);
+
+  const updated = await setPlanBgm(id, filename);
+  return c.json(updated, 201);
+});
+
+/** Phase 4e.x: xoá BGM của plan. */
+galleryPlanRoutes.delete("/:id/bgm", async (c) => {
+  const id = c.req.param("id");
+  const plan = await getPlan(id);
+  if (!plan) return c.json({ error: "Plan not found" }, 404);
+  if (plan.bgmFilename) {
+    const oldPath = path.join(PATHS.TMP_DIR, plan.bgmFilename);
+    await fs.unlink(oldPath).catch(() => {
+      /* ignore */
+    });
+  }
+  const updated = await clearPlanBgm(id);
+  return c.json(updated);
 });
 
 galleryPlanRoutes.delete("/:id", async (c) => {

@@ -161,6 +161,7 @@ function initSchema(db: Database.Database): void {
       output_filename TEXT,
       output_duration_ms INTEGER,
       exported_at TEXT,
+      bgm_filename TEXT,
       UNIQUE(brainstorm_id, idea_idx)
     );
     CREATE INDEX IF NOT EXISTS idx_gallery_plans_updated
@@ -177,6 +178,7 @@ function initSchema(db: Database.Database): void {
     ["output_filename", "TEXT"],
     ["output_duration_ms", "INTEGER"],
     ["exported_at", "TEXT"],
+    ["bgm_filename", "TEXT"], // Phase 4e.x
   ];
   for (const [name, type] of planExtras) {
     if (!planColNames.has(name)) {

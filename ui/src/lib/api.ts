@@ -605,6 +605,8 @@ export type GalleryChapterPlan = {
   outputFilename: string | null;
   outputDurationMs: number | null;
   exportedAt: string | null;
+  /** Phase 4e.x: BGM file của plan. Auto-mix với voice cho narration, BGM segment cho music. */
+  bgmFilename: string | null;
 };
 
 export type ResearchSearchResponse = {
@@ -1168,6 +1170,30 @@ export const api = {
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
       { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  /** Phase 4e.x: upload BGM file (mp3/m4a/wav/aac). */
+  uploadGalleryPlanBgm: async (
+    planId: string,
+    file: File,
+  ): Promise<GalleryChapterPlan> => {
+    const form = new FormData();
+    form.append("bgm", file);
+    const res = await fetch(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/bgm`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as GalleryChapterPlan;
+  },
+
+  deleteGalleryPlanBgm: (planId: string) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/bgm`,
+      { method: "DELETE" },
     ),
 
   /** Phase 4e: concat tất cả chapter MP4 + inject FFMETADATA chapter markers. */
