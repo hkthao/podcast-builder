@@ -41,25 +41,37 @@ export function Sidebar() {
   const { data } = useQuery({
     queryKey: ["episodes", workspace],
     queryFn: () => api.listEpisodes(workspace),
+    // Gallery sidebar không show recent eps — skip fetch
+    enabled: workspace === "podcast",
   });
   const [pinned, setPinned] = usePersistedState<string[]>(
     "sidebar.pinned",
     [],
   );
 
-  // Items chỉ thuộc 1 workspace — switch sang workspace khác mà đang ở page
-  // đó → navigate về "/" (tránh user kẹt ở page không thuộc workspace).
-  const WORKSPACE_ONLY_PATHS: Record<Workspace, string[]> = {
-    podcast: ["/scenes"],
-    gallery: ["/research"],
-  };
+  // Items chỉ thuộc 1 workspace — switch workspace mà đang ở page only-of-other
+  // → navigate về landing phù hợp (tránh user kẹt ở page không thuộc workspace).
+  const PODCAST_ONLY_PATHS = [
+    "/",
+    "/scenes",
+    "/workflow",
+    "/essay",
+    "/knowledge",
+    "/visual",
+  ];
+  const GALLERY_ONLY_PATHS = ["/research", "/gallery/"];
   const switchWorkspace = (next: Workspace) => {
     if (next === workspace) return;
     setWorkspace(next);
-    const otherWorkspacePaths =
-      WORKSPACE_ONLY_PATHS[next === "podcast" ? "gallery" : "podcast"];
-    if (otherWorkspacePaths.some((p) => location.pathname.startsWith(p))) {
-      navigate("/");
+    const otherPaths =
+      next === "podcast" ? GALLERY_ONLY_PATHS : PODCAST_ONLY_PATHS;
+    if (
+      otherPaths.some((p) =>
+        p === "/" ? location.pathname === p : location.pathname.startsWith(p),
+      )
+    ) {
+      // Landing: podcast → "/", gallery → "/brainstorm"
+      navigate(next === "podcast" ? "/" : "/brainstorm");
     }
   };
   const togglePin = (name: string) => {
@@ -110,94 +122,108 @@ export function Sidebar() {
       </div>
 
       <nav className="p-3 space-y-3">
-        {/* Group 1: Chung — overview + shared pre-prod */}
-        <div className="space-y-0.5">
-          <SectionLabel>Chung</SectionLabel>
-          <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
-          <NavItem
-            to="/workflow"
-            icon={<WorkflowIcon className="size-4" />}
-            label="Workflow"
-          />
-          <NavItem
-            to="/brainstorm"
-            icon={<Lightbulb className="size-4" />}
-            label="Brainstorm"
-          />
-          <NavItem
-            to="/essay"
-            icon={<FileText className="size-4" />}
-            label="Bài luận"
-          />
-        </div>
-
-        {/* Group 2: Library chung — cross-style */}
-        <div className="space-y-0.5">
-          <SectionLabel>Thư viện chung</SectionLabel>
-          <NavItem
-            to="/references"
-            icon={<Library className="size-4" />}
-            label="Tài liệu"
-          />
-          <NavItem
-            to="/knowledge"
-            icon={<Network className="size-4" />}
-            label="Tri thức"
-          />
-          <NavItem
-            to="/visual"
-            icon={<ImageIcon className="size-4" />}
-            label="Hình ảnh ý tưởng"
-          />
-        </div>
-
-        {/* Production group — chỉ hiện workspace tương ứng */}
-        {workspace === "podcast" && (
-          <div className="space-y-0.5">
-            <SectionLabel>
-              <span className="inline-flex items-center gap-1.5">
-                <Mic className="size-3" />
-                Podcast — Production
-              </span>
-            </SectionLabel>
-            <NavItem
-              to="/scenes"
-              icon={<Film className="size-4" />}
-              label="Scene templates"
-            />
-          </div>
-        )}
-
-        {workspace === "gallery" && (
-          <div className="space-y-0.5">
-            <SectionLabel>
-              <span className="inline-flex items-center gap-1.5">
-                <Frame className="size-3" />
-                Gallery Art — Production
-              </span>
-            </SectionLabel>
-            <NavItem
-              to="/research"
-              icon={<Compass className="size-4" />}
-              label="Research assets"
-            />
-          </div>
+        {workspace === "podcast" ? (
+          <>
+            {/* Podcast: Chung → Thư viện → Production */}
+            <div className="space-y-0.5">
+              <SectionLabel>Chung</SectionLabel>
+              <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
+              <NavItem
+                to="/workflow"
+                icon={<WorkflowIcon className="size-4" />}
+                label="Workflow"
+              />
+              <NavItem
+                to="/brainstorm"
+                icon={<Lightbulb className="size-4" />}
+                label="Brainstorm"
+              />
+              <NavItem
+                to="/essay"
+                icon={<FileText className="size-4" />}
+                label="Bài luận"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <SectionLabel>Thư viện</SectionLabel>
+              <NavItem
+                to="/references"
+                icon={<Library className="size-4" />}
+                label="Tài liệu"
+              />
+              <NavItem
+                to="/knowledge"
+                icon={<Network className="size-4" />}
+                label="Tri thức"
+              />
+              <NavItem
+                to="/visual"
+                icon={<ImageIcon className="size-4" />}
+                label="Hình ảnh ý tưởng"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  <Mic className="size-3" />
+                  Production
+                </span>
+              </SectionLabel>
+              <NavItem
+                to="/scenes"
+                icon={<Film className="size-4" />}
+                label="Scene templates"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Gallery: workflow 8 bước — gọn theo flow tạo content → tài nguyên */}
+            <div className="space-y-0.5">
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  <Frame className="size-3" />
+                  Sản xuất
+                </span>
+              </SectionLabel>
+              <NavItem
+                to="/brainstorm"
+                icon={<Lightbulb className="size-4" />}
+                label="Brainstorm"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <SectionLabel>Tài nguyên</SectionLabel>
+              <NavItem
+                to="/research"
+                icon={<Compass className="size-4" />}
+                label="Asset (Wikimedia/Met)"
+              />
+              <NavItem
+                to="/references"
+                icon={<Library className="size-4" />}
+                label="Tài liệu tham khảo"
+              />
+            </div>
+          </>
         )}
       </nav>
 
-      <div className="px-3 pt-3 pb-1 border-t mt-1">
-        <SectionLabel>
-          {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
-        </SectionLabel>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-        {recent.length === 0 && (
-          <div className="px-3 py-2 text-sm text-muted-foreground">
-            Chưa có tập
+      {workspace === "podcast" ? (
+        <>
+          <div className="px-3 pt-3 pb-1 border-t mt-1">
+            <SectionLabel>
+              {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
+            </SectionLabel>
           </div>
-        )}
-        {recent.map((ep) => {
+
+          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
+            {recent.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                Chưa có tập
+              </div>
+            )}
+            {recent.map((ep) => {
           const path = `/episodes/${encodeURIComponent(ep.name)}`;
           const active = location.pathname === path;
           const pinned = isPinned(ep.name);
@@ -243,7 +269,11 @@ export function Sidebar() {
             </div>
           );
         })}
-      </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1" />
+      )}
 
       <div className="border-t p-3 space-y-2">
         <NavLink
