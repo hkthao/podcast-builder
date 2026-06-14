@@ -113,6 +113,7 @@ const serveStatic = (rootDir: string) =>
       : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
       : ext === "png" ? "image/png"
       : ext === "json" ? "application/json"
+      : ext === "txt" ? "text/plain; charset=utf-8"
       : "application/octet-stream";
 
     // Range request → 206 partial (cho video/audio seeking)

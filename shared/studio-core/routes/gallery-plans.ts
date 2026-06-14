@@ -16,6 +16,7 @@ import {
 } from "../gallery-plan-store";
 import { generateChapterAudio } from "../gallery-chapter-audio";
 import { renderChapter } from "../gallery-render";
+import { exportPlan } from "../gallery-concat";
 import {
   getSession,
   isGallerySession,
@@ -285,6 +286,31 @@ galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
       plan,
       outputPath: result.outputPath,
       durationMs: result.durationMs,
+    });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "NOT_FOUND" ? 404 : err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Phase 4e: concat tất cả chapter MP4 thành 1 final video với chapter markers
+ * + sinh youtube-chapters.txt. Sync 10-30s (ffmpeg copy mode, không re-encode).
+ */
+galleryPlanRoutes.post("/:id/export", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const result = await exportPlan({ planId: id });
+    const plan = await import("../gallery-plan-store").then((m) =>
+      m.getPlan(id),
+    );
+    return c.json({
+      plan,
+      outputPath: result.outputPath,
+      outputDurationMs: result.outputDurationMs,
+      chaptersTxtPath: result.chaptersTxtPath,
     });
   } catch (e) {
     const err = e as Error & { code?: string };

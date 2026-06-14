@@ -158,6 +158,9 @@ function initSchema(db: Database.Database): void {
       model TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      output_filename TEXT,
+      output_duration_ms INTEGER,
+      exported_at TEXT,
       UNIQUE(brainstorm_id, idea_idx)
     );
     CREATE INDEX IF NOT EXISTS idx_gallery_plans_updated
@@ -165,6 +168,21 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_gallery_plans_brainstorm
       ON gallery_chapter_plans(brainstorm_id);
   `);
+  // Phase 4e migration cho DB cũ
+  const planCols = db
+    .prepare("PRAGMA table_info(gallery_chapter_plans)")
+    .all() as Array<{ name: string }>;
+  const planColNames = new Set(planCols.map((c) => c.name));
+  const planExtras: Array<[string, string]> = [
+    ["output_filename", "TEXT"],
+    ["output_duration_ms", "INTEGER"],
+    ["exported_at", "TEXT"],
+  ];
+  for (const [name, type] of planExtras) {
+    if (!planColNames.has(name)) {
+      db.exec(`ALTER TABLE gallery_chapter_plans ADD COLUMN ${name} ${type}`);
+    }
+  }
 
   // Gallery asset library — Phase 26a cross-episode reuse (link-only)
   db.exec(`

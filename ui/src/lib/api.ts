@@ -601,6 +601,10 @@ export type GalleryChapterPlan = {
   model: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Phase 4e: final video MP4 sau khi concat tất cả chapters. */
+  outputFilename: string | null;
+  outputDurationMs: number | null;
+  exportedAt: string | null;
 };
 
 export type ResearchSearchResponse = {
@@ -1164,6 +1168,18 @@ export const api = {
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
       { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  /** Phase 4e: concat tất cả chapter MP4 + inject FFMETADATA chapter markers. */
+  exportGalleryPlan: (planId: string) =>
+    jsonFetch<{
+      plan: GalleryChapterPlan;
+      outputPath: string;
+      outputDurationMs: number;
+      chaptersTxtPath: string;
+    }>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/export`,
+      { method: "POST" },
     ),
 
   /** Phase 4d: render chapter qua Remotion. Sync, ~60-90s. */

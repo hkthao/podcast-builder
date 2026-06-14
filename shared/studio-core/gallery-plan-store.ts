@@ -77,6 +77,10 @@ export type GalleryChapterPlan = {
   model: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Phase 4e: filename video final sau khi concat. null = chưa export. */
+  outputFilename: string | null;
+  outputDurationMs: number | null;
+  exportedAt: string | null;
 };
 
 type DbRow = {
@@ -89,6 +93,9 @@ type DbRow = {
   model: string | null;
   created_at: string;
   updated_at: string;
+  output_filename: string | null;
+  output_duration_ms: number | null;
+  exported_at: string | null;
 };
 
 const slugify = (s: string): string =>
@@ -153,6 +160,9 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
     model: r.model,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    outputFilename: r.output_filename,
+    outputDurationMs: r.output_duration_ms,
+    exportedAt: r.exported_at,
   };
 };
 
@@ -161,8 +171,9 @@ const savePlan = (p: GalleryChapterPlan): void => {
     .prepare(
       `INSERT OR REPLACE INTO gallery_chapter_plans
         (id, brainstorm_id, idea_idx, idea_snapshot_json, chapters_json,
-         provider, model, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         provider, model, created_at, updated_at,
+         output_filename, output_duration_ms, exported_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       p.id,
@@ -174,8 +185,28 @@ const savePlan = (p: GalleryChapterPlan): void => {
       p.model,
       p.createdAt,
       p.updatedAt,
+      p.outputFilename,
+      p.outputDurationMs,
+      p.exportedAt,
     );
 };
+
+/**
+ * Phase 4e: persist plan-level final output sau khi concat xong.
+ */
+export async function updatePlanOutput(
+  planId: string,
+  output: { outputFilename: string; outputDurationMs: number },
+): Promise<GalleryChapterPlan | null> {
+  const plan = await getPlan(planId);
+  if (!plan) return null;
+  plan.outputFilename = output.outputFilename;
+  plan.outputDurationMs = output.outputDurationMs;
+  plan.exportedAt = new Date().toISOString();
+  plan.updatedAt = plan.exportedAt;
+  savePlan(plan);
+  return plan;
+}
 
 export async function listPlans(
   filter: { brainstormId?: string } = {},
@@ -271,6 +302,9 @@ export async function createPlanFromIdea(input: {
     model: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
+    outputFilename: null,
+    outputDurationMs: null,
+    exportedAt: null,
   };
   savePlan(plan);
   return plan;

@@ -36,6 +36,8 @@ import {
   Headphones,
   Video as VideoIcon,
   Film,
+  Download,
+  FileText,
 } from "lucide-react";
 import {
   api,
@@ -361,6 +363,17 @@ export function GalleryPlanPage() {
           />
         ))}
       </div>
+
+      {/* Phase 4e: plan-level export */}
+      <ExportPanel
+        plan={plan}
+        onMutate={(updated) =>
+          qc.setQueryData<GalleryChapterPlan>(
+            ["gallery-plan", plan.id],
+            updated,
+          )
+        }
+      />
     </div>
   );
 }
@@ -603,40 +616,51 @@ function ChapterCard({
             saving={saveMut.isPending}
           />
 
-          {/* Phase 4d.2: video render */}
+        </div>
+      )}
+
+      {/* Music chapter: render + approve toggle */}
+      {isMusic && (
+        <>
           <VideoPanel
             chapter={chapter}
             onRender={() => renderMut.mutate()}
             renderPending={renderMut.isPending}
             renderError={renderMut.error}
           />
-        </div>
+          <div className="mt-3 flex items-center justify-end">
+            {chapter.status !== "approved" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => saveMut.mutate({ status: "approved" })}
+                disabled={saveMut.isPending}
+              >
+                <CheckCircle2 className="size-3.5" />
+                Approve music cue
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => saveMut.mutate({ status: "draft" })}
+                disabled={saveMut.isPending}
+              >
+                Unapprove
+              </Button>
+            )}
+          </div>
+        </>
       )}
 
-      {/* Music chapter: chỉ cho approve toggle */}
-      {isMusic && (
-        <div className="mt-3 flex items-center justify-end">
-          {chapter.status !== "approved" ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => saveMut.mutate({ status: "approved" })}
-              disabled={saveMut.isPending}
-            >
-              <CheckCircle2 className="size-3.5" />
-              Approve music cue
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => saveMut.mutate({ status: "draft" })}
-              disabled={saveMut.isPending}
-            >
-              Unapprove
-            </Button>
-          )}
-        </div>
+      {/* Phase 4d.2: video render — narration mới ở trong !isMusic block trên */}
+      {!isMusic && (
+        <VideoPanel
+          chapter={chapter}
+          onRender={() => renderMut.mutate()}
+          renderPending={renderMut.isPending}
+          renderError={renderMut.error}
+        />
       )}
     </Card>
   );
@@ -794,6 +818,7 @@ function VideoPanel({
   renderPending: boolean;
   renderError: unknown;
 }) {
+  const isMusic = chapter.kind === "music";
   const hasVideo = chapter.videoFilename !== null;
   const hasAudio = chapter.audioFilename !== null;
   const beatsCount = chapter.visualBeats.length;
@@ -804,14 +829,16 @@ function VideoPanel({
     ? Math.round(chapter.videoDurationMs / 1000)
     : 0;
 
-  // Render điều kiện: phải có audio + ít nhất 1 beat (kể cả chưa attach asset →
-  // placeholder). Music chapter chưa render được (cần BGM Phase 4e).
-  const canRender = hasAudio && beatsCount > 0;
-  const disableReason = !hasAudio
-    ? "Cần gen audio trước"
-    : beatsCount === 0
-      ? "Cần ít nhất 1 visual beat"
-      : null;
+  // Phase 4e: music chapter render được luôn (silent track + overlay text).
+  // Narration cần audio + ≥1 beat.
+  const canRender = isMusic ? true : hasAudio && beatsCount > 0;
+  const disableReason = isMusic
+    ? null
+    : !hasAudio
+      ? "Cần gen audio trước"
+      : beatsCount === 0
+        ? "Cần ít nhất 1 visual beat"
+        : null;
 
   return (
     <div className="mt-5 border-t pt-4">
@@ -1451,4 +1478,152 @@ function CopyChip({ text }: { text: string }) {
     </Button>
   );
 }
+
+// ─── Phase 4e: Plan-level concat export ─────────────────────────────────
+
+function ExportPanel({
+  plan,
+  onMutate,
+}: {
+  plan: GalleryChapterPlan;
+  onMutate: (plan: GalleryChapterPlan) => void;
+}) {
+  const exportMut = useMutation({
+    mutationFn: () => api.exportGalleryPlan(plan.id),
+    onSuccess: (res) => onMutate(res.plan),
+  });
+
+  const totalChapters = plan.chapters.length;
+  const renderedChapters = plan.chapters.filter(
+    (c) => c.videoFilename !== null,
+  ).length;
+  const allRendered = renderedChapters === totalChapters && totalChapters > 0;
+  const hasOutput = plan.outputFilename !== null;
+  const outputDurMin = plan.outputDurationMs
+    ? Math.round(plan.outputDurationMs / 60_000)
+    : 0;
+  const outputDurSec = plan.outputDurationMs
+    ? Math.round(plan.outputDurationMs / 1000) % 60
+    : 0;
+
+  const chaptersTxtUrl = `/tmp/gallery-${plan.id}-chapters.txt`;
+
+  return (
+    <Card className="p-5 mt-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-serif text-lg flex items-center gap-2">
+            <Film className="size-5 text-accent" />
+            Export final video
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Concat tất cả chapter MP4 thành 1 video + inject FFMETADATA chapter
+            markers (YouTube auto-detect) + sinh youtube-chapters.txt.
+          </p>
+        </div>
+        <Badge variant="outline" className="gap-1 shrink-0">
+          <CheckCircle2
+            className={cn(
+              "size-3",
+              allRendered
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-muted-foreground",
+            )}
+          />
+          {renderedChapters}/{totalChapters} chương rendered
+        </Badge>
+      </div>
+
+      {!allRendered && (
+        <p className="mt-3 text-xs text-amber-600 dark:text-amber-400 inline-flex items-center gap-1">
+          <AlertCircle className="size-3.5" />
+          Cần render tất cả chương trước khi concat. Còn{" "}
+          {totalChapters - renderedChapters} chương chưa render.
+        </p>
+      )}
+
+      {exportMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(exportMut.error)}</span>
+        </div>
+      )}
+
+      {hasOutput && (
+        <div className="mt-4 space-y-2">
+          <video
+            controls
+            preload="metadata"
+            src={`/tmp/${encodeURIComponent(plan.outputFilename!)}`}
+            className="w-full rounded-md border bg-black aspect-video"
+          />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono">
+              {outputDurMin}m {outputDurSec}s
+            </span>
+            {plan.exportedAt && (
+              <span className="ml-2">
+                · export {new Date(plan.exportedAt).toLocaleString("vi-VN")}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Footer actions — outline + căn phải */}
+      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2">
+        {hasOutput && (
+          <>
+            <a
+              href={chaptersTxtUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-secondary transition-colors"
+              title="Mở chapters.txt cho YouTube description"
+            >
+              <FileText className="size-3.5" />
+              chapters.txt
+            </a>
+            <a
+              href={`/tmp/${encodeURIComponent(plan.outputFilename!)}`}
+              download={plan.outputFilename!}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-secondary transition-colors"
+            >
+              <Download className="size-3.5" />
+              Tải MP4
+            </a>
+          </>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => exportMut.mutate()}
+          disabled={!allRendered || exportMut.isPending}
+        >
+          {exportMut.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : hasOutput ? (
+            <RefreshCw className="size-4" />
+          ) : (
+            <Film className="size-4" />
+          )}
+          {exportMut.isPending
+            ? "Đang concat…"
+            : hasOutput
+              ? "Re-export"
+              : "Export final video"}
+        </Button>
+      </div>
+
+      {exportMut.isPending && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          ffmpeg concat copy mode (không re-encode) + inject metadata ~10-30s.
+          Hold tight…
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// FileText/Download icon imports (centralized at top of file)
 
