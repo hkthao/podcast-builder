@@ -125,7 +125,9 @@ export function Brainstorm() {
     mutationFn: () =>
       api.createBrainstorm({
         topic,
-        tone,
+        // Gallery có art-historian persona cố định — gửi placeholder để
+        // backend không từ chối (field tone vẫn required)
+        tone: workspace === "gallery" ? "documentary" : tone,
         count,
         provider,
         model,
@@ -171,8 +173,17 @@ export function Brainstorm() {
           Brainstorm
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
-          Generate 5 ý tưởng tập từ chủ đề + tone. Sau khi pick → copy
-          title/hook, upload audio NotebookLM rồi điền vào episode config.
+          {workspace === "gallery" ? (
+            <>
+              Generate ý tưởng video tài liệu nghệ thuật từ chủ đề. Sau khi pick →
+              "Lập kế hoạch chương" để gen transcript + visual beats per chương.
+            </>
+          ) : (
+            <>
+              Generate 5 ý tưởng tập từ chủ đề + tone. Sau khi pick → copy
+              title/hook, upload audio NotebookLM rồi điền vào episode config.
+            </>
+          )}
         </p>
       </header>
 
@@ -205,27 +216,42 @@ export function Brainstorm() {
                   id="topic"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder="VD: Mù loà trước giá trị hiện tại — vì sao con người không nhận ra điều mình đang có cho tới khi mất…"
+                  placeholder={
+                    workspace === "gallery"
+                      ? "VD: Họa sĩ Phục Hưng Ý, Caravaggio và ánh sáng Baroque, Nghệ thuật Hà Lan thế kỷ 17…"
+                      : "VD: Mù loà trước giá trị hiện tại — vì sao con người không nhận ra điều mình đang có cho tới khi mất…"
+                  }
                   rows={3}
                   className="mt-1.5"
                 />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div>
-                  <Label htmlFor="tone">Tone</Label>
-                  <select
-                    id="tone"
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {TONES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div
+                className={cn(
+                  "grid gap-3",
+                  // Gallery bỏ field Tone (art-historian persona cố định trong
+                  // system prompt) → còn 3 cột thay vì 4
+                  workspace === "gallery"
+                    ? "grid-cols-1 md:grid-cols-3"
+                    : "grid-cols-2 md:grid-cols-4",
+                )}
+              >
+                {workspace === "podcast" && (
+                  <div>
+                    <Label htmlFor="tone">Tone</Label>
+                    <select
+                      id="tone"
+                      value={tone}
+                      onChange={(e) => setTone(e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {TONES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <Label htmlFor="provider">Provider</Label>
                   <select
@@ -539,10 +565,11 @@ function IdeasView({
             </button>
           )}
           <p className="text-xs text-muted-foreground mt-1">
-            {session.tone}
+            {/* Gallery không show tone (placeholder "documentary") */}
+            {session.style !== "gallery" && session.tone}
             {session.provider && session.model && (
               <>
-                {" · "}
+                {session.style !== "gallery" && " · "}
                 <code className="font-mono">
                   {session.provider}:{session.model}
                 </code>
