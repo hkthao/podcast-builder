@@ -10,6 +10,7 @@ import { KnowledgePage } from "./pages/Knowledge";
 import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
 import { ResearchPage } from "./pages/Research";
+import { GalleryPlanPage } from "./pages/GalleryPlan";
 import { useEpisodesChangedSync } from "./lib/sse";
 import { WorkspaceProvider } from "./lib/workspace";
 
@@ -30,6 +31,7 @@ export function App() {
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
           <Route path="/research" element={<ResearchPage />} />
+          <Route path="/gallery/plans/:id" element={<GalleryPlanPage />} />
         </Routes>
         </AppLayout>
       </WorkspaceProvider>

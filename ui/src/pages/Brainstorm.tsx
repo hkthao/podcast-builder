@@ -588,6 +588,7 @@ function IdeasView({
               key={idx}
               idea={idea}
               idx={idx}
+              sessionId={session.id}
               picked={session.pickedIdx === idx}
               onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
               loading={pickingIdx === idx}
@@ -988,16 +989,19 @@ const LICENSE_META: Record<
 function GalleryIdeaCard({
   idea,
   idx,
+  sessionId,
   picked,
   onPick,
   loading,
 }: {
   idea: GalleryBrainstormIdea;
   idx: number;
+  sessionId: string;
   picked: boolean;
   onPick: () => void;
   loading: boolean;
 }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const license = LICENSE_META[idea.licenseRisk];
   const LicenseIcon = license.icon;
@@ -1005,6 +1009,21 @@ function GalleryIdeaCard({
     (s, c) => s + c.minutes,
     0,
   );
+
+  // Phase 3d: lookup plan đã có để toggle nút "Mở plan" vs "Lập plan mới"
+  const existingPlanQ = useQuery({
+    queryKey: ["gallery-plan-lookup", sessionId, idx],
+    queryFn: () => api.lookupGalleryPlan(sessionId, idx),
+  });
+
+  const createPlanMut = useMutation({
+    mutationFn: () => api.createGalleryPlan(sessionId, idx),
+    onSuccess: (plan) => {
+      navigate(`/gallery/plans/${plan.id}`);
+    },
+  });
+
+  const existingPlanId = existingPlanQ.data?.plan?.id;
 
   return (
     <Card
@@ -1211,6 +1230,34 @@ function GalleryIdeaCard({
           </div>
         </div>
       )}
+
+      {/* Phase 3d: Plan workflow CTA — luôn hiện, ngay cả khi card collapsed */}
+      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2">
+        {existingPlanId ? (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => navigate(`/gallery/plans/${existingPlanId}`)}
+          >
+            <FileText className="size-4" />
+            Mở plan đã có
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => createPlanMut.mutate()}
+            disabled={createPlanMut.isPending}
+          >
+            {createPlanMut.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <FileText className="size-4" />
+            )}
+            Lập kế hoạch chương
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

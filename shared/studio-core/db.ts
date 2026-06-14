@@ -133,6 +133,28 @@ function initSchema(db: Database.Database): void {
       ON server_errors(id DESC);
   `);
 
+  // Gallery chapter plans — Phase 3d. 1 plan = 1 gallery brainstorm idea đã pick
+  // được expand thành transcript per chapter. Snapshot idea để stable kể cả khi
+  // user edit brainstorm sau.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gallery_chapter_plans (
+      id TEXT PRIMARY KEY,
+      brainstorm_id TEXT NOT NULL,
+      idea_idx INTEGER NOT NULL,
+      idea_snapshot_json TEXT NOT NULL,
+      chapters_json TEXT NOT NULL,
+      provider TEXT,
+      model TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(brainstorm_id, idea_idx)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gallery_plans_updated
+      ON gallery_chapter_plans(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_gallery_plans_brainstorm
+      ON gallery_chapter_plans(brainstorm_id);
+  `);
+
   // Gallery asset library — Phase 26a cross-episode reuse (link-only)
   db.exec(`
     CREATE TABLE IF NOT EXISTS gallery_assets (

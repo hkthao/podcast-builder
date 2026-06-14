@@ -551,6 +551,24 @@ export type ProviderInfo = {
   note?: string;
 };
 
+// ─── Phase 3d — Gallery chapter plan ────────────────────────────────────
+export type GalleryPlanChapter = GalleryChapter & {
+  transcript: string;
+  status: "pending" | "draft" | "approved";
+};
+
+export type GalleryChapterPlan = {
+  id: string;
+  brainstormId: string;
+  ideaIdx: number;
+  ideaSnapshot: GalleryBrainstormIdea;
+  chapters: GalleryPlanChapter[];
+  provider: LLMProvider | null;
+  model: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ResearchSearchResponse = {
   results: AssetResult[];
   total: number;
@@ -1031,6 +1049,69 @@ export const api = {
     jsonFetch<SavedAsset>(
       `/api/research/library/${encodeURIComponent(id)}/tags`,
       { method: "PUT", body: JSON.stringify({ tags }) },
+    ),
+
+  // ─── Phase 3d — Gallery chapter plans ────────────────────────────────
+  listGalleryPlans: (brainstormId?: string) => {
+    const qs = brainstormId
+      ? `?brainstormId=${encodeURIComponent(brainstormId)}`
+      : "";
+    return jsonFetch<{ plans: GalleryChapterPlan[] }>(
+      `/api/gallery/plans${qs}`,
+    );
+  },
+
+  getGalleryPlan: (id: string) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(id)}`,
+    ),
+
+  lookupGalleryPlan: (brainstormId: string, ideaIdx: number) =>
+    jsonFetch<{ plan: GalleryChapterPlan | null }>(
+      `/api/gallery/plans/_/lookup?brainstormId=${encodeURIComponent(
+        brainstormId,
+      )}&ideaIdx=${ideaIdx}`,
+    ),
+
+  createGalleryPlan: (brainstormId: string, ideaIdx: number) =>
+    jsonFetch<GalleryChapterPlan>("/api/gallery/plans", {
+      method: "POST",
+      body: JSON.stringify({ brainstormId, ideaIdx }),
+    }),
+
+  updateGalleryPlanChapter: (
+    planId: string,
+    chapterIdx: number,
+    patch: { transcript?: string; status?: GalleryPlanChapter["status"] },
+  ) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}`,
+      { method: "PUT", body: JSON.stringify(patch) },
+    ),
+
+  saveGalleryPlanChapters: (
+    planId: string,
+    chapters: GalleryPlanChapter[],
+  ) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters`,
+      { method: "PUT", body: JSON.stringify({ chapters }) },
+    ),
+
+  genGalleryPlanChapter: (
+    planId: string,
+    chapterIdx: number,
+    input: { provider: LLMProvider; model: string },
+  ) =>
+    jsonFetch<GalleryChapterPlan>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/generate`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  deleteGalleryPlan: (id: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/gallery/plans/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
     ),
 };
 
