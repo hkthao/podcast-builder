@@ -260,6 +260,7 @@ export function GalleryPlanPage() {
             chapter={chapter}
             chapterIdx={idx}
             planId={plan.id}
+            ideaSnapshot={plan.ideaSnapshot}
             modelsData={modelsQ.data}
             onMutate={(updated) => {
               qc.setQueryData<GalleryChapterPlan>(
@@ -289,12 +290,14 @@ function ChapterCard({
   chapter,
   chapterIdx,
   planId,
+  ideaSnapshot,
   modelsData,
   onMutate,
 }: {
   chapter: GalleryPlanChapter;
   chapterIdx: number;
   planId: string;
+  ideaSnapshot: import("@/lib/api").GalleryBrainstormIdea;
   modelsData: import("@/lib/api").LLMModels | undefined;
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
@@ -556,6 +559,10 @@ function ChapterCard({
             beats={chapter.visualBeats}
             transcript={transcript}
             sentenceCount={countSentences(transcript)}
+            keywordSuggestions={buildBeatKeywordSuggestions(
+              chapter,
+              ideaSnapshot,
+            )}
             onSave={(beats) => saveMut.mutate({ visualBeats: beats })}
             saving={saveMut.isPending}
           />
@@ -1094,16 +1101,61 @@ function VideoPanel({
   );
 }
 
+/**
+ * Build danh sách keyword gợi ý cho beat picker — kết hợp chapter.keyWorks
+ * (ưu tiên, vì user đang work trong chapter này) với plan.ideaSnapshot.keyWorks
+ * (broader scope). Dedup giữ thứ tự, max 10.
+ *
+ * Format: "{title} {medium} {year}" — đủ specific để Wikimedia/Met ra đúng ảnh.
+ */
+function buildBeatKeywordSuggestions(
+  chapter: GalleryPlanChapter,
+  idea: import("@/lib/api").GalleryBrainstormIdea,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  // 1. Tác phẩm chapter này focus (ưu tiên)
+  for (const ref of chapter.keyWorks) {
+    if (!ref.trim()) continue;
+    const key = ref.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref.trim());
+    if (out.length >= 10) return out;
+  }
+  // 2. Tác phẩm plan-wide (từ ideaSnapshot)
+  for (const kw of idea.keyWorks) {
+    const phrase = [kw.title, kw.medium, kw.year]
+      .filter((x) => x && x.trim().length > 0)
+      .join(" ")
+      .trim();
+    if (!phrase) continue;
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(phrase);
+    if (out.length >= 10) return out;
+  }
+  // 3. Fallback: era/region của idea (cho ảnh bối cảnh chung)
+  if (out.length < 10 && idea.era) {
+    const fallback = `${idea.era} ${idea.region ?? ""} art`.trim();
+    if (!seen.has(fallback.toLowerCase())) out.push(fallback);
+  }
+  return out;
+}
+
 function VisualBeatsEditor({
   beats,
   transcript,
   sentenceCount,
+  keywordSuggestions,
   onSave,
   saving,
 }: {
   beats: VisualBeat[];
   transcript: string;
   sentenceCount: number;
+  keywordSuggestions: string[];
   onSave: (beats: VisualBeat[]) => void;
   saving: boolean;
 }) {
@@ -1189,6 +1241,7 @@ function VisualBeatsEditor({
                 totalBeats={beats.length}
                 sentences={sentences}
                 sentenceCount={sentenceCount}
+                keywordSuggestions={keywordSuggestions}
                 onUpdate={(patch) => updateBeat(i, patch)}
                 onDelete={() => deleteBeat(i)}
                 disabled={saving}
@@ -1224,6 +1277,7 @@ function BeatRow({
   totalBeats,
   sentences,
   sentenceCount,
+  keywordSuggestions,
   onUpdate,
   onDelete,
   disabled,
@@ -1233,6 +1287,7 @@ function BeatRow({
   totalBeats: number;
   sentences: string[];
   sentenceCount: number;
+  keywordSuggestions: string[];
   onUpdate: (patch: Partial<VisualBeat>) => void;
   onDelete: () => void;
   disabled: boolean;
@@ -1332,6 +1387,7 @@ function BeatRow({
       {/* Phase 4c: asset attach */}
       <BeatAssetSlot
         beat={beat}
+        keywordSuggestions={keywordSuggestions}
         onAttach={(assetId) => onUpdate({ assetIdRef: assetId })}
         onDetach={() => onUpdate({ assetIdRef: null })}
         disabled={disabled}
@@ -1342,11 +1398,13 @@ function BeatRow({
 
 function BeatAssetSlot({
   beat,
+  keywordSuggestions,
   onAttach,
   onDetach,
   disabled,
 }: {
   beat: VisualBeat;
+  keywordSuggestions: string[];
   onAttach: (assetId: string) => void;
   onDetach: () => void;
   disabled: boolean;
@@ -1444,6 +1502,7 @@ function BeatAssetSlot({
       {pickerOpen && (
         <BeatAssetPicker
           initialQuery={beat.keyword}
+          suggestions={keywordSuggestions}
           onPick={(assetId) => {
             onAttach(assetId);
             setPickerOpen(false);
@@ -1457,10 +1516,12 @@ function BeatAssetSlot({
 
 function BeatAssetPicker({
   initialQuery,
+  suggestions,
   onPick,
   onClose,
 }: {
   initialQuery: string;
+  suggestions: string[];
   onPick: (assetId: string) => void;
   onClose: () => void;
 }) {
@@ -1541,6 +1602,31 @@ function BeatAssetPicker({
           <X className="size-3.5" />
         </Button>
       </div>
+
+      {/* Gợi ý keyword từ plan / chapter — click để fill search */}
+      {suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground self-center">
+            Gợi ý:
+          </span>
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setQ(s)}
+              className={cn(
+                "h-7 px-2 rounded-md border text-xs transition-colors max-w-[260px] truncate",
+                q === s
+                  ? "border-accent bg-accent/20 text-foreground"
+                  : "border-input hover:bg-secondary text-muted-foreground",
+              )}
+              title={`Search "${s}"`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === "library" && (
         <AssetGrid
