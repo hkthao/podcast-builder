@@ -66,47 +66,64 @@ export function Sidebar() {
         </NavLink>
       </div>
 
-      <nav className="p-3 space-y-0.5">
-        <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
-        <NavItem
-          to="/workflow"
-          icon={<WorkflowIcon className="size-4" />}
-          label="Workflow"
-        />
-        <NavItem
-          to="/brainstorm"
-          icon={<Lightbulb className="size-4" />}
-          label="Brainstorm"
-        />
-        <NavItem
-          to="/essay"
-          icon={<FileText className="size-4" />}
-          label="Bài luận"
-        />
-        <NavItem
-          to="/knowledge"
-          icon={<Network className="size-4" />}
-          label="Tri thức"
-        />
-        <NavItem
-          to="/visual"
-          icon={<ImageIcon className="size-4" />}
-          label="Hình ảnh"
-        />
-        <NavItem
-          to="/scenes"
-          icon={<Film className="size-4" />}
-          label="Scene"
-        />
-        <NavItem
-          to="/references"
-          icon={<Library className="size-4" />}
-          label="Tài liệu"
-        />
+      <nav className="p-3 space-y-3">
+        {/* Group 1: Tổng quan */}
+        <div className="space-y-0.5">
+          <SectionLabel>Tổng quan</SectionLabel>
+          <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
+          <NavItem
+            to="/workflow"
+            icon={<WorkflowIcon className="size-4" />}
+            label="Workflow"
+          />
+        </div>
+
+        {/* Group 2: Ý tưởng & Nội dung — pre-production */}
+        <div className="space-y-0.5">
+          <SectionLabel>Ý tưởng & Nội dung</SectionLabel>
+          <NavItem
+            to="/brainstorm"
+            icon={<Lightbulb className="size-4" />}
+            label="Brainstorm"
+          />
+          <NavItem
+            to="/essay"
+            icon={<FileText className="size-4" />}
+            label="Bài luận"
+          />
+          <NavItem
+            to="/references"
+            icon={<Library className="size-4" />}
+            label="Tài liệu"
+          />
+          <NavItem
+            to="/knowledge"
+            icon={<Network className="size-4" />}
+            label="Tri thức"
+          />
+          <NavItem
+            to="/visual"
+            icon={<ImageIcon className="size-4" />}
+            label="Hình ảnh"
+          />
+        </div>
+
+        {/* Group 3: Sản xuất — production assets + future styles */}
+        <div className="space-y-0.5">
+          <SectionLabel>Sản xuất</SectionLabel>
+          <NavItem
+            to="/scenes"
+            icon={<Film className="size-4" />}
+            label="Scene"
+          />
+          {/* Future expansion: tài liệu nghệ thuật, asset gallery, style mới */}
+        </div>
       </nav>
 
-      <div className="px-5 py-2 text-xs uppercase tracking-wider text-muted-foreground">
-        {pinnedEps.length > 0 ? "Pinned + Recent" : "Recent"}
+      <div className="px-3 pt-3 pb-1 border-t mt-1">
+        <SectionLabel>
+          {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
+        </SectionLabel>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
@@ -176,6 +193,14 @@ export function Sidebar() {
         <ThemeSwitcher />
       </div>
     </aside>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+      {children}
+    </div>
   );
 }
 
