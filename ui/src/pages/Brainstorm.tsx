@@ -14,12 +14,25 @@ import {
   AlertCircle,
   FileText,
   ChevronDown,
+  Mic2,
+  Music,
+  Image as ImageIcon,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Clock,
+  Landmark,
+  ExternalLink,
 } from "lucide-react";
 import {
   api,
+  isGallerySession,
   type BrainstormSession,
   type BrainstormIdea,
   type BrainstormScores,
+  type GalleryBrainstormIdea,
+  type GalleryChapter,
+  type LicenseRisk,
   type LLMProvider,
   type TopicCategory,
 } from "@/lib/api";
@@ -568,20 +581,32 @@ function IdeasView({
         </Button>
       </div>
 
-      {session.ideas
-        .map((idea, idx) => ({ idea, idx }))
-        .sort((a, b) => avgScore(b.idea.scores) - avgScore(a.idea.scores))
-        .map(({ idea, idx }) => (
-          <IdeaCard
-            key={idx}
-            idea={idea}
-            idx={idx}
-            sessionId={session.id}
-            picked={session.pickedIdx === idx}
-            onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
-            loading={pickingIdx === idx}
-          />
-        ))}
+      {/* Phase 3c: branch render theo style — gallery có schema riêng */}
+      {isGallerySession(session)
+        ? session.ideas.map((idea, idx) => (
+            <GalleryIdeaCard
+              key={idx}
+              idea={idea}
+              idx={idx}
+              picked={session.pickedIdx === idx}
+              onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
+              loading={pickingIdx === idx}
+            />
+          ))
+        : (session.ideas as BrainstormIdea[])
+            .map((idea, idx) => ({ idea, idx }))
+            .sort((a, b) => avgScore(b.idea.scores) - avgScore(a.idea.scores))
+            .map(({ idea, idx }) => (
+              <IdeaCard
+                key={idx}
+                idea={idea}
+                idx={idx}
+                sessionId={session.id}
+                picked={session.pickedIdx === idx}
+                onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
+                loading={pickingIdx === idx}
+              />
+            ))}
     </div>
   );
 }
@@ -927,5 +952,303 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       {label}
     </Button>
+  );
+}
+
+// ─── Phase 3c: Gallery idea card ─────────────────────────────────────
+
+const ARCHETYPE_LABEL: Record<GalleryBrainstormIdea["archetype"], string> = {
+  monograph: "Chân dung họa sĩ",
+  masterpiece: "Đào sâu 1 tác phẩm",
+  movement: "Trào lưu / thời kỳ",
+  theme: "Chủ đề xuyên thời",
+};
+
+const LICENSE_META: Record<
+  LicenseRisk,
+  { label: string; icon: React.ElementType; cls: string }
+> = {
+  safe: {
+    label: "Safe — public domain",
+    icon: ShieldCheck,
+    cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  },
+  check: {
+    label: "Check — cần kiểm tra",
+    icon: ShieldAlert,
+    cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  },
+  blocked: {
+    label: "Blocked — modern art",
+    icon: ShieldX,
+    cls: "bg-destructive/10 text-destructive border-destructive/40",
+  },
+};
+
+function GalleryIdeaCard({
+  idea,
+  idx,
+  picked,
+  onPick,
+  loading,
+}: {
+  idea: GalleryBrainstormIdea;
+  idx: number;
+  picked: boolean;
+  onPick: () => void;
+  loading: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const license = LICENSE_META[idea.licenseRisk];
+  const LicenseIcon = license.icon;
+  const totalChapterMinutes = idea.chapters.reduce(
+    (s, c) => s + c.minutes,
+    0,
+  );
+
+  return (
+    <Card
+      className={cn(
+        "p-5 transition-all",
+        picked && "ring-2 ring-accent border-accent",
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Badge variant="outline" className="text-[10px] font-mono">
+              #{idx + 1}
+            </Badge>
+            <Badge variant="secondary" className="text-xs">
+              {ARCHETYPE_LABEL[idea.archetype]}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn("text-xs gap-1", license.cls)}
+              title={idea.licenseNote}
+            >
+              <LicenseIcon className="size-3" />
+              {license.label}
+            </Badge>
+            {idea.structureMode === "doubled" && (
+              <Badge variant="outline" className="text-xs gap-1">
+                <Clock className="size-3" />
+                Doubled (mirror)
+              </Badge>
+            )}
+          </div>
+          <h3 className="font-serif text-lg leading-tight">{idea.title}</h3>
+          <p className="mt-1 text-sm text-muted-foreground italic">
+            "{idea.hook}"
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {idea.era} · {idea.region} · ~{idea.estimatedMinutes}p
+            {idea.structureMode === "doubled" &&
+              ` (Part1 + Part2 mirror, content ${totalChapterMinutes}p)`}
+          </p>
+        </div>
+        <Button
+          variant={picked ? "default" : "outline"}
+          size="sm"
+          onClick={onPick}
+          disabled={loading}
+          className="shrink-0"
+        >
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : picked ? (
+            <Check className="size-4" />
+          ) : null}
+          {picked ? "Đã chọn" : "Chọn ý này"}
+        </Button>
+      </div>
+
+      {/* Chapters + KeyWorks expandable */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-4 inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+      >
+        <ChevronDown
+          className={cn(
+            "size-3 transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+        {expanded ? "Thu gọn" : `Chi tiết (${idea.chapters.length} chương · ${idea.keyWorks.length} tác phẩm)`}
+      </button>
+
+      {expanded && (
+        <div className="mt-4 space-y-4 border-t pt-4">
+          {/* Chapters */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Cấu trúc chương ({totalChapterMinutes}p tổng)
+            </h4>
+            <ol className="space-y-1.5">
+              {idea.chapters.map((ch, i) => (
+                <ChapterRow key={i} idx={i} chapter={ch} />
+              ))}
+            </ol>
+          </div>
+
+          {/* KeyWorks */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Tác phẩm cần asset ({idea.keyWorks.length})
+            </h4>
+            <ul className="space-y-2">
+              {idea.keyWorks.map((kw, i) => (
+                <li
+                  key={i}
+                  className="text-sm border-l-2 border-secondary pl-3"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium">{kw.title}</span>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {kw.year}
+                    </span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {kw.medium}
+                    </Badge>
+                    <a
+                      href={`https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(kw.title)}&title=Special:MediaSearch&go=Go&type=image`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-accent hover:underline inline-flex items-center gap-0.5 ml-auto"
+                    >
+                      Wikimedia
+                      <ExternalLink className="size-3" />
+                    </a>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    <Landmark className="inline size-3 mr-1" />
+                    {kw.location}
+                  </p>
+                  <p className="text-xs mt-0.5">{kw.whyImportant}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Assets summary */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-md border bg-secondary/30 p-3">
+              <p className="font-semibold mb-1 flex items-center gap-1.5">
+                <ImageIcon className="size-3.5" />
+                Asset sources
+              </p>
+              <div className="space-y-0.5 text-muted-foreground">
+                <p>
+                  Wikimedia: {idea.assetSources.wikimedia ? "✓" : "✗"} · Met:{" "}
+                  {idea.assetSources.met ? "✓" : "✗"}
+                </p>
+                {idea.assetSources.customMuseums.length > 0 && (
+                  <p>Bảo tàng: {idea.assetSources.customMuseums.join(", ")}</p>
+                )}
+                <p>
+                  ~{idea.assetSources.estimatedImageCount} ảnh,{" "}
+                  {idea.assetSources.estimatedClipCount} clip
+                </p>
+              </div>
+            </div>
+            <div className="rounded-md border bg-secondary/30 p-3">
+              <p className="font-semibold mb-1 flex items-center gap-1.5">
+                <Sparkles className="size-3.5" />
+                Unique angle
+              </p>
+              <p className="text-muted-foreground">{idea.uniqueAngle}</p>
+            </div>
+          </div>
+
+          {/* Audience + scholarly debate */}
+          <div className="grid grid-cols-1 gap-2 text-xs">
+            <p>
+              <span className="font-semibold text-muted-foreground">
+                Audience:{" "}
+              </span>
+              {idea.audience}
+            </p>
+            {idea.scholarlyDebate && (
+              <p>
+                <span className="font-semibold text-muted-foreground">
+                  Scholarly debate:{" "}
+                </span>
+                {idea.scholarlyDebate}
+              </p>
+            )}
+            {idea.references.length > 0 && (
+              <div>
+                <span className="font-semibold text-muted-foreground">
+                  References:{" "}
+                </span>
+                <span>{idea.references.join(" · ")}</span>
+              </div>
+            )}
+            <p>
+              <span className="font-semibold text-muted-foreground">
+                License note:{" "}
+              </span>
+              {idea.licenseNote}
+            </p>
+          </div>
+
+          {/* Copy actions */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <CopyButton text={idea.title} label="Title" />
+            <CopyButton text={idea.hook} label="Hook" />
+            <CopyButton
+              text={idea.chapters
+                .map(
+                  (ch, i) =>
+                    `${i + 1}. [${ch.kind}] ${ch.title} (${ch.minutes}p)${
+                      ch.musicCue ? ` — ${ch.musicCue}` : ""
+                    }`,
+                )
+                .join("\n")}
+              label="Chapters"
+            />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ChapterRow({ idx, chapter }: { idx: number; chapter: GalleryChapter }) {
+  const isMusic = chapter.kind === "music";
+  const Icon = isMusic ? Music : Mic2;
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      <span className="text-xs font-mono text-muted-foreground mt-0.5 w-5 shrink-0">
+        {idx + 1}.
+      </span>
+      <Icon
+        className={cn(
+          "size-3.5 mt-0.5 shrink-0",
+          isMusic ? "text-accent" : "text-primary",
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={cn(isMusic && "italic")}>{chapter.title}</span>
+          <span className="text-xs text-muted-foreground font-mono shrink-0">
+            {chapter.minutes}p
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {chapter.summary}
+          {isMusic && chapter.musicCue && (
+            <span className="ml-1 italic">— {chapter.musicCue}</span>
+          )}
+        </p>
+        {chapter.keyWorks.length > 0 && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium">Tác phẩm:</span>{" "}
+            {chapter.keyWorks.join(", ")}
+          </p>
+        )}
+      </div>
+    </li>
   );
 }

@@ -257,11 +257,69 @@ export type TopicCategory =
   | "Ethics"
   | "Future";
 
+// Phase 3a: Gallery brainstorm schema — hoàn toàn khác podcast.
+export type GalleryArchetype =
+  | "monograph"
+  | "masterpiece"
+  | "movement"
+  | "theme";
+
+export type LicenseRisk = "safe" | "check" | "blocked";
+
+export type ChapterKind = "narration" | "music";
+
+export type StructureMode = "linear" | "doubled";
+
+export type GalleryChapter = {
+  kind: ChapterKind;
+  title: string;
+  minutes: number;
+  keyWorks: string[];
+  summary: string;
+  musicCue?: string;
+};
+
+export type GalleryKeyWork = {
+  title: string;
+  year: string;
+  location: string;
+  medium: string;
+  whyImportant: string;
+};
+
+export type GalleryAssetSources = {
+  wikimedia: boolean;
+  met: boolean;
+  customMuseums: string[];
+  estimatedImageCount: number;
+  estimatedClipCount: number;
+};
+
+export type GalleryBrainstormIdea = {
+  title: string;
+  archetype: GalleryArchetype;
+  hook: string;
+  era: string;
+  region: string;
+  estimatedMinutes: number;
+  structureMode: StructureMode;
+  chapters: GalleryChapter[];
+  keyWorks: GalleryKeyWork[];
+  licenseRisk: LicenseRisk;
+  licenseNote: string;
+  assetSources: GalleryAssetSources;
+  references: string[];
+  scholarlyDebate: string;
+  audience: string;
+  uniqueAngle: string;
+};
+
 export type BrainstormSession = {
   id: string;
   topic: string;
   tone: string;
-  ideas: BrainstormIdea[];
+  /** Phase 3a: union — kiểu thực phụ thuộc style (podcast vs gallery). */
+  ideas: BrainstormIdea[] | GalleryBrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
   categories: TopicCategory[];
@@ -270,6 +328,16 @@ export type BrainstormSession = {
   /** Phase 2: workspace style — default "podcast" cho legacy. */
   style: Style;
 };
+
+/** Type guards để narrow union. */
+export const isPodcastSession = (
+  s: BrainstormSession,
+): s is BrainstormSession & { ideas: BrainstormIdea[] } => s.style === "podcast";
+
+export const isGallerySession = (
+  s: BrainstormSession,
+): s is BrainstormSession & { ideas: GalleryBrainstormIdea[] } =>
+  s.style === "gallery";
 
 export type EssayBrainstormRef = {
   id: string;
