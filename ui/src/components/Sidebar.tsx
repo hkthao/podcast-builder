@@ -13,6 +13,8 @@ import {
   Film,
   Compass,
   Star,
+  Mic,
+  Frame,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -68,20 +70,15 @@ export function Sidebar() {
       </div>
 
       <nav className="p-3 space-y-3">
-        {/* Group 1: Tổng quan */}
+        {/* Group 1: Chung — overview + shared pre-prod */}
         <div className="space-y-0.5">
-          <SectionLabel>Tổng quan</SectionLabel>
+          <SectionLabel>Chung</SectionLabel>
           <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
           <NavItem
             to="/workflow"
             icon={<WorkflowIcon className="size-4" />}
             label="Workflow"
           />
-        </div>
-
-        {/* Group 2: Ý tưởng & Nội dung — pre-production */}
-        <div className="space-y-0.5">
-          <SectionLabel>Ý tưởng & Nội dung</SectionLabel>
           <NavItem
             to="/brainstorm"
             icon={<Lightbulb className="size-4" />}
@@ -92,6 +89,11 @@ export function Sidebar() {
             icon={<FileText className="size-4" />}
             label="Bài luận"
           />
+        </div>
+
+        {/* Group 2: Library chung — cross-style */}
+        <div className="space-y-0.5">
+          <SectionLabel>Thư viện chung</SectionLabel>
           <NavItem
             to="/references"
             icon={<Library className="size-4" />}
@@ -105,22 +107,37 @@ export function Sidebar() {
           <NavItem
             to="/visual"
             icon={<ImageIcon className="size-4" />}
-            label="Hình ảnh"
+            label="Hình ảnh ý tưởng"
           />
         </div>
 
-        {/* Group 3: Sản xuất — production assets + gallery research */}
+        {/* Group 3: Podcast — Style 1 (sticker SVG, 9:16 Reels) */}
         <div className="space-y-0.5">
-          <SectionLabel>Sản xuất</SectionLabel>
+          <SectionLabel>
+            <span className="inline-flex items-center gap-1.5">
+              <Mic className="size-3" />
+              Podcast
+            </span>
+          </SectionLabel>
           <NavItem
             to="/scenes"
             icon={<Film className="size-4" />}
-            label="Scene"
+            label="Scene templates"
           />
+        </div>
+
+        {/* Group 4: Gallery Art — Style 2 (real photos + Ken Burns, doc 16:9/9:16) */}
+        <div className="space-y-0.5">
+          <SectionLabel>
+            <span className="inline-flex items-center gap-1.5">
+              <Frame className="size-3" />
+              Gallery Art
+            </span>
+          </SectionLabel>
           <NavItem
             to="/research"
             icon={<Compass className="size-4" />}
-            label="Research"
+            label="Research assets"
           />
         </div>
       </nav>
