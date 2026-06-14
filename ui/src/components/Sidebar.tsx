@@ -41,8 +41,13 @@ export function Sidebar() {
   const { data } = useQuery({
     queryKey: ["episodes", workspace],
     queryFn: () => api.listEpisodes(workspace),
-    // Gallery sidebar không show recent eps — skip fetch
     enabled: workspace === "podcast",
+  });
+  // Gallery: list plans cho "Pinned + Recent" bottom panel
+  const { data: galleryPlansData } = useQuery({
+    queryKey: ["gallery-plans"],
+    queryFn: () => api.listGalleryPlans(),
+    enabled: workspace === "gallery",
   });
   const [pinned, setPinned] = usePersistedState<string[]>(
     "sidebar.pinned",
@@ -50,9 +55,8 @@ export function Sidebar() {
   );
 
   // Items chỉ thuộc 1 workspace — switch workspace mà đang ở page only-of-other
-  // → navigate về landing phù hợp (tránh user kẹt ở page không thuộc workspace).
+  // → navigate về "/" (route "/" tự branch theo workspace mới).
   const PODCAST_ONLY_PATHS = [
-    "/",
     "/scenes",
     "/workflow",
     "/essay",
@@ -65,13 +69,8 @@ export function Sidebar() {
     setWorkspace(next);
     const otherPaths =
       next === "podcast" ? GALLERY_ONLY_PATHS : PODCAST_ONLY_PATHS;
-    if (
-      otherPaths.some((p) =>
-        p === "/" ? location.pathname === p : location.pathname.startsWith(p),
-      )
-    ) {
-      // Landing: podcast → "/", gallery → "/brainstorm"
-      navigate(next === "podcast" ? "/" : "/brainstorm");
+    if (otherPaths.some((p) => location.pathname.startsWith(p))) {
+      navigate("/");
     }
   };
   const togglePin = (name: string) => {
@@ -186,6 +185,7 @@ export function Sidebar() {
                   Sản xuất
                 </span>
               </SectionLabel>
+              <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
               <NavItem
                 to="/brainstorm"
                 icon={<Lightbulb className="size-4" />}
@@ -216,6 +216,8 @@ export function Sidebar() {
               {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
             </SectionLabel>
           </div>
+
+
 
           <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
             {recent.length === 0 && (
@@ -272,7 +274,47 @@ export function Sidebar() {
           </div>
         </>
       ) : (
-        <div className="flex-1" />
+        <>
+          <div className="px-3 pt-3 pb-1 border-t mt-1">
+            <SectionLabel>Tập gần đây</SectionLabel>
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
+            {(galleryPlansData?.plans ?? []).length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                Chưa có tập
+              </div>
+            ) : (
+              [...(galleryPlansData?.plans ?? [])]
+                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+                .slice(0, 8)
+                .map((p) => {
+                  const path = `/gallery/plans/${encodeURIComponent(p.id)}`;
+                  const active = location.pathname === path;
+                  const exported = p.outputFilename !== null;
+                  return (
+                    <NavLink
+                      key={p.id}
+                      to={path}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors hover:bg-secondary",
+                        active && "bg-secondary text-foreground font-medium",
+                      )}
+                      title={p.ideaSnapshot.title}
+                    >
+                      {exported ? (
+                        <CheckCircle2 className="size-3.5 text-accent shrink-0" />
+                      ) : (
+                        <Clock className="size-3.5 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {p.ideaSnapshot.title}
+                      </span>
+                    </NavLink>
+                  );
+                })
+            )}
+          </div>
+        </>
       )}
 
       <div className="border-t p-3 space-y-2">

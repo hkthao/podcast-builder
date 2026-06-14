@@ -11,9 +11,10 @@ import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
 import { ResearchPage } from "./pages/Research";
 import { GalleryPlanPage } from "./pages/GalleryPlan";
+import { GalleryPlanList } from "./pages/GalleryPlanList";
 import { SettingsPage } from "./pages/Settings";
 import { useEpisodesChangedSync } from "./lib/sse";
-import { WorkspaceProvider } from "./lib/workspace";
+import { WorkspaceProvider, useWorkspace } from "./lib/workspace";
 
 export function App() {
   useEpisodesChangedSync();
@@ -22,7 +23,7 @@ export function App() {
       <WorkspaceProvider>
         <AppLayout>
         <Routes>
-          <Route path="/" element={<EpisodeList />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/episodes/:name" element={<EpisodeEdit />} />
           <Route path="/references" element={<ReferenceList />} />
           <Route path="/brainstorm" element={<Brainstorm />} />
@@ -39,4 +40,10 @@ export function App() {
       </WorkspaceProvider>
     </BrowserRouter>
   );
+}
+
+/** "/" branches theo workspace: podcast → EpisodeList, gallery → GalleryPlanList. */
+function HomeRoute() {
+  const { workspace } = useWorkspace();
+  return workspace === "gallery" ? <GalleryPlanList /> : <EpisodeList />;
 }
