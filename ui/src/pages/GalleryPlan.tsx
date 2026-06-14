@@ -1542,17 +1542,28 @@ function BeatAssetSlot({
             </p>
           </div>
           <a
+            href={attached.fullUrl}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="h-7 inline-flex items-center gap-1 px-2 text-xs rounded border border-input hover:bg-secondary shrink-0"
+            title="Mở ảnh fullsize — right-click Save As nếu API rate-limit"
+          >
+            <Download className="size-3" />
+            Tải ảnh
+          </a>
+          <a
             href={attached.sourcePage}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-accent hover:underline shrink-0"
-            title="Open source page"
+            className="h-7 inline-flex items-center px-2 text-xs rounded border border-input hover:bg-secondary shrink-0"
+            title="Mở trang gốc (Wikimedia/Met)"
           >
             <ExternalLink className="size-3" />
           </a>
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             className="h-7 text-xs"
             onClick={() => setPickerOpen((v) => !v)}
             disabled={disabled}
@@ -1561,8 +1572,8 @@ function BeatAssetSlot({
           </Button>
           <Button
             size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+            variant="outline"
+            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={onDetach}
             disabled={disabled}
             title="Detach asset"
