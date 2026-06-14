@@ -18,7 +18,8 @@
     "migrate": "tsx podcast/scripts/migrate-json-to-sqlite.ts",
     "typecheck": "tsc --noEmit",
     "gallery:parse-chapters": "tsx gallery/scripts/parse-chapters.ts",
-    "gallery:plan-assets": "tsx gallery/scripts/plan-assets.ts"
+    "gallery:plan-assets": "tsx gallery/scripts/plan-assets.ts",
+    "gallery:tts": "tsx gallery/scripts/gen-audio-tts.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",
