@@ -14,8 +14,8 @@ import {
   type Reference,
   type SuggestedRef,
 } from "../lib/reference-store";
-import { chat, type LLMProvider } from "../lib/llm-providers";
-import { safeParseJson } from "../lib/safe-json";
+import { chat, type LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { safeParseJson } from "../../../shared/lib/safe-json";
 import { saveEssaySuggestedRefs } from "../lib/essay-store";
 
 export const referencesRoutes = new Hono();

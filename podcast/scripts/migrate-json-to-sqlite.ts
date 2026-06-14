@@ -13,7 +13,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, getDbPath } from "../server/lib/db";
+import { getDb, getDbPath } from "../../shared/studio-core/db";
 
 const BRAINSTORM_DIR = path.resolve("brainstorm");
 const ESSAYS_DIR = path.resolve("essays");

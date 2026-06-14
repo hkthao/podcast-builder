@@ -6,9 +6,9 @@
  * Idea schema cố tình tổng quát (title/hook/angle/why) để dùng cho cả
  * Vietnamese ByteCast Tech lẫn các kênh khác sau này.
  */
-import { chat, type LLMProvider } from "./llm-providers";
-import { getDb } from "./db";
-import { safeParseJson } from "./safe-json";
+import { chat, type LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { getDb } from "../../../shared/studio-core/db";
+import { safeParseJson } from "../../../shared/lib/safe-json";
 const DEFAULT_PROVIDER: LLMProvider =
   (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
 const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";

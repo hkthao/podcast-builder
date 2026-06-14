@@ -4,24 +4,24 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
-import { brainstormRoutes } from "./routes/brainstorm";
-import { episodesRoutes } from "./routes/episodes";
-import { essayRoutes } from "./routes/essay";
-import { llmRoutes } from "./routes/llm";
-import { referencesRoutes } from "./routes/references";
-import { renderRoutes } from "./routes/render";
-import { knowledgeRoutes } from "./routes/knowledge";
-import { scenesRoutes } from "./routes/scenes";
-import { visualRoutes } from "./routes/visual";
-import { workflowRoutes } from "./routes/workflow";
-import { startFsWatcher } from "./lib/events";
-import { sseFromBus } from "./lib/sse";
+import { brainstormRoutes } from "../podcast/server/routes/brainstorm";
+import { episodesRoutes } from "../podcast/server/routes/episodes";
+import { essayRoutes } from "../podcast/server/routes/essay";
+import { llmRoutes } from "../shared/studio-core/routes/llm";
+import { referencesRoutes } from "../podcast/server/routes/references";
+import { renderRoutes } from "../podcast/server/routes/render";
+import { knowledgeRoutes } from "../podcast/server/routes/knowledge";
+import { scenesRoutes } from "../podcast/server/routes/scenes";
+import { visualRoutes } from "../podcast/server/routes/visual";
+import { workflowRoutes } from "../podcast/server/routes/workflow";
+import { startFsWatcher } from "../shared/studio-core/events";
+import { sseFromBus } from "../shared/studio-core/sse";
 import {
   clearErrors,
   listErrors,
   logError,
   registerGlobalHandlers,
-} from "./lib/error-log";
+} from "../shared/studio-core/error-log";
 
 dotenv.config();
 registerGlobalHandlers();

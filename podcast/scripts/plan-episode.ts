@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildScenePlan, type ScenePlan } from "../src/scenes";
 import { EpisodeConfigSchema, buildEpisodeTemplate, type EpisodeConfig } from "../src/episode";
-import type { Transcript } from "./transcribe";
+import type { Transcript } from "../../shared/transcribe/transcribe";
 
 const ensureDir = (p: string) => {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });

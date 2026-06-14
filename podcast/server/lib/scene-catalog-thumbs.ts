@@ -55,7 +55,7 @@ export async function generateAllSceneThumbs(
   ensureDir(THUMBS_DIR);
 
   const serveUrl = await bundle({
-    entryPoint: path.resolve("src/index.ts"),
+    entryPoint: path.resolve("podcast/src/index.ts"),
     publicDir: PUBLIC_DIR,
   });
 

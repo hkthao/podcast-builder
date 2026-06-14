@@ -4,7 +4,7 @@ import {
   type MoodKey,
   type SceneType,
 } from "./theme";
-import type { Transcript } from "../scripts/transcribe";
+import type { Transcript } from "../../shared/transcribe/transcribe";
 
 export type Scene = {
   index: number;

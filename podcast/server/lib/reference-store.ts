@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { getDb } from "./db";
+import { getDb } from "../../../shared/studio-core/db";
 
 export type ReferenceType =
   | "pdf"

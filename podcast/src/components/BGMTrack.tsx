@@ -8,7 +8,7 @@ import {
   staticFile,
   useVideoConfig,
 } from "remotion";
-import type { Transcript } from "../../scripts/transcribe";
+import type { Transcript } from "../../../shared/transcribe/transcribe";
 
 const DUCK_FACTOR = 0.35;
 const DUCK_RAMP_MS = 150;

@@ -14,9 +14,9 @@ import {
   EpisodeConfigSchema,
   type EpisodeConfig,
 } from "../src/episode";
-import { processAudio } from "./process-audio";
-import { transcribeAudio } from "./transcribe";
-import { getModel } from "./whisper-config";
+import { processAudio } from "../../shared/audio/process-audio";
+import { transcribeAudio } from "../../shared/transcribe/transcribe";
+import { getModel } from "../../shared/transcribe/whisper-config";
 import { spellFix } from "./spell-fix";
 import { planEpisode } from "./plan-episode";
 
@@ -25,7 +25,7 @@ dotenv.config();
 const PUBLIC_DIR = path.resolve("public");
 const OUTPUT_DIR = path.resolve("output");
 const TMP_DIR = path.resolve("tmp");
-const THEME_PATH = path.resolve("src/theme.ts");
+const THEME_PATH = path.resolve("podcast/src/theme.ts");
 
 const COMPOSITION_ID = "Podcast";
 
@@ -178,7 +178,7 @@ async function main() {
     // 7. Bundle Remotion project (1 lần / run)
     console.log(`[make] bundling Remotion project...`);
     const bundleOptions: BundleOptions = {
-      entryPoint: path.resolve("src/index.ts"),
+      entryPoint: path.resolve("podcast/src/index.ts"),
       publicDir: PUBLIC_DIR,
     };
     const serveUrl = await bundle(bundleOptions);

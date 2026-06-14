@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 import dotenv from "dotenv";
-import type { Transcript } from "./transcribe";
+import type { Transcript } from "../../shared/transcribe/transcribe";
 
 dotenv.config();
 

@@ -2,7 +2,7 @@ import {
   downloadWhisperModel,
   installWhisperCpp,
 } from "@remotion/install-whisper-cpp";
-import { WHISPER_CPP_VERSION, WHISPER_PATH, getModel } from "./whisper-config";
+import { WHISPER_CPP_VERSION, WHISPER_PATH, getModel } from "../../shared/transcribe/whisper-config";
 
 async function main() {
   const model = getModel();

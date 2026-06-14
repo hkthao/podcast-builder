@@ -5,12 +5,11 @@ import {
   EpisodeConfigSchema,
   type EpisodeConfig,
 } from "../../src/episode";
+import { PATHS } from "../../../shared/studio-core/paths";
 import { getEssay } from "./essay-store";
 import { getSession as getBrainstormSession } from "./brainstorm-store";
 
-const INPUT_DIR = path.resolve("input");
-const OUTPUT_DIR = path.resolve("output");
-const TMP_DIR = path.resolve("tmp");
+const { INPUT_DIR, OUTPUT_DIR, TMP_DIR } = PATHS;
 
 const AUDIO_EXTS = ["m4a", "mp3", "wav"] as const;
 const COVER_EXTS = ["jpg", "jpeg", "png", "webp"] as const;
@@ -635,7 +634,7 @@ export async function getPlan(name: string): Promise<PlanPayload> {
   return { scenes, totalScenes: scenes.length, totalDurationMs };
 }
 
-export const PATHS = { INPUT_DIR, OUTPUT_DIR, TMP_DIR } as const;
+export { PATHS } from "../../../shared/studio-core/paths";
 export const AUDIO_EXTENSIONS = AUDIO_EXTS;
 export const COVER_EXTENSIONS = COVER_EXTS;
 

@@ -17,8 +17,8 @@ import {
   type EssayBrainstormRef,
   type ShortsScript,
 } from "../lib/essay-store";
-import { chat, chatStream, type LLMProvider } from "../lib/llm-providers";
-import { safeParseJson } from "../lib/safe-json";
+import { chat, chatStream, type LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { safeParseJson } from "../../../shared/lib/safe-json";
 import {
   BLOG_SYSTEM,
   FB_POSTS_SYSTEM,

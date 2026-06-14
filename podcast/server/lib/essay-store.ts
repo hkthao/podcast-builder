@@ -5,8 +5,8 @@
  *
  * Optional `brainstormRef` link tới ý tưởng đã pick để truy ngược.
  */
-import type { LLMProvider } from "./llm-providers";
-import { getDb } from "./db";
+import type { LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { getDb } from "../../../shared/studio-core/db";
 import type { SuggestedRef } from "./reference-store";
 
 export type EssayBrainstormRef = {

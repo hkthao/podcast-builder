@@ -7,17 +7,17 @@ import {
   renderStill,
   selectComposition,
 } from "@remotion/renderer";
-import { processAudio } from "../../scripts/process-audio";
-import { transcribeAudio } from "../../scripts/transcribe";
+import { processAudio } from "../../../shared/audio/process-audio";
+import { transcribeAudio } from "../../../shared/transcribe/transcribe";
 import { spellFix } from "../../scripts/spell-fix";
 import { planEpisode } from "../../scripts/plan-episode";
-import { getModel } from "../../scripts/whisper-config";
-import { bus } from "./events";
+import { getModel } from "../../../shared/transcribe/whisper-config";
+import { bus } from "../../../shared/studio-core/events";
 import { PATHS, type EpisodeStatus, getEpisode } from "./episode-store";
 
 const COMPOSITION_ID = "Podcast";
 const PUBLIC_DIR = path.resolve("public");
-const THEME_PATH = path.resolve("src/theme.ts");
+const THEME_PATH = path.resolve("podcast/src/theme.ts");
 const MAX_PARALLEL = Number(process.env.STUDIO_RENDER_PARALLEL ?? 2);
 
 export type RenderPhase =
@@ -403,7 +403,7 @@ async function runJob(job: JobInternal): Promise<void> {
       // 6. Bundle
       setPhase(job, "bundle", 45, "Bundling Remotion…");
       const bundleOptions: BundleOptions = {
-        entryPoint: path.resolve("src/index.ts"),
+        entryPoint: path.resolve("podcast/src/index.ts"),
         publicDir: PUBLIC_DIR,
       };
       const serveUrl = await bundle(bundleOptions);

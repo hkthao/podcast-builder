@@ -5,8 +5,8 @@ import {
   listOllamaModels,
   type LLMModel,
   type LLMProvider,
-} from "../lib/llm-providers";
-import { safeParseJson } from "../lib/safe-json";
+} from "../llm-providers";
+import { safeParseJson } from "../../lib/safe-json";
 
 export const llmRoutes = new Hono();
 

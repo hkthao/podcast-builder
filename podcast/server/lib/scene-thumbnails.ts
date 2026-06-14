@@ -144,7 +144,7 @@ export async function genSceneThumbnails(
 
   try {
     const serveUrl = await bundle({
-      entryPoint: path.resolve("src/index.ts"),
+      entryPoint: path.resolve("podcast/src/index.ts"),
       publicDir: PUBLIC_DIR,
     });
     const composition = await selectComposition({
