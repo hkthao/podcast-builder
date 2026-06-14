@@ -723,70 +723,17 @@ function AudioPanel({
 
   return (
     <div className="mt-5 border-t pt-4">
-      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Headphones className="size-4" />
           Audio + word timestamps
-          {hasAudio && (
-            <Badge variant="outline" className="text-[10px] gap-1 ml-1">
-              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-              {durSec}s · {wordCount} words
-            </Badge>
-          )}
         </h4>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Provider + voice + model selects compact inline (h-9 = button sm) */}
-          <select
-            value={ttsProvider}
-            onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-            title="TTS provider"
-          >
-            <option value="gemini">Gemini</option>
-            <option value="openai">OpenAI</option>
-          </select>
-          <select
-            value={ttsVoice}
-            onChange={(e) => setTtsVoice(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-            title="Voice"
-          >
-            {(ttsProvider === "gemini"
-              ? GEMINI_TTS_VOICES
-              : OPENAI_TTS_VOICES
-            ).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => audioMut.mutate(hasAudio)}
-            disabled={genPending || !chapter.transcript.trim()}
-            title={
-              !chapter.transcript.trim()
-                ? "Cần transcript trước khi gen audio"
-                : hasAudio
-                  ? "Re-gen audio (overwrite file cũ)"
-                  : "Gen TTS + Whisper alignment"
-            }
-          >
-            {genPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : hasAudio ? (
-              <RefreshCw className="size-3.5" />
-            ) : (
-              <Volume2 className="size-3.5" />
-            )}
-            {genPending
-              ? "Đang gen…"
-              : hasAudio
-                ? "Re-gen"
-                : "Gen audio"}
-          </Button>
-        </div>
+        {hasAudio && (
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+            {durSec}s · {wordCount} words
+          </Badge>
+        )}
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
@@ -956,6 +903,60 @@ function AudioPanel({
           TTS ~20s, Whisper alignment ~20s. Tổng ~30-60s. Hold tight…
         </p>
       )}
+
+      {/* Footer actions — provider/voice/Gen button outline căn phải */}
+      <div className="mt-4 pt-3 border-t flex items-center justify-end gap-1.5 flex-wrap">
+        <select
+          value={ttsProvider}
+          onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+          title="TTS provider"
+        >
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <select
+          value={ttsVoice}
+          onChange={(e) => setTtsVoice(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+          title="Voice"
+        >
+          {(ttsProvider === "gemini"
+            ? GEMINI_TTS_VOICES
+            : OPENAI_TTS_VOICES
+          ).map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => audioMut.mutate(hasAudio)}
+          disabled={genPending || !chapter.transcript.trim()}
+          title={
+            !chapter.transcript.trim()
+              ? "Cần transcript trước khi gen audio"
+              : hasAudio
+                ? "Re-gen audio (overwrite file cũ)"
+                : "Gen TTS + Whisper alignment"
+          }
+        >
+          {genPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : hasAudio ? (
+            <RefreshCw className="size-3.5" />
+          ) : (
+            <Volume2 className="size-3.5" />
+          )}
+          {genPending
+            ? "Đang gen…"
+            : hasAudio
+              ? "Re-gen"
+              : "Gen audio"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -995,45 +996,25 @@ function VideoPanel({
 
   return (
     <div className="mt-5 border-t pt-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Film className="size-4" />
           Video render
-          {hasVideo && (
-            <Badge variant="outline" className="text-[10px] gap-1 ml-1">
-              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-              {durSec}s · 1920×1080 @ 24fps
-            </Badge>
-          )}
-          {beatsCount > 0 && (
-            <Badge variant="outline" className="text-[10px] ml-1">
-              {beatsWithAsset}/{beatsCount} beat có asset
-            </Badge>
-          )}
         </h4>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRender}
-          disabled={renderPending || !canRender}
-          title={disableReason ?? (hasVideo ? "Re-render" : "Render MP4")}
-        >
-          {renderPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : hasVideo ? (
-            <RefreshCw className="size-3.5" />
-          ) : (
-            <VideoIcon className="size-3.5" />
-          )}
-          {renderPending
-            ? "Đang render…"
-            : hasVideo
-              ? "Re-render"
-              : "Render video"}
-        </Button>
+        {hasVideo && (
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+            {durSec}s · 1920×1080 @ 24fps
+          </Badge>
+        )}
+        {beatsCount > 0 && (
+          <Badge variant="outline" className="text-[10px]">
+            {beatsWithAsset}/{beatsCount} beat có asset
+          </Badge>
+        )}
       </div>
 
-      <p className="mt-1.5 mb-2 text-xs text-muted-foreground leading-relaxed">
+      <p className="mb-2 text-xs text-muted-foreground leading-relaxed">
         Remotion render audio + visual beats → MP4 1920×1080 @ 24fps. Mỗi beat
         hiện 1 ảnh với Ken Burns motion theo timing từ word timestamps. Beat
         chưa attach asset → render placeholder text. ~60-90s mỗi chapter.
@@ -1084,6 +1065,30 @@ function VideoPanel({
           Hold tight…
         </p>
       )}
+
+      {/* Footer actions — Render button outline căn phải */}
+      <div className="mt-4 pt-3 border-t flex items-center justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRender}
+          disabled={renderPending || !canRender}
+          title={disableReason ?? (hasVideo ? "Re-render" : "Render MP4")}
+        >
+          {renderPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : hasVideo ? (
+            <RefreshCw className="size-3.5" />
+          ) : (
+            <VideoIcon className="size-3.5" />
+          )}
+          {renderPending
+            ? "Đang render…"
+            : hasVideo
+              ? "Re-render"
+              : "Render video"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1238,8 +1243,8 @@ function BeatRow({
   return (
     <div
       className={cn(
-        "rounded-md border p-3 space-y-2",
-        isStale && "border-amber-500/40 bg-amber-500/5",
+        "rounded-md bg-secondary/30 p-3 space-y-2",
+        isStale && "bg-amber-500/10 ring-1 ring-amber-500/30",
       )}
     >
       <div className="flex items-center gap-2">
@@ -1492,14 +1497,14 @@ function BeatAssetPicker({
   });
 
   return (
-    <div className="mt-2 rounded-md border bg-card p-3 space-y-2">
+    <div className="mt-2 pt-3 border-t space-y-2">
       <div className="flex items-center gap-2">
         <input
           type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search keyword (tiếng Anh)…"
-          className="h-8 flex-1 rounded border bg-background px-2 text-sm"
+          className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
         />
         <div className="flex items-center gap-0.5 p-0.5 rounded border bg-secondary/30">
           <button
