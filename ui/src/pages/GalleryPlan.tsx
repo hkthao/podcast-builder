@@ -37,10 +37,12 @@ import {
 } from "lucide-react";
 import {
   api,
+  type AssetResult,
   type GalleryChapterPlan,
   type GalleryPlanChapter,
   type KenBurnsMode,
   type LLMProvider,
+  type SavedAsset,
   type VisualBeat,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -991,6 +993,304 @@ function BeatRow({
           <span className="font-medium">Note:</span> {beat.note}
         </p>
       )}
+
+      {/* Phase 4c: asset attach */}
+      <BeatAssetSlot
+        beat={beat}
+        onAttach={(assetId) => onUpdate({ assetIdRef: assetId })}
+        onDetach={() => onUpdate({ assetIdRef: null })}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function BeatAssetSlot({
+  beat,
+  onAttach,
+  onDetach,
+  disabled,
+}: {
+  beat: VisualBeat;
+  onAttach: (assetId: string) => void;
+  onDetach: () => void;
+  disabled: boolean;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Resolve assetIdRef → asset (chỉ fetch khi có ref)
+  const assetQ = useQuery({
+    queryKey: ["research-asset", beat.assetIdRef],
+    queryFn: () => api.getResearchAsset(beat.assetIdRef!),
+    enabled: !!beat.assetIdRef,
+    // Asset bị xoá khỏi library → 404. Đừng retry vô tận.
+    retry: false,
+  });
+
+  const attached = assetQ.data;
+  const isMissing = !!beat.assetIdRef && assetQ.isError;
+
+  return (
+    <div className="border-t pt-2">
+      {attached ? (
+        <div className="flex items-center gap-3">
+          <img
+            src={attached.thumbUrl}
+            alt={attached.title}
+            className="size-12 rounded object-cover bg-secondary shrink-0"
+            loading="lazy"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium truncate">{attached.title}</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {attached.provider} · {attached.license}
+              {attached.year && ` · ${attached.year}`}
+            </p>
+          </div>
+          <a
+            href={attached.sourcePage}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-accent hover:underline shrink-0"
+            title="Open source page"
+          >
+            <ExternalLink className="size-3" />
+          </a>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => setPickerOpen((v) => !v)}
+            disabled={disabled}
+          >
+            Replace
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+            onClick={onDetach}
+            disabled={disabled}
+            title="Detach asset"
+          >
+            <X className="size-3.5" />
+          </Button>
+        </div>
+      ) : isMissing ? (
+        <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+          <AlertCircle className="size-3.5" />
+          <span>Asset {beat.assetIdRef} không còn trong library.</span>
+          <Button size="sm" variant="ghost" className="h-7" onClick={onDetach}>
+            Detach
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => setPickerOpen(true)}
+          >
+            Pick lại
+          </Button>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs w-full"
+          onClick={() => setPickerOpen((v) => !v)}
+          disabled={disabled || !beat.keyword.trim()}
+        >
+          <ImageIcon className="size-3.5" />
+          Attach asset
+          {!beat.keyword.trim() && " — cần keyword trước"}
+        </Button>
+      )}
+
+      {pickerOpen && (
+        <BeatAssetPicker
+          initialQuery={beat.keyword}
+          onPick={(assetId) => {
+            onAttach(assetId);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function BeatAssetPicker({
+  initialQuery,
+  onPick,
+  onClose,
+}: {
+  initialQuery: string;
+  onPick: (assetId: string) => void;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [q, setQ] = useState(initialQuery);
+  const [tab, setTab] = useState<"library" | "live">("library");
+
+  const libraryQ = useQuery({
+    queryKey: ["research-library-pick", q],
+    queryFn: () => api.listResearchLibrary({ q, kind: "image" }),
+    enabled: tab === "library",
+  });
+
+  const searchQ = useQuery({
+    queryKey: ["research-search-pick", q],
+    queryFn: () =>
+      api.searchResearch({
+        q,
+        kind: "image",
+        page: 1,
+        pageSize: 12,
+      }),
+    enabled: tab === "live" && q.trim().length >= 2,
+    // Live search có rate limit — không auto refetch
+    staleTime: 5 * 60_000,
+  });
+
+  // Save + attach trong 1 click cho live search result (chưa trong library)
+  const saveMut = useMutation({
+    mutationFn: (asset: AssetResult) => api.saveResearchAsset(asset),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["research-library-pick"] });
+      onPick(saved.id);
+    },
+  });
+
+  return (
+    <div className="mt-2 rounded-md border bg-card p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search keyword (tiếng Anh)…"
+          className="h-8 flex-1 rounded border bg-background px-2 text-sm"
+        />
+        <div className="flex items-center gap-0.5 p-0.5 rounded border bg-secondary/30">
+          <button
+            onClick={() => setTab("library")}
+            className={cn(
+              "px-2 py-1 text-xs rounded transition-colors",
+              tab === "library"
+                ? "bg-card text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Library
+          </button>
+          <button
+            onClick={() => setTab("live")}
+            className={cn(
+              "px-2 py-1 text-xs rounded transition-colors",
+              tab === "live"
+                ? "bg-card text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Wikimedia/Met
+          </button>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={onClose}
+          title="Đóng"
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+
+      {tab === "library" && (
+        <AssetGrid
+          items={libraryQ.data?.assets ?? []}
+          isLoading={libraryQ.isLoading}
+          emptyMsg={
+            q.trim()
+              ? `Library chưa có ảnh khớp "${q}". Thử tab "Wikimedia/Met".`
+              : "Library chưa có ảnh nào."
+          }
+          onPick={(asset) => onPick(asset.id)}
+        />
+      )}
+
+      {tab === "live" && (
+        <AssetGrid
+          items={searchQ.data?.results ?? []}
+          isLoading={searchQ.isLoading}
+          emptyMsg={
+            q.trim().length < 2
+              ? "Nhập keyword tối thiểu 2 chars."
+              : `Không tìm thấy kết quả cho "${q}".`
+          }
+          onPick={(asset) => saveMut.mutate(asset)}
+          actionLabel="Save + Attach"
+          saving={saveMut.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssetGrid({
+  items,
+  isLoading,
+  emptyMsg,
+  onPick,
+  actionLabel = "Attach",
+  saving = false,
+}: {
+  items: Array<SavedAsset | AssetResult>;
+  isLoading: boolean;
+  emptyMsg: string;
+  onPick: (asset: AssetResult) => void;
+  actionLabel?: string;
+  saving?: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+        <Loader2 className="size-3.5 animate-spin" />
+        Đang tải…
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground py-3">{emptyMsg}</p>;
+  }
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+      {items.map((asset) => (
+        <button
+          key={asset.id}
+          onClick={() => onPick(asset)}
+          disabled={saving}
+          className="group relative rounded-md border bg-secondary/20 overflow-hidden hover:border-accent transition-colors text-left disabled:opacity-50"
+          title={asset.title}
+        >
+          <img
+            src={asset.thumbUrl}
+            alt={asset.title}
+            loading="lazy"
+            className="w-full aspect-[4/3] object-cover"
+          />
+          <div className="p-1.5 space-y-0.5">
+            <p className="text-[10px] font-medium truncate">{asset.title}</p>
+            <p className="text-[9px] text-muted-foreground truncate">
+              {asset.provider} · {asset.license}
+            </p>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 bg-accent text-accent-foreground text-[10px] py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity text-center font-medium">
+            {actionLabel}
+          </div>
+        </button>
+      ))}
     </div>
   );
 }

@@ -1063,6 +1063,11 @@ export const api = {
     );
   },
 
+  getResearchAsset: (id: string) =>
+    jsonFetch<SavedAsset>(
+      `/api/research/library/${encodeURIComponent(id)}`,
+    ),
+
   deleteResearchAsset: (id: string) =>
     jsonFetch<{ deleted: boolean }>(
       `/api/research/library/${encodeURIComponent(id)}`,
