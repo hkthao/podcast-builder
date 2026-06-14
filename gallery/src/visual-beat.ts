@@ -39,8 +39,11 @@ export const VisualBeatSchema = z.object({
    * gợi ý cho asset team. Vd: "Mona Lisa portrait close-up", "Arena Chapel
    * interior wide shot", "Lamentation Mary cradling Christ detail".
    * NÊN dùng tiếng Anh để search engine ra ảnh đúng (tên tác phẩm gốc).
+   *
+   * Allow empty cho beat user thêm thủ công ("Thêm beat" trên UI) — sẽ
+   * fill keyword sau. Render thấy keyword rỗng → placeholder text.
    */
-  keyword: z.string().min(2),
+  keyword: z.string().default(""),
   /**
    * Asset đã pin/save trong Research library — link tới gallery_assets.id.
    * Null = chưa attach, beat chỉ có keyword. User attach sau khi review.

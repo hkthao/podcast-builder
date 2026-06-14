@@ -6,7 +6,7 @@
   "scripts": {
     "remotion-studio": "remotion studio",
     "studio": "concurrently -n server,ui -c blue,magenta \"npm:studio:server\" \"npm:studio:ui\"",
-    "studio:server": "tsx watch --ignore='podcast/src/components/**' --ignore='podcast/src/scenes.ts' --ignore='podcast/src/ScenePreview.tsx' --ignore='podcast/src/Video.tsx' --ignore='podcast/src/Root.tsx' --ignore='podcast/src/index.ts' --ignore='ui/**' --ignore='public/**' --ignore='tmp/**' --ignore='input/**' --ignore='output/**' --ignore='gallery/**' server/index.ts",
+    "studio:server": "tsx watch --ignore='podcast/src/components/**' --ignore='podcast/src/scenes.ts' --ignore='podcast/src/ScenePreview.tsx' --ignore='podcast/src/Video.tsx' --ignore='podcast/src/Root.tsx' --ignore='podcast/src/index.ts' --ignore='ui/**' --ignore='public/**' --ignore='tmp/**' --ignore='input/**' --ignore='output/**' --ignore='gallery/src/Root.gallery.tsx' --ignore='gallery/src/GalleryChapter.tsx' --ignore='gallery/src/KenBurnsImage.tsx' --ignore='gallery/src/index.ts' --ignore='gallery/src/theme.gallery.ts' server/index.ts",
     "studio:server:nowatch": "tsx server/index.ts",
     "studio:nowatch": "concurrently -n server,ui -c blue,magenta \"npm:studio:server:nowatch\" \"npm:studio:ui\"",
     "studio:ui": "cd ui && npm run dev",
