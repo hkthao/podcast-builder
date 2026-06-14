@@ -1165,6 +1165,11 @@ export const api = {
       voice?: string;
       ttsModel?: string;
       force?: boolean;
+      // Gemini Cloud TTS extras
+      speakingRate?: number;
+      pitch?: number;
+      languageCode?: string;
+      styleInstruction?: string;
     } = {},
   ) =>
     jsonFetch<GalleryChapterPlan>(

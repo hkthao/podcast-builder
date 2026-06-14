@@ -235,6 +235,10 @@ galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
     voice?: string;
     ttsModel?: string;
     force?: boolean;
+    speakingRate?: number;
+    pitch?: number;
+    languageCode?: string;
+    styleInstruction?: string;
   };
   if (
     body.ttsProvider !== undefined &&
@@ -254,6 +258,10 @@ galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
       voice: body.voice,
       ttsModel: body.ttsModel,
       force: body.force ?? false,
+      speakingRate: body.speakingRate,
+      pitch: body.pitch,
+      languageCode: body.languageCode,
+      styleInstruction: body.styleInstruction,
     });
     return c.json(plan);
   } catch (e) {

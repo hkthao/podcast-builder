@@ -33,9 +33,11 @@ import {
   chunkTextForGemini,
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_VOICE,
+  DEFAULT_LANGUAGE_CODE,
+  DEFAULT_PITCH,
+  DEFAULT_SPEAKING_RATE,
+  DEFAULT_STYLE_INSTRUCTION,
   generateGeminiTts,
-  GEMINI_PCM_CHANNELS,
-  GEMINI_PCM_SAMPLE_RATE,
   GEMINI_VOICES,
   type GeminiTtsModel,
   type GeminiVoice,
@@ -64,7 +66,15 @@ export const DEFAULT_OPENAI_VOICE: OpenAiVoice = "nova";
 export const DEFAULT_OPENAI_TTS_MODEL: OpenAiTtsModel = "tts-1-hd";
 
 // Gemini TTS re-export defaults
-export { DEFAULT_GEMINI_VOICE, DEFAULT_GEMINI_MODEL, GEMINI_VOICES };
+export {
+  DEFAULT_GEMINI_VOICE,
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_LANGUAGE_CODE,
+  DEFAULT_PITCH,
+  DEFAULT_SPEAKING_RATE,
+  DEFAULT_STYLE_INSTRUCTION,
+  GEMINI_VOICES,
+};
 
 const OPENAI_CHUNK_LIMIT = 4000;
 
@@ -127,35 +137,6 @@ const loudnormAndReencode = async (
   ]);
 };
 
-/**
- * Gemini TTS trả raw PCM (s16le, mono, 24kHz). Cần báo cho ffmpeg biết format
- * input vì PCM không có container header.
- */
-const loudnormPcmToAac = async (
-  rawPcmPath: string,
-  outPath: string,
-): Promise<void> => {
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-f",
-    "s16le",
-    "-ar",
-    String(GEMINI_PCM_SAMPLE_RATE),
-    "-ac",
-    String(GEMINI_PCM_CHANNELS),
-    "-i",
-    rawPcmPath,
-    "-af",
-    "loudnorm=I=-16:TP=-1.5:LRA=11",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-movflags",
-    "+faststart",
-    outPath,
-  ]);
-};
 
 type ProviderPipelineInput<V extends string, M extends string> = {
   transcript: string;
@@ -200,8 +181,16 @@ async function runOpenAiTtsPipeline(
   });
 }
 
+type GeminiPipelineExtras = {
+  speakingRate?: number;
+  pitch?: number;
+  languageCode?: string;
+  styleInstruction?: string;
+};
+
 async function runGeminiTtsPipeline(
-  input: ProviderPipelineInput<GeminiVoice, GeminiTtsModel>,
+  input: ProviderPipelineInput<GeminiVoice, GeminiTtsModel> &
+    GeminiPipelineExtras,
 ): Promise<void> {
   const apiKey = getApiKey("gemini");
   if (!apiKey) {
@@ -213,22 +202,26 @@ async function runGeminiTtsPipeline(
   }
 
   const chunks = chunkTextForGemini(input.transcript);
-  const pcmBuffers: Buffer[] = [];
+  const mp3Buffers: Buffer[] = [];
   for (const chunk of chunks) {
-    const pcm = await generateGeminiTts({
+    const { audio } = await generateGeminiTts({
       text: chunk,
       voice: input.voice,
       model: input.model,
       apiKey,
+      audioEncoding: "MP3",
+      speakingRate: input.speakingRate,
+      pitch: input.pitch,
+      languageCode: input.languageCode,
+      styleInstruction: input.styleInstruction,
     });
-    pcmBuffers.push(pcm);
+    mp3Buffers.push(audio);
   }
 
-  // PCM int16 streams concat trực tiếp được (mỗi sample 2 byte, không header).
-  // Save raw PCM file → loudnorm + AAC encode với ffmpeg input flags chỉ rõ format.
-  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.pcm`);
-  await fsp.writeFile(rawPath, Buffer.concat(pcmBuffers));
-  await loudnormPcmToAac(rawPath, input.outPath);
+  // MP3 frame-aligned concat ở file level — ffmpeg auto-detect khi loudnorm.
+  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.mp3`);
+  await fsp.writeFile(rawPath, Buffer.concat(mp3Buffers));
+  await loudnormAndReencode(rawPath, input.outPath);
   await fsp.unlink(rawPath).catch(() => {
     /* ignore */
   });
@@ -246,9 +239,18 @@ export type GenAudioInput = {
    *  Mỗi provider có defaults riêng nếu không truyền.
    */
   voice?: string;
-  /** Model: tts-1/tts-1-hd cho openai; gemini-2.5-flash-preview-tts cho gemini. */
+  /** Model: tts-1/tts-1-hd cho openai; gemini-2.5-flash-tts cho gemini. */
   ttsModel?: string;
   force?: boolean;
+  // Gemini Cloud TTS extras (ignored nếu provider=openai)
+  /** 0.25-4.0. Default 1.0. */
+  speakingRate?: number;
+  /** -20 to 20 semitones. Default 0. */
+  pitch?: number;
+  /** BCP-47, vd "vi-VN". Default "vi-VN". */
+  languageCode?: string;
+  /** Style steering qua Cloud TTS `input.prompt` field. */
+  styleInstruction?: string;
 };
 
 /**
@@ -323,6 +325,10 @@ export async function generateChapterAudio(
       model: (input.ttsModel as GeminiTtsModel) ?? DEFAULT_GEMINI_MODEL,
       outFilename,
       outPath,
+      speakingRate: input.speakingRate,
+      pitch: input.pitch,
+      languageCode: input.languageCode,
+      styleInstruction: input.styleInstruction,
     });
   } else {
     await runOpenAiTtsPipeline({

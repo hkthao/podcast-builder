@@ -103,6 +103,27 @@ const GEMINI_TTS_VOICES = [
 
 type TtsProvider = "openai" | "gemini";
 
+const LANGUAGE_CODES = [
+  { value: "vi-VN", label: "Vietnamese (Vietnam)" },
+  { value: "en-US", label: "English (US)" },
+  { value: "en-GB", label: "English (UK)" },
+  { value: "ja-JP", label: "Japanese" },
+  { value: "ko-KR", label: "Korean" },
+  { value: "zh-CN", label: "Chinese (Simplified)" },
+  { value: "fr-FR", label: "French" },
+  { value: "de-DE", label: "German" },
+  { value: "es-ES", label: "Spanish" },
+  { value: "it-IT", label: "Italian" },
+];
+
+const GEMINI_TTS_MODELS = [
+  { value: "gemini-2.5-flash-tts", label: "Gemini 2.5 Flash TTS (recommend)" },
+  { value: "gemini-2.5-pro-tts", label: "Gemini 2.5 Pro TTS" },
+];
+
+const DEFAULT_STYLE =
+  "Đọc giọng trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ. Giọng miền Bắc, phong cách documentary nghệ thuật.";
+
 export function GalleryPlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -124,6 +145,26 @@ export function GalleryPlanPage() {
     "gallery-plan.tts-voice",
     "Kore",
   );
+  // Cloud TTS advanced
+  const [ttsModel, setTtsModel] = usePersistedState<string>(
+    "gallery-plan.tts-model",
+    "gemini-2.5-flash-tts",
+  );
+  const [ttsLanguage, setTtsLanguage] = usePersistedState<string>(
+    "gallery-plan.tts-language",
+    "vi-VN",
+  );
+  const [ttsSpeakingRate, setTtsSpeakingRate] = usePersistedState<number>(
+    "gallery-plan.tts-speaking-rate",
+    1.0,
+  );
+  const [ttsPitch, setTtsPitch] = usePersistedState<number>(
+    "gallery-plan.tts-pitch",
+    0,
+  );
+  const [ttsStyleInstruction, setTtsStyleInstruction] =
+    usePersistedState<string>("gallery-plan.tts-style", DEFAULT_STYLE);
+  const [ttsAdvancedOpen, setTtsAdvancedOpen] = useState(false);
 
   const planQ = useQuery({
     queryKey: ["gallery-plan", id],
@@ -309,12 +350,12 @@ export function GalleryPlanPage() {
         }
       />
 
-      {/* Phase 4b': TTS provider + voice picker (cho audio gen) */}
+      {/* Phase 4b' v2: TTS Cloud TTS controls — match Google Studio UI */}
       <Card className="p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <Label htmlFor="tts-provider" className="text-xs">
-              TTS Provider (cho audio)
+              TTS Provider
             </Label>
             <select
               id="tts-provider"
@@ -322,18 +363,32 @@ export function GalleryPlanPage() {
               onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
               className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              <option value="gemini">Gemini TTS (recommend)</option>
+              <option value="gemini">Gemini Cloud TTS (recommend)</option>
               <option value="openai">OpenAI TTS (legacy)</option>
             </select>
           </div>
-          <div className="md:col-span-2">
+          {ttsProvider === "gemini" && (
+            <div>
+              <Label htmlFor="tts-model" className="text-xs">
+                Model
+              </Label>
+              <select
+                id="tts-model"
+                value={ttsModel}
+                onChange={(e) => setTtsModel(e.target.value)}
+                className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {GEMINI_TTS_MODELS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
             <Label htmlFor="tts-voice" className="text-xs">
-              TTS Voice
-              {ttsProvider === "gemini" && (
-                <span className="ml-2 text-muted-foreground font-normal">
-                  · style steering qua natural prompt
-                </span>
-              )}
+              Voice
             </Label>
             <select
               id="tts-voice"
@@ -352,6 +407,121 @@ export function GalleryPlanPage() {
             </select>
           </div>
         </div>
+
+        {/* Advanced — chỉ cho Gemini Cloud TTS */}
+        {ttsProvider === "gemini" && (
+          <>
+            <button
+              type="button"
+              onClick={() => setTtsAdvancedOpen((v) => !v)}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+            >
+              <ChevronDown
+                className={cn(
+                  "size-3 transition-transform",
+                  ttsAdvancedOpen && "rotate-180",
+                )}
+              />
+              {ttsAdvancedOpen ? "Thu gọn" : "Tuỳ chọn nâng cao"} (language,
+              rate, pitch, style)
+            </button>
+            {ttsAdvancedOpen && (
+              <div className="mt-3 pt-3 border-t space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label htmlFor="tts-language" className="text-xs">
+                      Language / locale
+                    </Label>
+                    <select
+                      id="tts-language"
+                      value={ttsLanguage}
+                      onChange={(e) => setTtsLanguage(e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {LANGUAGE_CODES.map((l) => (
+                        <option key={l.value} value={l.value}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="tts-rate" className="text-xs">
+                      Speaking rate
+                      <span className="ml-2 text-muted-foreground font-mono">
+                        {ttsSpeakingRate.toFixed(2)}×
+                      </span>
+                    </Label>
+                    <input
+                      id="tts-rate"
+                      type="range"
+                      min={0.25}
+                      max={2}
+                      step={0.05}
+                      value={ttsSpeakingRate}
+                      onChange={(e) =>
+                        setTtsSpeakingRate(Number(e.target.value))
+                      }
+                      className="mt-3.5 w-full accent-accent"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="tts-pitch" className="text-xs">
+                      Pitch
+                      <span className="ml-2 text-muted-foreground font-mono">
+                        {ttsPitch > 0 ? "+" : ""}
+                        {ttsPitch}
+                      </span>
+                    </Label>
+                    <input
+                      id="tts-pitch"
+                      type="range"
+                      min={-20}
+                      max={20}
+                      step={1}
+                      value={ttsPitch}
+                      onChange={(e) => setTtsPitch(Number(e.target.value))}
+                      className="mt-3.5 w-full accent-accent"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="tts-style" className="text-xs">
+                    Style instructions
+                    <span className="ml-2 text-muted-foreground font-normal">
+                      · gửi vào{" "}
+                      <code className="font-mono text-[11px]">input.prompt</code>{" "}
+                      RIÊNG với text → TTS không đọc đoạn này
+                    </span>
+                  </Label>
+                  <Textarea
+                    id="tts-style"
+                    value={ttsStyleInstruction}
+                    onChange={(e) => setTtsStyleInstruction(e.target.value)}
+                    rows={2}
+                    className="mt-1.5"
+                    placeholder='vd: "Read aloud in a warm, welcoming tone. Giọng miền Bắc."'
+                  />
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-muted-foreground">
+                      Apply cho mọi chapter render từ giờ. Persisted trong
+                      browser.
+                    </p>
+                    {ttsStyleInstruction !== DEFAULT_STYLE && (
+                      <button
+                        type="button"
+                        onClick={() => setTtsStyleInstruction(DEFAULT_STYLE)}
+                        className="text-[10px] text-accent hover:underline"
+                      >
+                        Reset default
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </Card>
 
       {/* Chapter list */}
@@ -366,6 +536,11 @@ export function GalleryPlanPage() {
             model={model}
             ttsProvider={ttsProvider}
             ttsVoice={ttsVoice}
+            ttsModel={ttsModel}
+            ttsLanguage={ttsLanguage}
+            ttsSpeakingRate={ttsSpeakingRate}
+            ttsPitch={ttsPitch}
+            ttsStyleInstruction={ttsStyleInstruction}
             onMutate={(updated) => {
               qc.setQueryData<GalleryChapterPlan>(
                 ["gallery-plan", plan.id],
@@ -398,6 +573,11 @@ function ChapterCard({
   model,
   ttsProvider,
   ttsVoice,
+  ttsModel,
+  ttsLanguage,
+  ttsSpeakingRate,
+  ttsPitch,
+  ttsStyleInstruction,
   onMutate,
 }: {
   chapter: GalleryPlanChapter;
@@ -407,6 +587,11 @@ function ChapterCard({
   model: string;
   ttsProvider: TtsProvider;
   ttsVoice: string;
+  ttsModel: string;
+  ttsLanguage: string;
+  ttsSpeakingRate: number;
+  ttsPitch: number;
+  ttsStyleInstruction: string;
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
   const isMusic = chapter.kind === "music";
@@ -447,7 +632,17 @@ function ChapterCard({
       api.genGalleryPlanChapterAudio(planId, chapterIdx, {
         ttsProvider,
         voice: ttsVoice,
+        ttsModel: ttsProvider === "gemini" ? ttsModel : undefined,
         force,
+        // Cloud TTS extras chỉ áp dụng cho Gemini
+        ...(ttsProvider === "gemini"
+          ? {
+              languageCode: ttsLanguage,
+              speakingRate: ttsSpeakingRate,
+              pitch: ttsPitch,
+              styleInstruction: ttsStyleInstruction,
+            }
+          : {}),
       }),
     onSuccess: (plan) => onMutate(plan),
   });

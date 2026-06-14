@@ -50,11 +50,11 @@ const PROVIDER_META: Record<
       "Dùng cho LLM brainstorm/essay/transcript (gpt-4o-mini, gpt-4o) + OpenAI TTS (legacy).",
   },
   gemini: {
-    label: "Gemini",
-    docsUrl: "https://aistudio.google.com/apikey",
+    label: "Gemini (Cloud TTS)",
+    docsUrl: "https://console.cloud.google.com/apis/library/texttospeech.googleapis.com",
     placeholder: "AIzaSy...",
     description:
-      "Dùng cho Gemini TTS (recommend cho gallery, voice Kore/Aoede style steering). Cùng key dùng được cho Gemini LLM tương lai.",
+      'Cloud TTS API key — TẠO trong GCP Console (KHÔNG dùng key từ AI Studio). Steps: GCP Console → enable "Cloud Text-to-Speech API" → APIs & Services → Credentials → Create API key. Cần billing-enabled project. Cho phép tách prompt/text → không noise như AI Studio endpoint.',
   },
   anthropic: {
     label: "Anthropic Claude",
