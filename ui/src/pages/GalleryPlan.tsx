@@ -105,10 +105,21 @@ type TtsProvider = "openai" | "gemini";
 
 const GEMINI_TTS_MODELS = [
   {
-    value: "gemini-2.5-flash-preview-tts",
-    label: "Gemini 2.5 Flash TTS (recommend)",
+    value: "gemini-3.1-flash-tts-preview",
+    label: "Gemini 3.1 Flash TTS (newest, recommend)",
   },
-  { value: "gemini-2.5-pro-preview-tts", label: "Gemini 2.5 Pro TTS" },
+  {
+    value: "gemini-2.5-flash-preview-tts",
+    label: "Gemini 2.5 Flash TTS",
+  },
+  {
+    value: "gemini-2.5-flash-lite-preview-tts",
+    label: "Gemini 2.5 Flash Lite TTS (cheapest)",
+  },
+  {
+    value: "gemini-2.5-pro-preview-tts",
+    label: "Gemini 2.5 Pro TTS (highest quality)",
+  },
 ];
 
 const DEFAULT_STYLE =
@@ -663,7 +674,7 @@ function AudioPanel({
   );
   const [ttsModel, setTtsModel] = usePersistedState<string>(
     `${stateKey}.tts-model`,
-    "gemini-2.5-flash-preview-tts",
+    "gemini-3.1-flash-tts-preview",
   );
   // Rate/pitch/language: Cloud TTS-only, AI Studio endpoint không support.
   // Giữ state để future restore khi service-account OAuth được implement.

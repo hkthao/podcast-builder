@@ -53,14 +53,17 @@ export const GEMINI_VOICES = [
 export type GeminiVoice = (typeof GEMINI_VOICES)[number];
 
 export const GEMINI_TTS_MODELS = [
+  "gemini-3.1-flash-tts-preview",
   "gemini-2.5-flash-preview-tts",
+  "gemini-2.5-flash-lite-preview-tts",
   "gemini-2.5-pro-preview-tts",
 ] as const;
 export type GeminiTtsModel = (typeof GEMINI_TTS_MODELS)[number];
 
 export const DEFAULT_GEMINI_VOICE: GeminiVoice = "Kore";
+// Default → Gemini 3.1 Flash (newest, recommended balance quality/cost)
 export const DEFAULT_GEMINI_MODEL: GeminiTtsModel =
-  "gemini-2.5-flash-preview-tts";
+  "gemini-3.1-flash-tts-preview";
 
 /** AI Studio output là PCM 24kHz mono — caller pipe vào ffmpeg s16le. */
 export const GEMINI_PCM_SAMPLE_RATE = 24000;
@@ -121,12 +124,28 @@ type AiStudioResponse = {
  * Gọi AI Studio Gemini TTS → trả PCM Buffer (16-bit LE mono 24kHz).
  * Caller cần ffmpeg `-f s16le -ar 24000 -ac 1` để decode.
  */
+/**
+ * Normalize model name về dạng AI Studio v1beta. Tự fix:
+ *  - Cloud TTS names (no -preview-) → AI Studio (-preview-)
+ *  - Legacy localStorage values từ thời thử Cloud TTS
+ */
+const LEGACY_MODEL_MAP: Record<string, string> = {
+  "gemini-2.5-flash-tts": "gemini-2.5-flash-preview-tts",
+  "gemini-2.5-pro-tts": "gemini-2.5-pro-preview-tts",
+  "gemini-2.5-flash-lite-tts": "gemini-2.5-flash-lite-preview-tts",
+};
+
+const toAiStudioModel = (m: string | undefined): string => {
+  const raw = m ?? DEFAULT_GEMINI_MODEL;
+  return LEGACY_MODEL_MAP[raw] ?? raw;
+};
+
 export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
   audio: Buffer;
   /** Cho caller biết format input ffmpeg. */
   encoding: "PCM_S16LE_24K";
 }> {
-  const model = input.model ?? DEFAULT_GEMINI_MODEL;
+  const model = toAiStudioModel(input.model);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${input.apiKey}`;
 
   // AI Studio TTS không support systemInstruction → prepend style + delimiter
