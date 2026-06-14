@@ -47,14 +47,14 @@ const PROVIDER_META: Record<
     docsUrl: "https://platform.openai.com/api-keys",
     placeholder: "sk-proj-...",
     description:
-      "Dùng cho LLM brainstorm/essay/transcript (gpt-4o-mini, gpt-4o) + OpenAI TTS (legacy).",
+      "Dùng cho AI viết bài (brainstorm ý tưởng, bài luận, kịch bản voiceover) qua model gpt-4o-mini/gpt-4o. Có thể dùng để đọc voiceover (giọng nova/shimmer) nhưng tiếng Việt không tự nhiên bằng Gemini.",
   },
   gemini: {
-    label: "Gemini (Cloud TTS)",
+    label: "Gemini (Google TTS)",
     docsUrl: "https://console.cloud.google.com/apis/library/texttospeech.googleapis.com",
     placeholder: "AIzaSy...",
     description:
-      'Cloud TTS API key — TẠO trong GCP Console (KHÔNG dùng key từ AI Studio). Steps: GCP Console → enable "Cloud Text-to-Speech API" → APIs & Services → Credentials → Create API key. Cần billing-enabled project. Cho phép tách prompt/text → không noise như AI Studio endpoint.',
+      'Dùng cho AI đọc voiceover tiếng Việt (giọng Kore/Aoede/... rất tự nhiên). Lấy API key từ Google Cloud Console: bấm "Lấy API key" → Enable "Cloud Text-to-Speech API" → Credentials → Create API key. Cần bật billing trên project Google Cloud.',
   },
   anthropic: {
     label: "Anthropic Claude",
@@ -78,8 +78,9 @@ export function SettingsPage() {
           Settings
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
-          Quản lý API keys cho LLM + TTS providers. DB-first, fallback .env.
-          Key value KHÔNG được hiện lại — type lại để update.
+          Quản lý API key của các nhà cung cấp AI (cho viết bài + đọc
+          voiceover). Vì bảo mật, key đã lưu không hiện lại — muốn đổi thì
+          nhập key mới rồi Save.
         </p>
       </header>
 
@@ -105,11 +106,11 @@ export function SettingsPage() {
 
       <Card className="mt-6 p-4 bg-secondary/30 border-dashed">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          <strong>Security note:</strong> API keys lưu plaintext trong{" "}
-          <code className="font-mono text-[11px]">data.db</code> (SQLite local).
-          DB nằm trên máy bạn, không sync, không expose qua HTTP với CORS rộng.
-          Match security model với <code className="font-mono text-[11px]">.env</code>.
-          Để max security có thể giữ tiếp ở .env — Settings UI sẽ override khi cả 2 đều set.
+          <strong>Lưu ý bảo mật:</strong> API key được lưu trong file dữ liệu
+          trên chính máy của bạn — không gửi lên đâu cả, không đồng bộ qua mạng.
+          Nếu bạn đã có key trong file{" "}
+          <code className="font-mono text-[11px]">.env</code> sẵn, Settings UI
+          sẽ ưu tiên key bạn nhập ở đây.
         </p>
       </Card>
     </div>

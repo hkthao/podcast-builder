@@ -737,9 +737,9 @@ function AudioPanel({
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-        TTS sinh voiceover MP3 từ transcript → ffmpeg loudnorm -16 LUFS → Whisper
-        chạy ngược để lấy word-level timestamps (cần cho align visual beats lúc
-        render). ~30-60s mỗi chapter 4-10 phút.
+        AI đọc bản transcript thành giọng nói. Hệ thống tự cân bằng âm lượng
+        (rõ + đều) và ghi nhận thời điểm đọc từng từ — để sau khớp ảnh với
+        từng câu. Mất 30-60 giây cho 1 chương 4-10 phút.
       </p>
 
       {/* Advanced TTS (Gemini only) — collapsible */}
@@ -830,10 +830,10 @@ function AudioPanel({
               </div>
               <div>
                 <Label className="text-[10px]">
-                  Style instructions
+                  Hướng dẫn phong cách đọc
                   <span className="ml-1 text-muted-foreground font-normal">
-                    · gửi vào <code className="font-mono">input.prompt</code>{" "}
-                    riêng — TTS không đọc
+                    · AI chỉ DÙNG làm gợi ý giọng đọc, KHÔNG đọc đoạn này
+                    thành tiếng
                   </span>
                 </Label>
                 <Textarea
@@ -1015,9 +1015,10 @@ function VideoPanel({
       </div>
 
       <p className="mb-2 text-xs text-muted-foreground leading-relaxed">
-        Remotion render audio + visual beats → MP4 1920×1080 @ 24fps. Mỗi beat
-        hiện 1 ảnh với Ken Burns motion theo timing từ word timestamps. Beat
-        chưa attach asset → render placeholder text. ~60-90s mỗi chapter.
+        Ghép giọng đọc + ảnh thành video Full HD. Khi voiceover đọc đến từng
+        câu, ảnh tương ứng sẽ hiện ra với hiệu ứng phóng to / lia chậm như
+        phim tài liệu. Beat nào chưa chọn ảnh → video sẽ hiện chữ thay thế.
+        Mất 60-90 giây cho 1 chương.
       </p>
 
       {disableReason && !hasVideo && (
@@ -1166,11 +1167,11 @@ function VisualBeatsEditor({
       </button>
 
       <p className="mt-1.5 ml-6 text-xs text-muted-foreground leading-relaxed">
-        Mỗi beat = 1 ảnh hiện trong video, neo theo câu thứ N của transcript.
-        Render sẽ align beats với word timestamps để biết ms nào hiện ảnh nào +
-        Ken Burns motion. LLM auto-gen ~1 beat mỗi 6-12s cùng lúc với transcript.
-        Bấm "Attach asset" để pick ảnh thật từ Wikimedia/Met — KHÔNG attach thì
-        beat sẽ render placeholder text.
+        Danh sách các "khoảnh khắc hình ảnh" trong video — mỗi beat là 1 ảnh
+        đi kèm voiceover. Khi đọc đến câu nào, ảnh tương ứng sẽ hiện ra với
+        hiệu ứng phóng to / lia chậm. AI đã tự gợi ý sẵn khoảng 1 ảnh mỗi
+        6-12 giây. Bấm "Attach asset" để chọn ảnh thật từ kho Wikimedia/Met
+        — nếu chưa chọn, beat đó sẽ hiện chữ thay vì ảnh.
       </p>
 
       {expanded && (
@@ -1689,8 +1690,9 @@ function ExportPanel({
             Export final video
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Concat tất cả chapter MP4 thành 1 video + inject FFMETADATA chapter
-            markers (YouTube auto-detect) + sinh youtube-chapters.txt.
+            Ghép tất cả chương thành 1 video hoàn chỉnh + nhúng mốc chương để
+            YouTube tự nhận diện (vạch chia chương khi xem) + tạo file mô tả
+            để dán vào phần Description khi upload YouTube.
           </p>
         </div>
         <Badge variant="outline" className="gap-1 shrink-0">
@@ -1846,8 +1848,8 @@ function BgmPanel({
           </h4>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             {hasBgm
-              ? "Auto-mix với voice ở -20dB cho narration. Music chapter dùng full volume + loop."
-              : "Upload nhạc nền (mp3/m4a/wav). Có BGM thì narration sẽ có ambient + music chapter sẽ phát nhạc thay vì silent."}
+              ? "Hệ thống tự phối nhạc nền với giọng đọc (nhạc nhỏ lại khi có lời, đầy đủ khi không). Các đoạn nhạc xen kẽ sẽ phát đầy đủ + lặp lại nếu cần."
+              : "Tải lên 1 bản nhạc nền (mp3/m4a/wav). Có nhạc nền thì voiceover sẽ có ambient đệm + các đoạn nhạc xen kẽ giữa chương sẽ phát nhạc thay vì im lặng."}
           </p>
         </div>
       </div>
