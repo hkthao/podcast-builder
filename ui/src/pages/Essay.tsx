@@ -20,6 +20,8 @@ import {
   Mic2,
   X,
   Image as ImageIcon,
+  Volume2,
+  Download,
 } from "lucide-react";
 import {
   api,
@@ -818,6 +820,20 @@ export function EssayPage() {
             />
           )}
 
+          {/* TTS audio gen — Phase 27b */}
+          {activeId && content.length > 0 && !streaming && (
+            <TTSGenCard
+              essayContent={content}
+              essayTitle={title}
+              essayId={activeId}
+              onAudioReady={(file) => {
+                setCoverFile(null);
+                uploadMut.mutate(file);
+              }}
+              uploadPending={uploadMut.isPending}
+            />
+          )}
+
           {/* Upload audio from NotebookLM → tạo episode mới */}
           {activeId && content.length > 0 && !streaming && (
             <Card className="p-0 overflow-hidden">
@@ -1509,6 +1525,230 @@ function CopyButton({ text }: { text: string }) {
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       Copy
     </Button>
+  );
+}
+
+const TTS_VOICES = ["nova", "shimmer", "alloy", "echo", "fable", "onyx"] as const;
+type TtsVoice = (typeof TTS_VOICES)[number];
+const TTS_MODELS = ["tts-1-hd", "tts-1"] as const;
+type TtsModel = (typeof TTS_MODELS)[number];
+
+function TTSGenCard({
+  essayContent,
+  essayTitle,
+  essayId,
+  onAudioReady,
+  uploadPending,
+}: {
+  essayContent: string;
+  essayTitle: string;
+  essayId: string;
+  onAudioReady: (file: File) => void;
+  uploadPending: boolean;
+}) {
+  const [voice, setVoice] = useState<TtsVoice>("nova");
+  const [model, setModel] = useState<TtsModel>("tts-1-hd");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cleanup blob URL khi unmount or new blob
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
+  const charCount = essayContent.length;
+  // tts-1-hd = $30/1M chars, tts-1 = $15/1M chars
+  const ratePerMillion = model === "tts-1-hd" ? 30 : 15;
+  const estimatedCost = (charCount / 1_000_000) * ratePerMillion;
+
+  const genMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: essayContent, voice, model }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as { error?: string }).error ?? `${res.status} ${res.statusText}`,
+        );
+      }
+      const blob = await res.blob();
+      return blob;
+    },
+    onSuccess: (blob) => {
+      setAudioBlob(blob);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      setAudioUrl(URL.createObjectURL(blob));
+      setError(null);
+    },
+    onError: (e) => {
+      setError(String(e));
+    },
+  });
+
+  const handleUseAudio = () => {
+    if (!audioBlob) return;
+    // Build filename slug từ title
+    const slug = essayTitle
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/đ/gi, "d")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || `essay-${essayId}`;
+    const file = new File([audioBlob], `${slug}.m4a`, { type: "audio/aac" });
+    onAudioReady(file);
+  };
+
+  return (
+    <Card className="p-0 overflow-hidden">
+      <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-3">
+        <span className="font-medium text-sm flex items-center gap-2">
+          <Volume2 className="size-4 text-accent" />
+          Tạo audio narration (TTS)
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          AI đọc bài luận → audio cho style documentary
+        </span>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Dùng cho phong cách <strong>documentary lịch sử</strong> (1 giọng dẫn
+          chuyện). Đối lập với NotebookLM (2 host hội thoại) phía dưới.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="tts-voice" className="text-xs">
+              Voice
+            </Label>
+            <select
+              id="tts-voice"
+              value={voice}
+              onChange={(e) => setVoice(e.target.value as TtsVoice)}
+              disabled={genMut.isPending}
+              className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {TTS_VOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                  {v === "nova" ? " (mặc định, VN mềm)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="tts-model" className="text-xs">
+              Model
+            </Label>
+            <select
+              id="tts-model"
+              value={model}
+              onChange={(e) => setModel(e.target.value as TtsModel)}
+              disabled={genMut.isPending}
+              className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {TTS_MODELS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                  {m === "tts-1-hd" ? " (HD)" : " (rẻ hơn)"}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-secondary/20 p-3 text-xs space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Bài luận:</span>
+            <span className="font-mono tabular-nums">
+              {charCount.toLocaleString("vi-VN")} chars
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Cost ước tính:</span>
+            <span className="font-mono tabular-nums">
+              ${estimatedCost.toFixed(3)} USD
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Audio gen time:</span>
+            <span className="font-mono tabular-nums">
+              ~{Math.max(5, Math.round(charCount / 60))}s
+            </span>
+          </div>
+        </div>
+
+        {audioUrl && (
+          <div className="rounded-md border bg-accent/5 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Check className="size-4 text-accent" />
+              <span className="font-medium">Audio sẵn sàng</span>
+              {audioBlob && (
+                <span className="ml-auto text-xs text-muted-foreground font-mono">
+                  {(audioBlob.size / 1024 / 1024).toFixed(2)} MB
+                </span>
+              )}
+            </div>
+            <audio controls src={audioUrl} className="w-full" />
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive flex items-start gap-2">
+            <AlertCircle className="size-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-3 border-t flex items-center justify-end gap-2">
+        {audioUrl && audioBlob && (
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={audioUrl}
+              download={`${essayId}.m4a`}
+            >
+              <Download className="size-3.5" />
+              Tải về
+            </a>
+          </Button>
+        )}
+        {audioBlob && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUseAudio}
+            disabled={uploadPending}
+          >
+            {uploadPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Upload className="size-3.5" />
+            )}
+            Tạo episode
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => genMut.mutate()}
+          disabled={genMut.isPending || charCount === 0}
+        >
+          {genMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          {audioBlob ? "Tạo lại" : "Tạo audio"}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
