@@ -723,7 +723,7 @@ function AudioPanel({
 
   return (
     <div className="mt-5 border-t pt-4">
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Headphones className="size-4" />
           Audio + word timestamps
@@ -788,6 +788,12 @@ function AudioPanel({
           </Button>
         </div>
       </div>
+
+      <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+        TTS sinh voiceover MP3 từ transcript → ffmpeg loudnorm -16 LUFS → Whisper
+        chạy ngược để lấy word-level timestamps (cần cho align visual beats lúc
+        render). ~30-60s mỗi chapter 4-10 phút.
+      </p>
 
       {/* Advanced TTS (Gemini only) — collapsible */}
       {ttsProvider === "gemini" && (
@@ -1027,6 +1033,12 @@ function VideoPanel({
         </Button>
       </div>
 
+      <p className="mt-1.5 mb-2 text-xs text-muted-foreground leading-relaxed">
+        Remotion render audio + visual beats → MP4 1920×1080 @ 24fps. Mỗi beat
+        hiện 1 ảnh với Ken Burns motion theo timing từ word timestamps. Beat
+        chưa attach asset → render placeholder text. ~60-90s mỗi chapter.
+      </p>
+
       {disableReason && !hasVideo && (
         <p className="mt-2 text-xs text-muted-foreground">
           <AlertCircle className="inline size-3 mr-1" />
@@ -1147,6 +1159,14 @@ function VisualBeatsEditor({
           ~1 ảnh/{Math.max(1, Math.round(sentenceCount / Math.max(1, beats.length)))} câu
         </span>
       </button>
+
+      <p className="mt-1.5 ml-6 text-xs text-muted-foreground leading-relaxed">
+        Mỗi beat = 1 ảnh hiện trong video, neo theo câu thứ N của transcript.
+        Render sẽ align beats với word timestamps để biết ms nào hiện ảnh nào +
+        Ken Burns motion. LLM auto-gen ~1 beat mỗi 6-12s cùng lúc với transcript.
+        Bấm "Attach asset" để pick ảnh thật từ Wikimedia/Met — KHÔNG attach thì
+        beat sẽ render placeholder text.
+      </p>
 
       {expanded && (
         <div className="mt-3 space-y-2">
