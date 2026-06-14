@@ -668,12 +668,6 @@ function IdeaCard({
         onClick={() => setExpanded((v) => !v)}
         className="w-full px-6 py-3 border-b bg-secondary/30 flex items-center gap-2 hover:bg-secondary/50 transition-colors text-left"
       >
-        <ChevronDown
-          className={cn(
-            "size-4 text-muted-foreground transition-transform shrink-0",
-            !expanded && "-rotate-90",
-          )}
-        />
         <Badge variant="outline" className="font-mono">
           #{String(idx + 1).padStart(2, "0")}
         </Badge>
@@ -693,6 +687,12 @@ function IdeaCard({
             Đã pick
           </Badge>
         )}
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform shrink-0 ml-1",
+            !expanded && "-rotate-90",
+          )}
+        />
       </button>
       {!expanded && (
         <div className="px-6 py-3 border-b">
@@ -1113,15 +1113,19 @@ function GalleryIdeaCard({
       {/* Chapters + KeyWorks expandable */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="mt-4 inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+        className="mt-4 w-full inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
       >
+        <span>
+          {expanded
+            ? "Thu gọn"
+            : `Chi tiết (${idea.chapters.length} chương · ${idea.keyWorks.length} tác phẩm)`}
+        </span>
         <ChevronDown
           className={cn(
-            "size-3 transition-transform",
+            "size-3 ml-auto transition-transform",
             expanded && "rotate-180",
           )}
         />
-        {expanded ? "Thu gọn" : `Chi tiết (${idea.chapters.length} chương · ${idea.keyWorks.length} tác phẩm)`}
       </button>
 
       {expanded && (

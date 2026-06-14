@@ -755,16 +755,18 @@ function AudioPanel({
           <button
             type="button"
             onClick={() => setAdvancedOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+            className="w-full inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
           >
+            <span>
+              {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model, language,
+              rate, pitch, style)
+            </span>
             <ChevronDown
               className={cn(
-                "size-3 transition-transform",
+                "size-3 ml-auto transition-transform",
                 advancedOpen && "rotate-180",
               )}
             />
-            {advancedOpen ? "Thu gọn" : "Tuỳ chọn TTS"} (model, language,
-            rate, pitch, style)
           </button>
           {advancedOpen && (
             <div className="mt-2 pt-2 space-y-2 text-xs">
@@ -1240,12 +1242,6 @@ function VisualBeatsEditor({
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-2 text-sm font-medium hover:text-accent transition-colors"
       >
-        <ChevronDown
-          className={cn(
-            "size-4 transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
         <ImageIcon className="size-4" />
         Visual beats ({beats.length})
         {staleBeats.length > 0 && (
@@ -1259,9 +1255,15 @@ function VisualBeatsEditor({
         <span className="ml-auto text-xs text-muted-foreground font-normal">
           ~1 ảnh/{Math.max(1, Math.round(sentenceCount / Math.max(1, beats.length)))} câu
         </span>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform shrink-0",
+            expanded && "rotate-180",
+          )}
+        />
       </button>
 
-      <p className="mt-1.5 ml-6 text-xs text-muted-foreground leading-relaxed">
+      <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
         Danh sách các "khoảnh khắc hình ảnh" trong video — mỗi beat là 1 ảnh
         đi kèm voiceover. Khi đọc đến câu nào, ảnh tương ứng sẽ hiện ra với
         hiệu ứng phóng to / lia chậm.
