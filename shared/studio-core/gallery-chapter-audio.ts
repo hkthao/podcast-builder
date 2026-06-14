@@ -28,10 +28,25 @@ import {
 import { transcribeAudio } from "../transcribe/transcribe";
 import { PATHS } from "./paths";
 import type { WordTimestamp } from "../../gallery/src/word-timestamp";
+import {
+  chunkTextForGemini,
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_GEMINI_VOICE,
+  generateGeminiTts,
+  GEMINI_PCM_CHANNELS,
+  GEMINI_PCM_SAMPLE_RATE,
+  GEMINI_VOICES,
+  type GeminiTtsModel,
+  type GeminiVoice,
+} from "./tts-providers/gemini-tts";
 
 const execFileAsync = promisify(execFile);
 
-const VALID_VOICES = [
+export const TTS_PROVIDERS = ["openai", "gemini"] as const;
+export type TtsProvider = (typeof TTS_PROVIDERS)[number];
+
+// OpenAI TTS voices/models (legacy fallback)
+const OPENAI_VOICES = [
   "alloy",
   "echo",
   "fable",
@@ -39,24 +54,26 @@ const VALID_VOICES = [
   "nova",
   "shimmer",
 ] as const;
-type Voice = (typeof VALID_VOICES)[number];
+type OpenAiVoice = (typeof OPENAI_VOICES)[number];
 
-const VALID_TTS_MODELS = ["tts-1", "tts-1-hd"] as const;
-type TtsModel = (typeof VALID_TTS_MODELS)[number];
+const OPENAI_TTS_MODELS = ["tts-1", "tts-1-hd"] as const;
+type OpenAiTtsModel = (typeof OPENAI_TTS_MODELS)[number];
 
-export const DEFAULT_VOICE: Voice = "nova";
-export const DEFAULT_TTS_MODEL: TtsModel = "tts-1-hd";
+export const DEFAULT_OPENAI_VOICE: OpenAiVoice = "nova";
+export const DEFAULT_OPENAI_TTS_MODEL: OpenAiTtsModel = "tts-1-hd";
 
-const CHUNK_LIMIT = 4000;
+// Gemini TTS re-export defaults
+export { DEFAULT_GEMINI_VOICE, DEFAULT_GEMINI_MODEL, GEMINI_VOICES };
 
-const chunkText = (text: string): string[] => {
-  // Split theo sentence boundary nếu > CHUNK_LIMIT
-  if (text.length <= CHUNK_LIMIT) return [text];
+const OPENAI_CHUNK_LIMIT = 4000;
+
+const chunkTextForOpenAi = (text: string): string[] => {
+  if (text.length <= OPENAI_CHUNK_LIMIT) return [text];
   const sentences = text.split(/(?<=[.!?])\s+/);
   const chunks: string[] = [];
   let buf = "";
   for (const s of sentences) {
-    if ((buf + " " + s).length > CHUNK_LIMIT && buf.length > 0) {
+    if ((buf + " " + s).length > OPENAI_CHUNK_LIMIT && buf.length > 0) {
       chunks.push(buf.trim());
       buf = s;
     } else {
@@ -109,11 +126,127 @@ const loudnormAndReencode = async (
   ]);
 };
 
+/**
+ * Gemini TTS trả raw PCM (s16le, mono, 24kHz). Cần báo cho ffmpeg biết format
+ * input vì PCM không có container header.
+ */
+const loudnormPcmToAac = async (
+  rawPcmPath: string,
+  outPath: string,
+): Promise<void> => {
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-f",
+    "s16le",
+    "-ar",
+    String(GEMINI_PCM_SAMPLE_RATE),
+    "-ac",
+    String(GEMINI_PCM_CHANNELS),
+    "-i",
+    rawPcmPath,
+    "-af",
+    "loudnorm=I=-16:TP=-1.5:LRA=11",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    outPath,
+  ]);
+};
+
+type ProviderPipelineInput<V extends string, M extends string> = {
+  transcript: string;
+  voice: V;
+  model: M;
+  outFilename: string;
+  outPath: string;
+};
+
+async function runOpenAiTtsPipeline(
+  input: ProviderPipelineInput<OpenAiVoice, OpenAiTtsModel>,
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const err = new Error(
+      "Thiếu OPENAI_API_KEY — không gen được OpenAI TTS.",
+    ) as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+
+  const chunks = chunkTextForOpenAi(input.transcript);
+  const openai = new OpenAI({ apiKey });
+  const audioBuffers: Buffer[] = [];
+  for (const chunk of chunks) {
+    const response = await openai.audio.speech.create({
+      model: input.model,
+      voice: input.voice,
+      input: chunk,
+      response_format: "aac",
+    });
+    const arrayBuf = await response.arrayBuffer();
+    audioBuffers.push(Buffer.from(arrayBuf));
+  }
+
+  // Concat AAC streams (sequential AAC chainable ở file level) → loudnorm + re-encode
+  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.raw`);
+  await fsp.writeFile(rawPath, Buffer.concat(audioBuffers));
+  await loudnormAndReencode(rawPath, input.outPath);
+  await fsp.unlink(rawPath).catch(() => {
+    /* ignore */
+  });
+}
+
+async function runGeminiTtsPipeline(
+  input: ProviderPipelineInput<GeminiVoice, GeminiTtsModel>,
+): Promise<void> {
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    const err = new Error(
+      "Thiếu GEMINI_API_KEY (hoặc GOOGLE_API_KEY) — không gen được Gemini TTS.",
+    ) as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+
+  const chunks = chunkTextForGemini(input.transcript);
+  const pcmBuffers: Buffer[] = [];
+  for (const chunk of chunks) {
+    const pcm = await generateGeminiTts({
+      text: chunk,
+      voice: input.voice,
+      model: input.model,
+      apiKey,
+    });
+    pcmBuffers.push(pcm);
+  }
+
+  // PCM int16 streams concat trực tiếp được (mỗi sample 2 byte, không header).
+  // Save raw PCM file → loudnorm + AAC encode với ffmpeg input flags chỉ rõ format.
+  const rawPath = path.join(PATHS.TMP_DIR, `${input.outFilename}.pcm`);
+  await fsp.writeFile(rawPath, Buffer.concat(pcmBuffers));
+  await loudnormPcmToAac(rawPath, input.outPath);
+  await fsp.unlink(rawPath).catch(() => {
+    /* ignore */
+  });
+}
+
 export type GenAudioInput = {
   planId: string;
   chapterIdx: number;
-  voice?: Voice;
-  ttsModel?: TtsModel;
+  /** Phase 4b': "gemini" (recommended cho gallery) hoặc "openai" (legacy). */
+  ttsProvider?: TtsProvider;
+  /**
+   * Voice tùy provider:
+   *  - openai: nova/shimmer/onyx/…
+   *  - gemini: Kore/Aoede/Puck/…
+   *  Mỗi provider có defaults riêng nếu không truyền.
+   */
+  voice?: string;
+  /** Model: tts-1/tts-1-hd cho openai; gemini-2.5-flash-preview-tts cho gemini. */
+  ttsModel?: string;
   force?: boolean;
 };
 
@@ -159,17 +292,7 @@ export async function generateChapterAudio(
     throw err;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    const err = new Error(
-      "Thiếu OPENAI_API_KEY — không gen được TTS.",
-    ) as Error & { code: string };
-    err.code = "VALIDATION";
-    throw err;
-  }
-
-  const voice: Voice = input.voice ?? DEFAULT_VOICE;
-  const ttsModel: TtsModel = input.ttsModel ?? DEFAULT_TTS_MODEL;
+  const ttsProvider: TtsProvider = input.ttsProvider ?? "gemini";
   const force = input.force ?? false;
 
   const outFilename = galleryChapterAudioFilename(plan.id, input.chapterIdx);
@@ -191,30 +314,24 @@ export async function generateChapterAudio(
     await fsp.mkdir(PATHS.TMP_DIR, { recursive: true });
   }
 
-  // 1. TTS từng chunk
-  const chunks = chunkText(transcript);
-  const openai = new OpenAI({ apiKey });
-  const audioBuffers: Buffer[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const response = await openai.audio.speech.create({
-      model: ttsModel,
-      voice,
-      input: chunks[i]!,
-      response_format: "aac",
+  // 1+2+3. Provider dispatch — gen raw audio + loudnorm sang AAC chuẩn -16 LUFS
+  if (ttsProvider === "gemini") {
+    await runGeminiTtsPipeline({
+      transcript,
+      voice: (input.voice as GeminiVoice) ?? DEFAULT_GEMINI_VOICE,
+      model: (input.ttsModel as GeminiTtsModel) ?? DEFAULT_GEMINI_MODEL,
+      outFilename,
+      outPath,
     });
-    const arrayBuf = await response.arrayBuffer();
-    audioBuffers.push(Buffer.from(arrayBuf));
+  } else {
+    await runOpenAiTtsPipeline({
+      transcript,
+      voice: (input.voice as OpenAiVoice) ?? DEFAULT_OPENAI_VOICE,
+      model: (input.ttsModel as OpenAiTtsModel) ?? DEFAULT_OPENAI_TTS_MODEL,
+      outFilename,
+      outPath,
+    });
   }
-
-  // 2. Concat raw AAC (sequential AAC streams chainable ở file level)
-  const rawPath = path.join(PATHS.TMP_DIR, `${outFilename}.raw`);
-  await fsp.writeFile(rawPath, Buffer.concat(audioBuffers));
-
-  // 3. Loudnorm + re-encode (-16 LUFS broadcast standard)
-  await loudnormAndReencode(rawPath, outPath);
-  await fsp.unlink(rawPath).catch(() => {
-    /* ignore */
-  });
 
   // 4. ffprobe duration
   const durationMs = ffprobeDurationMs(outPath);

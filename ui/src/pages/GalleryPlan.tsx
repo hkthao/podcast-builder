@@ -72,6 +72,30 @@ const STATUS_META: Record<
   },
 };
 
+const OPENAI_TTS_VOICES = [
+  "alloy",
+  "echo",
+  "fable",
+  "onyx",
+  "nova",
+  "shimmer",
+];
+
+const GEMINI_TTS_VOICES = [
+  "Kore", // deep contemplative — default cho gallery
+  "Aoede", // warm breezy
+  "Puck", // bright energetic
+  "Charon", // baritone serious
+  "Zephyr", // light airy
+  "Fenrir", // gravelly deep
+  "Leda", // soft warm
+  "Orus", // narrator standard
+  "Schedar", // measured scholarly
+  "Sulafat", // smooth mid
+];
+
+type TtsProvider = "openai" | "gemini";
+
 export function GalleryPlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -83,6 +107,15 @@ export function GalleryPlanPage() {
   const [model, setModel] = usePersistedState<string>(
     "gallery-plan.model",
     "gpt-4o-mini",
+  );
+  // Phase 4b': TTS provider + voice (default Gemini Kore)
+  const [ttsProvider, setTtsProvider] = usePersistedState<TtsProvider>(
+    "gallery-plan.tts-provider",
+    "gemini",
+  );
+  const [ttsVoice, setTtsVoice] = usePersistedState<string>(
+    "gallery-plan.tts-voice",
+    "Kore",
   );
 
   const planQ = useQuery({
@@ -103,6 +136,15 @@ export function GalleryPlanPage() {
       setModel(list[0].id);
     }
   }, [provider, modelsQ.data, model]);
+
+  // Auto-fix voice khi đổi TTS provider — pick voice 1 của provider mới
+  useEffect(() => {
+    const validVoices =
+      ttsProvider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+    if (!validVoices.includes(ttsVoice)) {
+      setTtsVoice(validVoices[0]);
+    }
+  }, [ttsProvider, ttsVoice]);
 
   const deleteMut = useMutation({
     mutationFn: () => api.deleteGalleryPlan(id!),
@@ -202,11 +244,13 @@ export function GalleryPlanPage() {
         </div>
       </div>
 
-      {/* Provider/model picker */}
-      <Card className="p-4 mb-6">
+      {/* LLM provider/model picker (cho transcript gen) */}
+      <Card className="p-4 mb-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <Label htmlFor="provider">Provider</Label>
+            <Label htmlFor="provider" className="text-xs">
+              LLM Provider (cho transcript)
+            </Label>
             <select
               id="provider"
               value={provider}
@@ -228,7 +272,9 @@ export function GalleryPlanPage() {
             </select>
           </div>
           <div className="md:col-span-2">
-            <Label htmlFor="model">Model</Label>
+            <Label htmlFor="model" className="text-xs">
+              LLM Model
+            </Label>
             <select
               id="model"
               value={model}
@@ -238,6 +284,51 @@ export function GalleryPlanPage() {
               {(modelsQ.data?.[provider] ?? []).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Phase 4b': TTS provider + voice picker (cho audio gen) */}
+      <Card className="p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <Label htmlFor="tts-provider" className="text-xs">
+              TTS Provider (cho audio)
+            </Label>
+            <select
+              id="tts-provider"
+              value={ttsProvider}
+              onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
+              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="gemini">Gemini TTS (recommend)</option>
+              <option value="openai">OpenAI TTS (legacy)</option>
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <Label htmlFor="tts-voice" className="text-xs">
+              TTS Voice
+              {ttsProvider === "gemini" && (
+                <span className="ml-2 text-muted-foreground font-normal">
+                  · style steering qua natural prompt
+                </span>
+              )}
+            </Label>
+            <select
+              id="tts-voice"
+              value={ttsVoice}
+              onChange={(e) => setTtsVoice(e.target.value)}
+              className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {(ttsProvider === "gemini"
+                ? GEMINI_TTS_VOICES
+                : OPENAI_TTS_VOICES
+              ).map((v) => (
+                <option key={v} value={v}>
+                  {v}
                 </option>
               ))}
             </select>
@@ -255,6 +346,8 @@ export function GalleryPlanPage() {
             planId={plan.id}
             provider={provider}
             model={model}
+            ttsProvider={ttsProvider}
+            ttsVoice={ttsVoice}
             onMutate={(updated) => {
               qc.setQueryData<GalleryChapterPlan>(
                 ["gallery-plan", plan.id],
@@ -274,6 +367,8 @@ function ChapterCard({
   planId,
   provider,
   model,
+  ttsProvider,
+  ttsVoice,
   onMutate,
 }: {
   chapter: GalleryPlanChapter;
@@ -281,6 +376,8 @@ function ChapterCard({
   planId: string;
   provider: LLMProvider;
   model: string;
+  ttsProvider: TtsProvider;
+  ttsVoice: string;
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
   const isMusic = chapter.kind === "music";
@@ -315,10 +412,14 @@ function ChapterCard({
     },
   });
 
-  // Phase 4b: TTS + Whisper alignment
+  // Phase 4b: TTS + Whisper alignment (dispatch theo ttsProvider plan-level)
   const audioMut = useMutation({
     mutationFn: (force: boolean) =>
-      api.genGalleryPlanChapterAudio(planId, chapterIdx, { force }),
+      api.genGalleryPlanChapterAudio(planId, chapterIdx, {
+        ttsProvider,
+        voice: ttsVoice,
+        force,
+      }),
     onSuccess: (plan) => onMutate(plan),
   });
 

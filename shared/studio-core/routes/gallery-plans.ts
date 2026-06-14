@@ -222,13 +222,29 @@ galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
     return c.json({ error: "chapter idx không hợp lệ" }, 400);
   }
   const raw = await c.req.json().catch(() => ({}));
-  const body = raw as { voice?: string; ttsModel?: string; force?: boolean };
+  const body = raw as {
+    ttsProvider?: string;
+    voice?: string;
+    ttsModel?: string;
+    force?: boolean;
+  };
+  if (
+    body.ttsProvider !== undefined &&
+    body.ttsProvider !== "openai" &&
+    body.ttsProvider !== "gemini"
+  ) {
+    return c.json(
+      { error: "ttsProvider phải là 'openai' hoặc 'gemini'" },
+      400,
+    );
+  }
   try {
     const plan = await generateChapterAudio({
       planId: id,
       chapterIdx: idx,
-      voice: body.voice as Parameters<typeof generateChapterAudio>[0]["voice"],
-      ttsModel: body.ttsModel as Parameters<typeof generateChapterAudio>[0]["ttsModel"],
+      ttsProvider: body.ttsProvider as "openai" | "gemini" | undefined,
+      voice: body.voice,
+      ttsModel: body.ttsModel,
       force: body.force ?? false,
     });
     return c.json(plan);

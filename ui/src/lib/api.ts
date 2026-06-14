@@ -1145,7 +1145,12 @@ export const api = {
   genGalleryPlanChapterAudio: (
     planId: string,
     chapterIdx: number,
-    input: { voice?: string; ttsModel?: string; force?: boolean } = {},
+    input: {
+      ttsProvider?: "openai" | "gemini";
+      voice?: string;
+      ttsModel?: string;
+      force?: boolean;
+    } = {},
   ) =>
     jsonFetch<GalleryChapterPlan>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
