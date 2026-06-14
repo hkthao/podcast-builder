@@ -396,6 +396,42 @@ export type KnowledgeEntry = {
   sessions: Array<{ id: string; topic: string; createdAt: string }>;
 };
 
+// ────── Podcast script (dialogue 2 voice) ──────
+export type PodcastSpeaker = "host_nam" | "host_nu";
+
+export type PodcastScriptTurn = {
+  speaker: PodcastSpeaker;
+  text: string;
+};
+
+export type PodcastScriptSource = {
+  essayId: string | null;
+  brainstormRef: { id: string; ideaIdx: number } | null;
+  extraNotes: string;
+};
+
+export type PodcastScript = {
+  episodeName: string;
+  turns: PodcastScriptTurn[];
+  source: PodcastScriptSource;
+  provider: LLMProvider | null;
+  model: string | null;
+  generatedAt: string | null;
+  updatedAt: string;
+};
+
+// Voice catalog — re-export gọn lại cho UI dropdown
+export type VoiceGender = "male" | "female" | "neutral";
+export type VoiceSuggestedRole = "host_nam" | "host_nu" | "narrator" | "any";
+export type VoiceInfo = {
+  id: string;
+  provider: "gemini" | "openai";
+  displayName: string;
+  gender: VoiceGender;
+  character: string;
+  suggestedRole: VoiceSuggestedRole;
+};
+
 export type VisualEntry = {
   metaphor: string;
   sessionId: string;
@@ -1229,6 +1265,71 @@ export const api = {
       `/api/gallery/plans/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
+
+  // ─── Podcast script gen + audio gen (dialogue 2 voice) ────────────────
+  listVoices: () =>
+    jsonFetch<{
+      voices: VoiceInfo[];
+      defaults: { hostNam: string; hostNu: string };
+    }>("/api/episodes/_/voices"),
+
+  getPodcastScript: (name: string) =>
+    jsonFetch<PodcastScript | null>(
+      `/api/episodes/${encodeURIComponent(name)}/script`,
+    ),
+
+  genPodcastScript: (
+    name: string,
+    input: {
+      provider: LLMProvider;
+      model: string;
+      essayId?: string | null;
+      brainstormRef?: { id: string; ideaIdx: number } | null;
+      extraNotes: string;
+      targetMinutes?: number;
+    },
+  ) =>
+    jsonFetch<PodcastScript>(
+      `/api/episodes/${encodeURIComponent(name)}/script/generate`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  savePodcastScript: (
+    name: string,
+    input: { turns: PodcastScriptTurn[]; extraNotes?: string },
+  ) =>
+    jsonFetch<PodcastScript>(
+      `/api/episodes/${encodeURIComponent(name)}/script`,
+      { method: "PUT", body: JSON.stringify(input) },
+    ),
+
+  deletePodcastScript: (name: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/episodes/${encodeURIComponent(name)}/script`,
+      { method: "DELETE" },
+    ),
+
+  genPodcastScriptAudio: (
+    name: string,
+    input: {
+      ttsModel?: string;
+      hostNam: { voice: string; styleInstruction: string };
+      hostNu: { voice: string; styleInstruction: string };
+      mixBgm?: boolean;
+      turnGapMs?: number;
+      force?: boolean;
+    },
+  ) =>
+    jsonFetch<{
+      episode: EpisodeSummary | null;
+      audioPath: string;
+      durationMs: number;
+      turnCount: number;
+      bgmMixed: boolean;
+    }>(`/api/episodes/${encodeURIComponent(name)}/script/audio`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 
   // ─── Phase 4b'' — API keys settings ─────────────────────────────────
   listApiKeys: () =>

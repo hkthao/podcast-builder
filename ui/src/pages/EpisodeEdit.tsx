@@ -39,13 +39,20 @@ import { Button } from "@/components/ui/button";
 import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
 import { RenderTab } from "@/components/RenderTab";
 import { PublishTab } from "@/components/PublishTab";
+import { ScriptTab } from "@/components/ScriptTab";
 import { cn } from "@/lib/utils";
 
-type Tab = "config" | "scenes" | "transcript" | "render" | "publish" | "files";
+/**
+ * 5 tab top-level (gộp từ 7): config / content / render / publish / files.
+ * `content` chứa 3 sub-tab pipeline tạo: script → transcript → scenes.
+ */
+type Tab = "config" | "content" | "render" | "publish" | "files";
+type ContentSubTab = "script" | "transcript" | "scenes";
 
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
   const [tab, setTab] = useState<Tab>("config");
+  const [contentSub, setContentSub] = useState<ContentSubTab>("script");
 
   const epQ = useQuery({
     queryKey: ["episode", name],
@@ -161,8 +168,8 @@ export function EpisodeEdit() {
         </Meta>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 border-b">
+      {/* Tabs — 5 top-level (gộp 3 production stage thành "Nội dung") */}
+      <div className="mb-4 flex gap-1 border-b">
         <TabButton
           active={tab === "config"}
           onClick={() => setTab("config")}
@@ -170,16 +177,14 @@ export function EpisodeEdit() {
           label="Cấu hình"
         />
         <TabButton
-          active={tab === "transcript"}
-          onClick={() => setTab("transcript")}
+          active={tab === "content"}
+          onClick={() => setTab("content")}
           icon={<FileText className="size-4" />}
-          label={`Transcript${transcriptCount > 0 ? ` (${transcriptCount})` : ""}`}
-        />
-        <TabButton
-          active={tab === "scenes"}
-          onClick={() => setTab("scenes")}
-          icon={<Film className="size-4" />}
-          label={`Cảnh${planCount > 0 ? ` (${planCount})` : ""}`}
+          label={`Nội dung${
+            transcriptCount > 0 || planCount > 0
+              ? ` (${[transcriptCount && `${transcriptCount} câu`, planCount && `${planCount} cảnh`].filter(Boolean).join(" · ")})`
+              : ""
+          }`}
         />
         <TabButton
           active={tab === "render"}
@@ -208,24 +213,62 @@ export function EpisodeEdit() {
       </div>
 
       {tab === "config" && <EpisodeConfigForm ep={ep} />}
-      {tab === "transcript" && (
-        <TranscriptPanel
-          episodeName={name}
-          segments={transcriptQ.data?.segments ?? []}
-          source={transcriptQ.data?.source ?? "none"}
-          loading={transcriptQ.isLoading}
-          hasAudio={!!ep.audioPath}
-        />
+
+      {tab === "content" && (
+        <>
+          {/* Sub-tabs: script (podcast only) → transcript → cảnh */}
+          <div className="mb-4 flex gap-1 flex-wrap text-xs">
+            {ep.config.style === "podcast" && (
+              <SubTabButton
+                active={contentSub === "script"}
+                onClick={() => setContentSub("script")}
+                icon={<Sparkles className="size-3.5" />}
+                label="Kịch bản"
+              />
+            )}
+            <SubTabButton
+              active={contentSub === "transcript"}
+              onClick={() => setContentSub("transcript")}
+              icon={<FileText className="size-3.5" />}
+              label={`Transcript${transcriptCount > 0 ? ` · ${transcriptCount}` : ""}`}
+            />
+            <SubTabButton
+              active={contentSub === "scenes"}
+              onClick={() => setContentSub("scenes")}
+              icon={<Film className="size-3.5" />}
+              label={`Cảnh${planCount > 0 ? ` · ${planCount}` : ""}`}
+            />
+          </div>
+
+          {contentSub === "script" && ep.config.style === "podcast" && (
+            <ScriptTab ep={ep} />
+          )}
+          {contentSub === "script" && ep.config.style !== "podcast" && (
+            <p className="text-sm text-muted-foreground italic">
+              Kịch bản dialogue chỉ áp dụng cho podcast style.
+            </p>
+          )}
+          {contentSub === "transcript" && (
+            <TranscriptPanel
+              episodeName={name}
+              segments={transcriptQ.data?.segments ?? []}
+              source={transcriptQ.data?.source ?? "none"}
+              loading={transcriptQ.isLoading}
+              hasAudio={!!ep.audioPath}
+            />
+          )}
+          {contentSub === "scenes" && (
+            <ScenesPanel
+              episodeName={name}
+              scenes={planQ.data?.scenes ?? []}
+              totalDurationMs={planQ.data?.totalDurationMs ?? 0}
+              loading={planQ.isLoading}
+              hasTranscript={transcriptCount > 0}
+            />
+          )}
+        </>
       )}
-      {tab === "scenes" && (
-        <ScenesPanel
-          episodeName={name}
-          scenes={planQ.data?.scenes ?? []}
-          totalDurationMs={planQ.data?.totalDurationMs ?? 0}
-          loading={planQ.isLoading}
-          hasTranscript={transcriptCount > 0}
-        />
-      )}
+
       {tab === "render" && (
         <RenderTab
           ep={ep}
@@ -271,10 +314,37 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
         active
           ? "border-primary text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function SubTabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors whitespace-nowrap",
+        active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground",
       )}
     >
       {icon}

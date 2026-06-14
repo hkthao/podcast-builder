@@ -20,6 +20,27 @@ import {
   genSceneThumbnails,
   listSceneThumbnails,
 } from "../lib/scene-thumbnails";
+import {
+  deleteScript,
+  generateScript,
+  loadScript,
+  saveScript,
+  type Speaker,
+} from "../lib/script-store";
+import {
+  generateScriptAudio,
+  type TtsVoiceConfig,
+} from "../../../shared/studio-core/podcast-script-tts";
+import {
+  ALL_VOICES,
+  DEFAULT_HOST_NAM_VOICE,
+  DEFAULT_HOST_NU_VOICE,
+} from "../../../shared/studio-core/tts-providers/voice-catalog";
+import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
+import { PATHS } from "../../../shared/studio-core/paths";
+import path from "node:path";
+import fs from "node:fs/promises";
+import type { LLMProvider } from "../../../shared/studio-core/llm-providers";
 
 export const episodesRoutes = new Hono();
 
@@ -293,6 +314,241 @@ episodesRoutes.put("/:name/plan", async (c) => {
 
 /** Bảng option valid cho mood + sceneType, dropdown UI dùng. */
 episodesRoutes.get("/_/plan-options", (c) => c.json(PLAN_OPTIONS));
+
+// ────── Podcast script gen + audio gen (Phase: dialogue 2 voice) ──────
+
+/**
+ * Voice catalog — toàn bộ Gemini + OpenAI voices với mô tả tiếng Việt.
+ * UI dropdown đọc từ đây để render label rõ ràng cho user pick.
+ */
+episodesRoutes.get("/_/voices", (c) =>
+  c.json({
+    voices: ALL_VOICES,
+    defaults: {
+      hostNam: DEFAULT_HOST_NAM_VOICE,
+      hostNu: DEFAULT_HOST_NU_VOICE,
+    },
+  }),
+);
+
+/**
+ * Load script sidecar `input/{slug}.script.json`. null nếu chưa gen.
+ */
+episodesRoutes.get("/:name/script", async (c) => {
+  const name = c.req.param("name");
+  const script = await loadScript(name);
+  return c.json(script);
+});
+
+/**
+ * Gen kịch bản 2 voice qua LLM. Body:
+ *   { provider, model, essayId?, brainstormRef?, extraNotes, targetMinutes? }
+ * Sync — chờ LLM trả JSON (~10-30s).
+ */
+episodesRoutes.post("/:name/script/generate", async (c) => {
+  const name = c.req.param("name");
+  const ep = await getEpisode(name);
+  if (!ep) return c.json({ error: `Episode not found: ${name}` }, 404);
+
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as {
+    provider?: string;
+    model?: string;
+    essayId?: string | null;
+    brainstormRef?: { id: string; ideaIdx: number } | null;
+    extraNotes?: string;
+    targetMinutes?: number;
+  };
+  if (body.provider !== "openai" && body.provider !== "ollama") {
+    return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
+  }
+  if (typeof body.model !== "string" || !body.model.trim()) {
+    return c.json({ error: "Thiếu model" }, 400);
+  }
+  try {
+    const script = await generateScript({
+      episodeName: name,
+      essayId: body.essayId ?? null,
+      brainstormRef: body.brainstormRef ?? null,
+      extraNotes: body.extraNotes ?? "",
+      title: ep.config.title,
+      hook: ep.config.hook,
+      targetMinutes: body.targetMinutes,
+      provider: body.provider as LLMProvider,
+      model: body.model.trim(),
+    });
+    return c.json(script);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Lưu script sau khi user edit. Body: { turns, extraNotes? }
+ */
+episodesRoutes.put("/:name/script", async (c) => {
+  const name = c.req.param("name");
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as {
+    turns?: Array<{ speaker: string; text: string }>;
+    extraNotes?: string;
+  };
+  if (!Array.isArray(body.turns)) {
+    return c.json({ error: "Body phải có field 'turns' là array" }, 400);
+  }
+  try {
+    const existing = await loadScript(name);
+    const script = await saveScript(name, {
+      turns: body.turns as Array<{ speaker: Speaker; text: string }>,
+      source:
+        body.extraNotes !== undefined && existing
+          ? { ...existing.source, extraNotes: body.extraNotes }
+          : existing?.source,
+    });
+    return c.json(script);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/** Xoá script (reset). */
+episodesRoutes.delete("/:name/script", async (c) => {
+  const name = c.req.param("name");
+  const deleted = await deleteScript(name);
+  return c.json({ deleted });
+});
+
+/**
+ * Gen audio từ script — TTS turn-by-turn 2 voice + concat + loudnorm.
+ * Body:
+ *   {
+ *     ttsModel?: string,
+ *     hostNam: { voice, styleInstruction },
+ *     hostNu: { voice, styleInstruction },
+ *     mixBgm?: boolean,
+ *     turnGapMs?: number,
+ *     force?: boolean
+ *   }
+ * Sync ~60-120s tuỳ độ dài script.
+ */
+episodesRoutes.post("/:name/script/audio", async (c) => {
+  const name = c.req.param("name");
+  const ep = await getEpisode(name);
+  if (!ep) return c.json({ error: `Episode not found: ${name}` }, 404);
+
+  const script = await loadScript(name);
+  if (!script || script.turns.length === 0) {
+    return c.json({ error: "Chưa có script — gen kịch bản trước." }, 400);
+  }
+
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    raw = {};
+  }
+  const body = raw as {
+    ttsModel?: string;
+    hostNam?: { voice?: string; styleInstruction?: string };
+    hostNu?: { voice?: string; styleInstruction?: string };
+    mixBgm?: boolean;
+    turnGapMs?: number;
+    force?: boolean;
+  };
+  if (
+    !body.hostNam?.voice ||
+    !body.hostNu?.voice ||
+    typeof body.hostNam.styleInstruction !== "string" ||
+    typeof body.hostNu.styleInstruction !== "string"
+  ) {
+    return c.json(
+      {
+        error:
+          "Cần đủ hostNam + hostNu với voice (id Gemini) và styleInstruction.",
+      },
+      400,
+    );
+  }
+
+  try {
+    const voices: Record<Speaker, TtsVoiceConfig> = {
+      host_nam: {
+        voice: body.hostNam.voice as TtsVoiceConfig["voice"],
+        styleInstruction: body.hostNam.styleInstruction,
+      },
+      host_nu: {
+        voice: body.hostNu.voice as TtsVoiceConfig["voice"],
+        styleInstruction: body.hostNu.styleInstruction,
+      },
+    };
+    const result = await generateScriptAudio({
+      episodeName: name,
+      script,
+      ttsModel: body.ttsModel as
+        | Parameters<typeof generateScriptAudio>[0]["ttsModel"]
+        | undefined,
+      voices,
+      turnGapMs: body.turnGapMs,
+      force: body.force,
+    });
+
+    // Optional BGM mix — chỉ khi user enable + episode có bgm filename set
+    let bgmMixed: { path: string; durationMs: number } | null = null;
+    if (body.mixBgm && ep.config.bgm) {
+      const bgmPath = path.join(PATHS.INPUT_DIR, ep.config.bgm);
+      try {
+        await fs.access(bgmPath);
+      } catch {
+        return c.json(
+          {
+            error: `BGM file không tồn tại: input/${ep.config.bgm}. Upload BGM rồi thử lại.`,
+          },
+          400,
+        );
+      }
+      const mix = await mixBgmIntoVoice({
+        voicePath: result.outputPath,
+        bgmPath,
+        episodeName: name,
+        bgmVolumeDb: ep.config.bgmVolumeDb,
+      });
+      // Ghi đè audio gốc bằng version có BGM
+      await fs.rename(mix.outputPath, result.outputPath);
+      bgmMixed = {
+        path: result.outputPath,
+        durationMs: mix.durationMs,
+      };
+    }
+
+    const updated = await getEpisode(name);
+    return c.json({
+      episode: updated,
+      audioPath: result.outputPath,
+      durationMs: bgmMixed?.durationMs ?? result.durationMs,
+      turnCount: result.turnCount,
+      bgmMixed: bgmMixed !== null,
+    });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
 
 /**
  * Save edit config. Body: EpisodeConfig JSON (zod-validated).
