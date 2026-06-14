@@ -1263,7 +1263,7 @@ function GalleryIdeaCard({
         {existingPlanId ? (
           <Button
             size="sm"
-            variant="default"
+            variant="outline"
             onClick={() => navigate(`/gallery/plans/${existingPlanId}`)}
           >
             <FileText className="size-4" />

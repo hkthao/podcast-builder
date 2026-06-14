@@ -185,68 +185,73 @@ function ApiKeyRow({ status }: { status: ApiKeyStatus }) {
         <Label htmlFor={`key-${status.provider}`} className="text-xs">
           {status.hasKey ? "Update key (type new)" : "API key"}
         </Label>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              id={`key-${status.provider}`}
-              type={show ? "text" : "password"}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={meta.placeholder}
-              className="pr-10 font-mono"
-            />
-            <button
-              type="button"
-              onClick={() => setShow((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              title={show ? "Hide" : "Show"}
-            >
-              {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => saveMut.mutate()}
-            disabled={!input.trim() || saveMut.isPending}
+        <div className="relative">
+          <Input
+            id={`key-${status.provider}`}
+            type={show ? "text" : "password"}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={meta.placeholder}
+            className="pr-10 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            title={show ? "Hide" : "Show"}
           >
-            {saveMut.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            Save
-          </Button>
-          {status.source === "db" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Xoá ${meta.label} key khỏi DB? (Nếu .env có set, sẽ fallback về đó.)`,
-                  )
-                ) {
-                  clearMut.mutate();
-                }
-              }}
-              disabled={clearMut.isPending}
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          )}
+            {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
         </div>
         {saveMut.isError && (
-          <p className="text-xs text-destructive">
-            {String(saveMut.error)}
-          </p>
+          <p className="text-xs text-destructive">{String(saveMut.error)}</p>
         )}
         {saveMut.isSuccess && !saveMut.isPending && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="inline size-3" /> Đã lưu
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+            <CheckCircle2 className="size-3" /> Đã lưu
           </p>
         )}
+      </div>
+
+      {/* Footer actions — outline + căn phải */}
+      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2">
+        {status.source === "db" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Xoá ${meta.label} key khỏi DB? (Nếu .env có set, sẽ fallback về đó.)`,
+                )
+              ) {
+                clearMut.mutate();
+              }
+            }}
+            disabled={clearMut.isPending}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            {clearMut.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            Xoá
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => saveMut.mutate()}
+          disabled={!input.trim() || saveMut.isPending}
+        >
+          {saveMut.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          Save
+        </Button>
       </div>
     </Card>
   );
