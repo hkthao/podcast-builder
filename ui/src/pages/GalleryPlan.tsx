@@ -1191,6 +1191,49 @@ function VisualBeatsEditor({
     ]);
   };
 
+  // Auto-fill: target ~1 beat mỗi 2.5 câu (= 6-12 giây mỗi ảnh ở tốc độ đọc
+  // 160 từ/phút). Min 3 beat cho chapter ngắn.
+  const targetBeatCount = Math.max(3, Math.round(sentenceCount / 2.5));
+  const KEN_BURNS_ROTATION: KenBurnsMode[] = [
+    "zoom-in",
+    "pan-right",
+    "zoom-out",
+    "pan-left",
+    "zoom-in",
+    "pan-up",
+  ];
+  const autoFillBeats = () => {
+    const needed = targetBeatCount - beats.length;
+    if (needed <= 0) return;
+    const existingIdxs = new Set(beats.map((b) => b.sentenceIdx));
+    const keywordPool =
+      keywordSuggestions.length > 0 ? keywordSuggestions : [""];
+    const stride = Math.max(1, sentenceCount / targetBeatCount);
+    const added: VisualBeat[] = [];
+    for (let i = 0; i < targetBeatCount && added.length < needed; i++) {
+      const idx = Math.min(
+        sentenceCount - 1,
+        Math.max(0, Math.round(i * stride)),
+      );
+      if (existingIdxs.has(idx)) continue;
+      existingIdxs.add(idx);
+      added.push({
+        sentenceIdx: idx,
+        keyword: keywordPool[added.length % keywordPool.length] ?? "",
+        assetIdRef: null,
+        kenBurns:
+          KEN_BURNS_ROTATION[added.length % KEN_BURNS_ROTATION.length],
+        durationMs: null,
+        note: "",
+      });
+    }
+    if (added.length === 0) return;
+    const next = [...beats, ...added].sort(
+      (a, b) => a.sentenceIdx - b.sentenceIdx,
+    );
+    onSave(next);
+  };
+
   return (
     <div className="mt-5 border-t pt-4">
       <button
@@ -1221,17 +1264,27 @@ function VisualBeatsEditor({
       <p className="mt-1.5 ml-6 text-xs text-muted-foreground leading-relaxed">
         Danh sách các "khoảnh khắc hình ảnh" trong video — mỗi beat là 1 ảnh
         đi kèm voiceover. Khi đọc đến câu nào, ảnh tương ứng sẽ hiện ra với
-        hiệu ứng phóng to / lia chậm. AI đã tự gợi ý sẵn khoảng 1 ảnh mỗi
-        6-12 giây. Bấm "Attach asset" để chọn ảnh thật từ kho Wikimedia/Met
-        — nếu chưa chọn, beat đó sẽ hiện chữ thay vì ảnh.
+        hiệu ứng phóng to / lia chậm.
+        {sentenceCount > 0 && (
+          <>
+            {" "}Chương này dài <strong>{sentenceCount} câu</strong> → gợi ý
+            khoảng <strong>{targetBeatCount} ảnh</strong> ({beats.length}{" "}
+            beat hiện có). Bấm "Tự fill" để hệ thống sinh đủ scaffold, rồi
+            "Attach asset" cho từng beat — hoặc xoá beat không cần.
+          </>
+        )}
       </p>
 
       {expanded && (
         <div className="mt-3 space-y-2">
           {beats.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              Chưa có beat. Re-gen transcript hoặc thêm thủ công.
-            </p>
+            <div className="rounded-md bg-secondary/20 p-4 text-center space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Chưa có beat nào. Bấm <strong>"Tự fill"</strong> để hệ thống
+                tạo sẵn {targetBeatCount} beat scaffold theo độ dài chương,
+                hoặc <strong>"Thêm beat"</strong> để thêm từng cái.
+              </p>
+            </div>
           ) : (
             beats.map((beat, i) => (
               <BeatRow
@@ -1248,22 +1301,47 @@ function VisualBeatsEditor({
               />
             ))
           )}
-          <div className="flex items-center gap-2 pt-1">
+
+          {/* Footer actions — Tự fill + Thêm beat căn phải */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t mt-2">
+            {saving && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-auto">
+                <Loader2 className="size-3 animate-spin" />
+                Đang lưu…
+              </span>
+            )}
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
+              onClick={autoFillBeats}
+              disabled={
+                saving ||
+                sentenceCount === 0 ||
+                beats.length >= targetBeatCount
+              }
+              title={
+                beats.length >= targetBeatCount
+                  ? `Đã đủ ${beats.length}/${targetBeatCount} beat — nếu cần thêm bấm "Thêm beat"`
+                  : `Sinh thêm ${targetBeatCount - beats.length} beat để đủ scaffold`
+              }
+            >
+              <Sparkles className="size-3.5" />
+              Tự fill ~{targetBeatCount} beat
+              {beats.length > 0 && beats.length < targetBeatCount && (
+                <span className="text-muted-foreground font-normal">
+                  {" "}(+{targetBeatCount - beats.length})
+                </span>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={addBeat}
               disabled={saving || sentenceCount === 0}
             >
               <Plus className="size-3.5" />
               Thêm beat
             </Button>
-            {saving && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Loader2 className="size-3 animate-spin" />
-                Đang lưu…
-              </span>
-            )}
           </div>
         </div>
       )}
