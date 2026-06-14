@@ -90,7 +90,7 @@ export function ReferenceList() {
             chỉ lưu metadata, KHÔNG tải về. Bấm "Mở" để xem trên browser.
           </p>
         </div>
-        <Button onClick={() => setShowAddForm((v) => !v)}>
+        <Button variant="outline" onClick={() => setShowAddForm((v) => !v)}>
           {showAddForm ? <XIcon className="size-4" /> : <Plus className="size-4" />}
           {showAddForm ? "Đóng form" : "Thêm tài liệu"}
         </Button>
@@ -400,8 +400,8 @@ function ReferenceRow({ ref }: { ref: Reference }) {
   });
 
   return (
-    <Card className="p-4 flex items-start gap-4 hover:bg-secondary/20 transition-colors">
-      <div className="flex-1 min-w-0">
+    <Card className="p-4 hover:bg-secondary/20 transition-colors">
+      <div className="min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <Badge variant="outline" className="font-mono uppercase">
             {ref.type}
@@ -445,12 +445,26 @@ function ReferenceRow({ ref }: { ref: Reference }) {
           </div>
         )}
       </div>
-      <div className="flex flex-col gap-1 shrink-0">
-        <Button variant="outline" size="sm" asChild>
-          <a href={ref.url} target="_blank" rel="noreferrer noopener">
-            <ExternalLink className="size-3.5" />
-            Mở trang
-          </a>
+
+      {/* Footer actions — outline + căn phải */}
+      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => {
+            if (
+              confirm(
+                `Xoá "${ref.title}" khỏi library?\n(URL vẫn copy được trước khi xoá)`,
+              )
+            ) {
+              deleteMutation.mutate();
+            }
+          }}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="size-3.5" />
+          Xoá
         </Button>
         {ref.pdfUrl && (
           <Button variant="outline" size="sm" asChild>
@@ -465,22 +479,11 @@ function ReferenceRow({ ref }: { ref: Reference }) {
             </a>
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (
-              confirm(
-                `Xoá "${ref.title}" khỏi library?\n(URL vẫn copy được trước khi xoá)`,
-              )
-            ) {
-              deleteMutation.mutate();
-            }
-          }}
-          disabled={deleteMutation.isPending}
-          className="text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="size-3.5" />
+        <Button variant="outline" size="sm" asChild>
+          <a href={ref.url} target="_blank" rel="noreferrer noopener">
+            <ExternalLink className="size-3.5" />
+            Mở trang
+          </a>
         </Button>
       </div>
     </Card>

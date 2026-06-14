@@ -161,7 +161,11 @@ export function ResearchPage() {
                   className="pl-10"
                 />
               </div>
-              <Button type="submit" disabled={!query.trim() || searchQ.isFetching}>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={!query.trim() || searchQ.isFetching}
+              >
                 {searchQ.isFetching ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
@@ -181,7 +185,7 @@ export function ResearchPage() {
                   type="button"
                   onClick={() => setKind(k)}
                   className={cn(
-                    "h-8 px-3 rounded-md border text-sm inline-flex items-center gap-1.5 transition-colors",
+                    "h-10 px-3 rounded-md border text-sm inline-flex items-center gap-1.5 transition-colors",
                     kind === k
                       ? "border-accent bg-accent/20 text-foreground"
                       : "border-input hover:bg-secondary text-muted-foreground",
@@ -211,7 +215,7 @@ export function ResearchPage() {
                     disabled={!supportsKind}
                     title={p.note}
                     className={cn(
-                      "h-8 px-3 rounded-md border text-sm transition-colors",
+                      "h-10 px-3 rounded-md border text-sm transition-colors",
                       !supportsKind && "opacity-30 cursor-not-allowed",
                       active && supportsKind
                         ? "border-accent bg-accent/20 text-foreground"
@@ -447,7 +451,7 @@ function LibraryPanel() {
             key={k}
             onClick={() => setLibFilter(k)}
             className={cn(
-              "h-8 px-3 rounded-md border text-sm inline-flex items-center gap-1.5 transition-colors",
+              "h-10 px-3 rounded-md border text-sm inline-flex items-center gap-1.5 transition-colors",
               libFilter === k
                 ? "border-accent bg-accent/20 text-foreground"
                 : "border-input hover:bg-secondary text-muted-foreground",
