@@ -38,8 +38,11 @@ export function sseFromBus(c: Context) {
 
     const onChange = (ev: unknown) => push("episodes:changed", ev);
     const onProgress = (ev: unknown) => push("render:progress", ev);
+    const onGalleryProgress = (ev: unknown) =>
+      push("gallery-render:progress", ev);
     bus.on("episodes:changed", onChange);
     bus.on("render:progress", onProgress);
+    bus.on("gallery-render:progress", onGalleryProgress);
 
     const ping = setInterval(() => push("ping", { ts: Date.now() }), 15_000);
     let aborted = false;
@@ -48,6 +51,7 @@ export function sseFromBus(c: Context) {
       clearInterval(ping);
       bus.off("episodes:changed", onChange);
       bus.off("render:progress", onProgress);
+      bus.off("gallery-render:progress", onGalleryProgress);
       wake();
     });
 
@@ -71,6 +75,7 @@ export function sseFromBus(c: Context) {
       clearInterval(ping);
       bus.off("episodes:changed", onChange);
       bus.off("render:progress", onProgress);
+      bus.off("gallery-render:progress", onGalleryProgress);
     }
   });
 }

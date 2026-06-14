@@ -25,6 +25,7 @@ import {
 } from "./gallery-plan-store";
 import { prepareChapterRenderAudio } from "./gallery-bgm-mix";
 import { prefetchAssetsBatch } from "./gallery-asset-prefetch";
+import { bus } from "./events";
 import { getAsset } from "./gallery-asset-store";
 import { PATHS } from "./paths";
 import type { VisualBeat } from "../../gallery/src/visual-beat";
@@ -222,7 +223,18 @@ export async function renderChapter(input: {
     throw err;
   }
 
-  input.onProgress?.(5, "Resolving beats…");
+  // Helper emit progress qua cả callback (cho CLI) + SSE bus (cho UI)
+  const emit = (percent: number, message: string) => {
+    input.onProgress?.(percent, message);
+    bus.emit("gallery-render:progress", {
+      planId: input.planId,
+      chapterIdx: input.chapterIdx,
+      percent,
+      message,
+    });
+  };
+
+  emit(3, "Tải ảnh từ Wikimedia/Met…");
   const props = await buildChapterProps(
     plan,
     input.chapterIdx,
@@ -235,20 +247,20 @@ export async function renderChapter(input: {
   const outFilename = galleryChapterVideoFilename(plan.id, input.chapterIdx);
   const outPath = path.join(PATHS.TMP_DIR, outFilename);
 
-  input.onProgress?.(10, "Bundling Remotion…");
+  emit(10, "Bundle Remotion…");
   const serveUrl = await bundle({
     entryPoint: ENTRY_POINT,
     publicDir: path.resolve("public"),
   });
 
-  input.onProgress?.(25, "Selecting composition…");
+  emit(25, "Select composition…");
   const composition = await selectComposition({
     serveUrl,
     id: COMPOSITION_ID,
     inputProps: props,
   });
 
-  input.onProgress?.(30, "Rendering…");
+  emit(30, "Rendering frames…");
   await renderMedia({
     serveUrl,
     composition,
@@ -260,12 +272,11 @@ export async function renderChapter(input: {
     audioBitrate: "192K",
     onProgress: ({ progress }) => {
       const pct = 30 + progress * 65;
-      input.onProgress?.(
-        pct,
-        `frame ${Math.floor(progress * composition.durationInFrames)}/${composition.durationInFrames}`,
-      );
+      const frame = Math.floor(progress * composition.durationInFrames);
+      emit(pct, `frame ${frame}/${composition.durationInFrames}`);
     },
   });
+  emit(98, "Đang ghi DB…");
 
   const durationMs = Math.round((composition.durationInFrames / FPS) * 1000);
 

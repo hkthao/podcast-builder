@@ -576,6 +576,8 @@ function ChapterCard({
         <>
           <VideoPanel
             chapter={chapter}
+            planId={planId}
+            chapterIdx={chapterIdx}
             onRender={() => renderMut.mutate()}
             renderPending={renderMut.isPending}
             renderError={renderMut.error}
@@ -609,6 +611,8 @@ function ChapterCard({
       {!isMusic && (
         <VideoPanel
           chapter={chapter}
+          planId={planId}
+          chapterIdx={chapterIdx}
           onRender={() => renderMut.mutate()}
           renderPending={renderMut.isPending}
           renderError={renderMut.error}
@@ -930,15 +934,56 @@ function AudioPanel({
 
 function VideoPanel({
   chapter,
+  planId,
+  chapterIdx,
   onRender,
   renderPending,
   renderError,
 }: {
   chapter: GalleryPlanChapter;
+  planId: string;
+  chapterIdx: number;
   onRender: () => void;
   renderPending: boolean;
   renderError: unknown;
 }) {
+  // SSE listener cho real-time render progress
+  const [progress, setProgress] = useState<{
+    percent: number;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!renderPending) {
+      setProgress(null);
+      return;
+    }
+    const es = new EventSource("/api/events");
+    const handler = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as {
+          planId: string;
+          chapterIdx: number;
+          percent: number;
+          message: string;
+        };
+        if (data.planId === planId && data.chapterIdx === chapterIdx) {
+          setProgress({
+            percent: Math.round(data.percent),
+            message: data.message,
+          });
+        }
+      } catch {
+        /* ignore parse error */
+      }
+    };
+    es.addEventListener("gallery-render:progress", handler);
+    return () => {
+      es.removeEventListener("gallery-render:progress", handler);
+      es.close();
+    };
+  }, [renderPending, planId, chapterIdx]);
+
   const isMusic = chapter.kind === "music";
   const hasVideo = chapter.videoFilename !== null;
   const hasAudio = chapter.audioFilename !== null;
@@ -1027,11 +1072,29 @@ function VideoPanel({
         </div>
       )}
 
-      {renderPending && !hasVideo && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Bundle Remotion ~5s, render ~3x realtime. Chapter 4 phút → ~60-90s.
-          Hold tight…
-        </p>
+      {renderPending && (
+        <div className="mt-3 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">
+              {progress?.message ?? "Đang chuẩn bị…"}
+            </span>
+            <span className="font-mono text-foreground tabular-nums">
+              {progress?.percent ?? 0}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-secondary overflow-hidden">
+            <div
+              className="h-full bg-accent transition-all duration-300 ease-out"
+              style={{ width: `${progress?.percent ?? 0}%` }}
+            />
+          </div>
+          {!hasVideo && (
+            <p className="text-[10px] text-muted-foreground">
+              Bundle Remotion ~5s + tải ảnh + render ~3× realtime. Chapter 4 phút
+              → ~60-90s.
+            </p>
+          )}
+        </div>
       )}
 
       {/* Footer actions — Render button outline căn phải */}
