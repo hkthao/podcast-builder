@@ -22,6 +22,7 @@ import {
   Search,
   AlertCircle,
   Sparkles,
+  SpellCheck,
   Copy,
   Check,
   Send,
@@ -39,6 +40,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
 import { RenderTab } from "@/components/RenderTab";
+import { SpellFixPanel } from "@/components/SpellFixPanel";
+import { applySpellFix } from "@/components/spell-fix-rules";
+import type { SpellFixRule } from "@/components/spell-fix-rules";
 import { PublishTab } from "@/components/PublishTab";
 import { ScriptTab } from "@/components/ScriptTab";
 import { cn } from "@/lib/utils";
@@ -881,6 +885,7 @@ function TranscriptPanel({
   const [showFindBar, setShowFindBar] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showSpellFix, setShowSpellFix] = useState(false);
 
   const copyFullTranscript = async () => {
     const fullText = segments
@@ -919,6 +924,38 @@ function TranscriptPanel({
       i === idx ? { ...s, text: newText } : s,
     );
     saveMutation.mutate(next);
+  };
+
+  // Sửa chính tả: apply user-pasted dictionary lên text mọi segment.
+  // Aggregate count theo rule. Auto-save sau khi confirm.
+  const runSpellFix = (
+    rules: SpellFixRule[],
+  ): { wrong: string; right: string; count: number; note?: string }[] => {
+    const aggregated = new Map<
+      string,
+      { wrong: string; right: string; count: number; note?: string }
+    >();
+    const nextSegments = segments.map((seg) => {
+      const { text, applied } = applySpellFix(seg.text, rules);
+      for (const a of applied) {
+        const prev = aggregated.get(a.wrong);
+        if (prev) prev.count += a.count;
+        else aggregated.set(a.wrong, { ...a });
+      }
+      return { ...seg, text };
+    });
+    const report = Array.from(aggregated.values()).sort(
+      (a, b) => b.count - a.count,
+    );
+    if (
+      report.length > 0 &&
+      window.confirm(
+        `Sửa ${report.reduce((s, r) => s + r.count, 0)} lỗi (${report.length} luật) trong ${segments.length} câu?`,
+      )
+    ) {
+      saveMutation.mutate(nextSegments);
+    }
+    return report;
   };
 
   const replaceAll = () => {
@@ -1009,7 +1046,7 @@ function TranscriptPanel({
                 : "—"}
           </Badge>
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {truncated && (
             <Button
               variant="ghost"
@@ -1023,6 +1060,7 @@ function TranscriptPanel({
           <Button
             variant="outline"
             size="sm"
+            className="h-8 w-8 p-0"
             onClick={() => {
               if (
                 window.confirm(
@@ -1032,28 +1070,39 @@ function TranscriptPanel({
                 transcribeJobMut.mutate();
             }}
             disabled={transcribeJobMut.isPending}
-            title="Re-run Whisper transcribe + spell-fix. GHI ĐÈ transcript hiện tại."
+            title="Tạo lại — re-run Whisper transcribe + spell-fix. GHI ĐÈ transcript hiện tại."
           >
             {transcribeJobMut.isPending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
-            Tạo lại
           </Button>
           <Button
             variant="outline"
             size="sm"
+            className="h-8 w-8 p-0"
             onClick={copyFullTranscript}
             disabled={segments.length === 0}
-            title={`Copy ${segments.length} câu vào clipboard`}
+            title={
+              copied ? "Đã copy" : `Copy ${segments.length} câu vào clipboard`
+            }
           >
             {copied ? (
               <Check className="size-3.5 text-accent" />
             ) : (
               <Copy className="size-3.5" />
             )}
-            {copied ? "Đã copy" : "Copy toàn bộ"}
+          </Button>
+          <Button
+            variant={showSpellFix ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowSpellFix((v) => !v)}
+            disabled={segments.length === 0}
+            title="Mở dictionary các lỗi chính tả — user paste cặp wrong → right"
+          >
+            <SpellCheck className="size-3.5" />
+            Sửa chính tả
           </Button>
           <Button
             variant={showFindBar ? "secondary" : "ghost"}
@@ -1066,6 +1115,15 @@ function TranscriptPanel({
           </Button>
         </div>
       </div>
+
+      {showSpellFix && (
+        <SpellFixPanel
+          storageKey="transcript.spell-fix-rules"
+          pending={saveMutation.isPending}
+          onApply={runSpellFix}
+          onClose={() => setShowSpellFix(false)}
+        />
+      )}
 
       {showFindBar && (
         <div className="px-6 py-3 border-b bg-secondary/10 flex items-center gap-2">

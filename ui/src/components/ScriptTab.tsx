@@ -24,9 +24,13 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  SpellCheck,
   Volume2,
   X,
 } from "lucide-react";
+import { SpellFixPanel } from "./SpellFixPanel";
+import { applySpellFix } from "./spell-fix-rules";
+import type { SpellFixRule } from "./spell-fix-rules";
 import {
   api,
   isPodcastSession,
@@ -498,6 +502,36 @@ function ScriptEditor({
     });
   };
 
+  // Sửa chính tả: apply user-pasted dictionary lên toàn bộ turns. Set
+  // dirty=true để user tự bấm "Lưu" (script không auto-save). Trả report
+  // cho SpellFixPanel hiển thị.
+  const [showSpellFix, setShowSpellFix] = useState(false);
+  const runSpellFix = (
+    rules: SpellFixRule[],
+  ): { wrong: string; right: string; count: number; note?: string }[] => {
+    const aggregated = new Map<
+      string,
+      { wrong: string; right: string; count: number; note?: string }
+    >();
+    const nextTurns = turns.map((turn) => {
+      const { text, applied } = applySpellFix(turn.text, rules);
+      for (const a of applied) {
+        const prev = aggregated.get(a.wrong);
+        if (prev) prev.count += a.count;
+        else aggregated.set(a.wrong, { ...a });
+      }
+      return { ...turn, text };
+    });
+    const report = Array.from(aggregated.values()).sort(
+      (a, b) => b.count - a.count,
+    );
+    if (report.length > 0) {
+      setTurns(nextTurns);
+      setDirty(true);
+    }
+    return report;
+  };
+
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -528,6 +562,17 @@ function ScriptEditor({
         </div>
       )}
 
+      {showSpellFix && (
+        <div className="mt-3 -mx-5 -mb-5 border-t">
+          <SpellFixPanel
+            storageKey="script.spell-fix-rules"
+            pending={saveMut.isPending}
+            onApply={runSpellFix}
+            onClose={() => setShowSpellFix(false)}
+          />
+        </div>
+      )}
+
       {/* Footer action — căn phải */}
       <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2">
         {dirty && !saveMut.isPending && (
@@ -535,6 +580,16 @@ function ScriptEditor({
             Có thay đổi chưa lưu
           </span>
         )}
+        <Button
+          size="sm"
+          variant={showSpellFix ? "secondary" : "outline"}
+          onClick={() => setShowSpellFix((v) => !v)}
+          disabled={turns.length === 0 || saveMut.isPending}
+          title="Mở dictionary các lỗi chính tả — user paste cặp wrong → right"
+        >
+          <SpellCheck className="size-3.5" />
+          Sửa chính tả
+        </Button>
         <Button
           size="sm"
           variant="outline"
