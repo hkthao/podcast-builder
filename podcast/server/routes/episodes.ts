@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import {
   AUDIO_EXTENSIONS,
   COVER_EXTENSIONS,
+  createEmptyEpisode,
   deleteCover,
   deleteEpisodeFile,
+  replaceEpisodeAudio,
   getEpisode,
   getPlan,
   getTranscript,
@@ -50,6 +52,44 @@ episodesRoutes.get("/", async (c) => {
     styleParam === "gallery" || styleParam === "podcast" ? styleParam : undefined;
   const episodes = await listEpisodes(style ? { style } : {});
   return c.json({ episodes });
+});
+
+/**
+ * Tạo episode TRỐNG (chỉ config .json, chưa có audio). User dùng tab
+ * Kịch bản để gen audio TTS sau. Body: { title, hook?, essayId?, style? }
+ */
+episodesRoutes.post("/", async (c) => {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as {
+    title?: string;
+    hook?: string | null;
+    essayId?: string | null;
+    style?: string;
+  };
+  if (typeof body.title !== "string" || !body.title.trim()) {
+    return c.json({ error: "Cần field 'title' (string)" }, 400);
+  }
+  if (body.style && body.style !== "podcast" && body.style !== "gallery") {
+    return c.json({ error: "style phải là 'podcast' hoặc 'gallery'" }, 400);
+  }
+  try {
+    const summary = await createEmptyEpisode({
+      title: body.title,
+      hook: body.hook,
+      essayId: body.essayId ?? undefined,
+      style: body.style as "podcast" | "gallery" | undefined,
+    });
+    return c.json(summary, 201);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
 });
 
 /**
@@ -138,6 +178,39 @@ episodesRoutes.post("/:name/cover", async (c) => {
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
     const summary = await uploadCover(name, file.name, buf);
+    return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Upload audio cho episode CÓ SẴN — replace audio cũ khác extension.
+ * Multipart, field "audio".
+ */
+episodesRoutes.post("/:name/audio", async (c) => {
+  const name = c.req.param("name");
+  const body = await c.req.parseBody();
+  const file = body["audio"];
+  if (!file || typeof file === "string" || !(file instanceof File)) {
+    return c.json({ error: "Thiếu field 'audio' (file)" }, 400);
+  }
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!AUDIO_EXTENSIONS.includes(ext as (typeof AUDIO_EXTENSIONS)[number])) {
+    return c.json(
+      {
+        error: `File ext không hỗ trợ: .${ext}`,
+        accepted: AUDIO_EXTENSIONS.map((e) => `.${e}`),
+      },
+      400,
+    );
+  }
+  const buf = new Uint8Array(await file.arrayBuffer());
+  try {
+    const summary = await replaceEpisodeAudio(name, file.name, buf);
     return c.json(summary);
   } catch (e) {
     const err = e as Error & { code?: string };

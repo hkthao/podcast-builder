@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Upload, AlertCircle, CheckCircle2, Clock, FileAudio2 } from "lucide-react";
+import {
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  FileAudio2,
+  Plus,
+  Loader2,
+  X,
+} from "lucide-react";
 import { api, type EpisodeStatus, type EpisodeSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +35,17 @@ export function EpisodeList() {
     },
   });
 
+  const createEpisode = useMutation({
+    mutationFn: (title: string) =>
+      api.createEpisode({ title, style: workspace }),
+    onSuccess: (ep) => {
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+      navigate(`/episodes/${encodeURIComponent(ep.name)}`);
+    },
+  });
+
   const [dragOver, setDragOver] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -61,10 +80,20 @@ export function EpisodeList() {
               Kéo audio (.m4a/.mp3/.wav) vào trang để tạo tập mới
             </p>
           </div>
-          <UploadButton
-            onPick={(f) => upload.mutate(f)}
-            isUploading={upload.isPending}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(true)}
+              disabled={createEpisode.isPending}
+            >
+              <Plus className="size-4" />
+              Tạo tập mới
+            </Button>
+            <UploadButton
+              onPick={(f) => upload.mutate(f)}
+              isUploading={upload.isPending}
+            />
+          </div>
         </header>
 
         {upload.isError && (
@@ -117,6 +146,16 @@ export function EpisodeList() {
         )}
       </div>
 
+      {/* Create-empty-episode modal */}
+      {createOpen && (
+        <CreateEpisodeDialog
+          onCancel={() => setCreateOpen(false)}
+          onCreate={(title) => createEpisode.mutate(title)}
+          pending={createEpisode.isPending}
+          error={createEpisode.isError ? String(createEpisode.error) : null}
+        />
+      )}
+
       {/* Drag overlay */}
       {dragOver && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -136,6 +175,95 @@ export function EpisodeList() {
           <span>Đang upload…</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function CreateEpisodeDialog({
+  onCancel,
+  onCreate,
+  pending,
+  error,
+}: {
+  onCancel: () => void;
+  onCreate: (title: string) => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [title, setTitle] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+      <Card className="w-full max-w-md p-0 overflow-hidden">
+        <div className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
+          <Plus className="size-4 text-accent" />
+          <span className="font-medium">Tạo tập mới</span>
+          <button
+            onClick={onCancel}
+            disabled={pending}
+            className="ml-auto p-1 rounded hover:bg-secondary disabled:opacity-50"
+            title="Đóng"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="px-5 py-5 space-y-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Tạo episode trống (chưa cần audio). Sau đó vào tab{" "}
+            <strong>Kịch bản</strong> để gen script + audio TTS từ essay /
+            brainstorm / tài liệu của bạn.
+          </p>
+          <div>
+            <label className="block text-sm font-medium mb-1.5">
+              Tên tập <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+              placeholder="VD: Mù loà trước giá trị hiện tại"
+              disabled={pending}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && title.trim()) onCreate(title.trim());
+                if (e.key === "Escape") onCancel();
+              }}
+            />
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Sẽ slugify thành tên file (vd "mu-loa-truoc-gia-tri-hien-tai")
+            </p>
+          </div>
+          {error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+              <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={pending}
+          >
+            Huỷ
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => title.trim() && onCreate(title.trim())}
+            disabled={pending || !title.trim()}
+          >
+            {pending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            Tạo tập
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

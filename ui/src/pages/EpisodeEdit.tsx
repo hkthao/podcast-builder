@@ -30,6 +30,7 @@ import {
   api,
   type EpisodeFile,
   type EpisodeFileKind,
+  type EpisodeSummary,
   type ScenePlanItem,
   type TranscriptSegment,
 } from "@/lib/api";
@@ -168,6 +169,10 @@ export function EpisodeEdit() {
         </Meta>
       </div>
 
+      {/* Audio uploader — luôn hiện. Prompt mạnh nếu chưa có audio. */}
+      <AudioUploadPanel ep={ep} />
+
+
       {/* Tabs — 5 top-level (gộp 3 production stage thành "Nội dung") */}
       <div className="mb-4 flex gap-1 border-b">
         <TabButton
@@ -296,6 +301,114 @@ export function EpisodeEdit() {
         />
       )}
     </div>
+  );
+}
+
+function AudioUploadPanel({ ep }: { ep: EpisodeSummary }) {
+  const qc = useQueryClient();
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => api.uploadEpisodeAudio(ep.name, file),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["episode-files", ep.name] });
+      qc.invalidateQueries({ queryKey: ["transcript", ep.name] });
+    },
+  });
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) uploadMut.mutate(f);
+    e.target.value = "";
+  };
+
+  const hasAudio = !!ep.audioPath;
+  const filename = ep.audioPath?.split("/").pop() ?? "";
+  const audioUrl = hasAudio
+    ? `/input/${encodeURIComponent(filename)}`
+    : null;
+
+  return (
+    <Card
+      className={cn(
+        "p-5 mb-6",
+        !hasAudio && "border-amber-500/40 bg-amber-500/5",
+      )}
+    >
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <FileAudio2
+          className={cn(
+            "size-4",
+            hasAudio
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400",
+          )}
+        />
+        <h3 className="font-medium">
+          {hasAudio ? "Audio đã có" : "Chưa có audio"}
+        </h3>
+        {hasAudio && (
+          <code className="text-xs font-mono text-muted-foreground truncate ml-auto">
+            {filename}
+          </code>
+        )}
+      </div>
+
+      {hasAudio && audioUrl ? (
+        <audio
+          controls
+          preload="metadata"
+          src={audioUrl}
+          className="w-full h-10"
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Tải lên file <code className="font-mono">.m4a</code> /{" "}
+          <code className="font-mono">.mp3</code> /{" "}
+          <code className="font-mono">.wav</code> để pipeline transcribe →
+          plan → render có thể chạy. Hoặc vào tab{" "}
+          <strong>Nội dung → Kịch bản</strong> để gen audio TTS từ kịch bản.
+        </p>
+      )}
+
+      {uploadMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(uploadMut.error)}</span>
+        </div>
+      )}
+
+      {/* Footer action — căn phải */}
+      <div className="mt-4 pt-3 border-t flex items-center justify-end">
+        <label>
+          <input
+            type="file"
+            accept=".m4a,.mp3,.wav,audio/*"
+            onChange={onPick}
+            disabled={uploadMut.isPending}
+            className="hidden"
+          />
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            disabled={uploadMut.isPending}
+          >
+            <span className="cursor-pointer">
+              {uploadMut.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Volume2 className="size-3.5" />
+              )}
+              {uploadMut.isPending
+                ? "Đang tải lên…"
+                : hasAudio
+                  ? "Thay audio"
+                  : "Tải audio lên"}
+            </span>
+          </Button>
+        </label>
+      </div>
+    </Card>
   );
 }
 

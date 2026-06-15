@@ -73,6 +73,12 @@ export type LLMChatRequest = {
   temperature?: number;
   /** Yêu cầu JSON output. Provider tự config. */
   jsonMode?: boolean;
+  /**
+   * Cap output tokens. Khi gen JSON cấu trúc lớn (5 idea × 13 field) cần
+   * set cao để LLM không truncate giữa chừng → JSON malformed/thiếu idea.
+   * Default null = provider tự quyết.
+   */
+  maxTokens?: number;
 };
 
 /**
@@ -199,9 +205,16 @@ export async function chat(req: LLMChatRequest): Promise<string> {
         { role: "user", content: req.userContent },
       ],
       ...(req.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+      ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
     });
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("OpenAI trả về empty response");
+    const finishReason = response.choices[0]?.finish_reason;
+    if (finishReason === "length") {
+      console.warn(
+        `[llm] OpenAI ${req.model} truncate output do hit max_tokens — JSON có thể không hoàn chỉnh. Tăng maxTokens hoặc giảm scope yêu cầu.`,
+      );
+    }
     return content;
   }
 

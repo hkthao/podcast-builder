@@ -265,13 +265,13 @@ function SourcesPanel({
       <div className="space-y-3">
         {/* Essay picker */}
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <Label className="text-xs text-muted-foreground">Essay</Label>
+          <Label className="text-sm text-muted-foreground">Bài luận</Label>
           <select
             value={essayId ?? ""}
             onChange={(e) => setEssayId(e.target.value || null)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
           >
-            <option value="">— Không dùng essay —</option>
+            <option value="">— Không dùng bài luận —</option>
             {essays.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.title}
@@ -282,7 +282,7 @@ function SourcesPanel({
 
         {/* Brainstorm picker */}
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <Label className="text-xs text-muted-foreground">Brainstorm</Label>
+          <Label className="text-sm text-muted-foreground">Ý tưởng</Label>
           <div className="flex gap-2">
             <select
               value={brainstormId ?? ""}
@@ -290,9 +290,9 @@ function SourcesPanel({
                 setBrainstormId(e.target.value || null);
                 setIdeaIdx(0);
               }}
-              className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-10 flex-1 rounded-md border border-input bg-background px-2 text-sm"
             >
-              <option value="">— Không dùng brainstorm —</option>
+              <option value="">— Không dùng ý tưởng —</option>
               {brainstormSessions
                 .filter((s) => s.style === "podcast")
                 .map((s) => {
@@ -302,7 +302,7 @@ function SourcesPanel({
                       : s.topic;
                   return (
                     <option key={s.id} value={s.id} title={s.topic}>
-                      {topic} ({s.ideas.length} idea)
+                      {topic} ({s.ideas.length} ý)
                     </option>
                   );
                 })}
@@ -311,7 +311,7 @@ function SourcesPanel({
               <select
                 value={ideaIdx ?? 0}
                 onChange={(e) => setIdeaIdx(Number(e.target.value))}
-                className="h-9 w-48 rounded-md border border-input bg-background px-2 text-sm"
+                className="h-10 w-48 rounded-md border border-input bg-background px-2 text-sm"
               >
                 {isPodcast.ideas.map((idea, i) => (
                   <option key={i} value={i}>
@@ -325,21 +325,21 @@ function SourcesPanel({
 
         {/* Extra notes */}
         <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
-          <Label className="text-xs text-muted-foreground mt-2">
+          <Label className="text-sm text-muted-foreground mt-2">
             Tài liệu bổ sung
           </Label>
           <Textarea
             value={extraNotes}
             onChange={(e) => setExtraNotes(e.target.value)}
             rows={4}
-            placeholder="Paste excerpt PDF, transcript bài viết khác, link summary… (optional, sẽ inject vào prompt cùng essay/brainstorm)"
+            placeholder="Dán đoạn trích PDF, transcript bài viết khác, tóm tắt liên kết… (tuỳ chọn — sẽ chèn vào prompt cùng bài luận / ý tưởng)"
             className="text-sm font-sans"
           />
         </div>
 
         {/* Độ dài + LLM picker (input row, không phải action) */}
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <Label className="text-xs text-muted-foreground">Độ dài</Label>
+          <Label className="text-sm text-muted-foreground">Độ dài</Label>
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="number"
@@ -348,14 +348,14 @@ function SourcesPanel({
               max={20}
               step={1}
               onChange={(e) => setTargetMinutes(Number(e.target.value))}
-              className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm font-mono"
+              className="h-10 w-16 rounded-md border border-input bg-background px-2 text-sm font-mono"
             />
-            <span className="text-xs text-muted-foreground mr-2">phút</span>
+            <span className="text-sm text-muted-foreground mr-2">phút</span>
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value as LLMProvider)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-              title="LLM provider"
+              className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+              title="Nhà cung cấp LLM"
             >
               <option value="openai" disabled={!!modelsData && modelsData.openai.length === 0}>
                 OpenAI
@@ -367,8 +367,8 @@ function SourcesPanel({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs max-w-[200px]"
-              title="LLM model"
+              className="h-10 rounded-md border border-input bg-background px-2 text-sm max-w-[200px]"
+              title="Mô hình LLM"
             >
               {(modelsData?.[provider] ?? []).map((m) => (
                 <option key={m.id} value={m.id}>

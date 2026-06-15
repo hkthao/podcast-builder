@@ -222,6 +222,117 @@ const buildTemplate = (
 });
 
 /**
+ * Replace/set audio cho episode CÓ SẴN (slug đã tồn tại). Dùng khi user
+ * upload audio vào episode đã tạo trống qua "Tạo tập mới" — hoặc khi
+ * thay audio cũ. Xoá audio extension cũ trước khi ghi mới.
+ */
+export async function replaceEpisodeAudio(
+  name: string,
+  originalName: string,
+  buffer: Uint8Array,
+): Promise<EpisodeSummary> {
+  const summary = await loadSummary(name);
+  if (!summary) {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const ext = (originalName.split(".").pop() ?? "").toLowerCase();
+  if (!AUDIO_EXTS.includes(ext as (typeof AUDIO_EXTS)[number])) {
+    const err = new Error(
+      `File ext không hỗ trợ: ${ext}. Hợp lệ: ${AUDIO_EXTS.join(", ")}`,
+    );
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+
+  // Xoá audio cũ khác extension để pipeline make.ts pick up file vừa ghi
+  // (findAudio() ưu tiên theo thứ tự AUDIO_EXTS — nếu giữ file cũ thì sai).
+  for (const oldExt of AUDIO_EXTS) {
+    if (oldExt === ext) continue;
+    const oldPath = path.join(INPUT_DIR, `${name}.${oldExt}`);
+    await fs.unlink(oldPath).catch(() => {
+      /* ignore */
+    });
+  }
+
+  await fs.mkdir(INPUT_DIR, { recursive: true });
+  const audioPath = path.join(INPUT_DIR, `${name}.${ext}`);
+  await fs.writeFile(audioPath, buffer);
+
+  const updated = await loadSummary(name);
+  if (!updated) throw new Error(`Audio OK nhưng không load lại: ${name}`);
+  return updated;
+}
+
+/**
+ * Tạo episode TRỐNG (chỉ config .json, không có audio file). Dùng cho
+ * workflow podcast script-gen: user tạo episode trước, sau đó vào tab
+ * Kịch bản gen audio từ TTS → ghi đè input/{slug}.aac.
+ *
+ * Khác uploadAudio: không nhận audio buffer, không bắt buộc.
+ */
+export async function createEmptyEpisode(input: {
+  title: string;
+  hook?: string | null;
+  essayId?: string | null;
+  style?: EpisodeConfig["style"];
+}): Promise<EpisodeSummary> {
+  const title = input.title.trim();
+  if (!title) {
+    const err = new Error("Thiếu title");
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+  const style = input.style ?? "podcast";
+
+  // Nếu có essayId → derive title/hook nếu user chưa override
+  let derived: { title: string; hook: string | null } | null = null;
+  if (input.essayId) {
+    derived = await deriveFromEssay(input.essayId);
+    if (!derived) {
+      const err = new Error(`Essay không tồn tại: ${input.essayId}`);
+      (err as Error & { code: string }).code = "VALIDATION";
+      throw err;
+    }
+  }
+
+  const baseName = title;
+  const slug = slugify(baseName) || `episode-${Date.now()}`;
+  const configPath = path.join(INPUT_DIR, `${slug}.json`);
+
+  await fs.mkdir(INPUT_DIR, { recursive: true });
+  if (await exists(configPath)) {
+    const err = new Error(
+      `Đã có episode tên "${slug}". Đổi title hoặc xoá episode cũ trước.`,
+    );
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+
+  const template = buildTemplate(slug, style);
+  template.title = title;
+  if (input.hook !== undefined && input.hook !== null) {
+    template.hook = input.hook;
+  } else if (derived?.hook) {
+    template.hook = derived.hook;
+  }
+  if (input.essayId) template.essayId = input.essayId;
+
+  // Auto-increment episodeNumber theo workspace style
+  const all = await listEpisodes({ style });
+  const maxNum = all.reduce((m, e) => Math.max(m, e.config.episodeNumber), 0);
+  template.episodeNumber = maxNum + 1;
+
+  await fs.writeFile(configPath, JSON.stringify(template, null, 2));
+  const summary = await loadSummary(slug);
+  if (!summary) {
+    throw new Error(`Tạo OK nhưng không load lại được: ${slug}`);
+  }
+  return summary;
+}
+
+/**
  * Upload audio file qua POST. Tạo template JSON nếu chưa có.
  * `originalName` đến từ multipart upload (vd "recording.m4a").
  */

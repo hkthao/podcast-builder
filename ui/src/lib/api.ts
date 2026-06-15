@@ -803,6 +803,13 @@ export const api = {
       `/api/brainstorm${styleQuery(style)}`,
     ),
 
+  getBrainstormPrompts: () =>
+    jsonFetch<{
+      podcast: { brainstorm: string; expand: string };
+      gallery: string;
+    }>("/api/brainstorm/_/prompts"),
+
+
   getBrainstorm: (id: string) =>
     jsonFetch<BrainstormSession>(
       `/api/brainstorm/${encodeURIComponent(id)}`,
@@ -815,6 +822,13 @@ export const api = {
     provider?: LLMProvider;
     model?: string;
     style?: Style;
+    /**
+     * Khi true, topic = danh sách ý có sẵn của user. LLM expand mỗi ý
+     * theo schema 13 field thay vì brainstorm idea mới. Bỏ qua field count.
+     */
+    expandUserIdeas?: boolean;
+    /** Override system prompt — empty = dùng default. */
+    systemPromptOverride?: string;
   }) =>
     jsonFetch<BrainstormSession>("/api/brainstorm", {
       method: "POST",
@@ -972,6 +986,12 @@ export const api = {
       { method: "DELETE" },
     ),
 
+  deleteBrainstormIdea: (id: string, ideaIdx: number) =>
+    jsonFetch<BrainstormSession>(
+      `/api/brainstorm/${encodeURIComponent(id)}/ideas/${ideaIdx}`,
+      { method: "DELETE" },
+    ),
+
   startRender: (
     episodeName: string,
     preview: boolean,
@@ -1013,6 +1033,17 @@ export const api = {
       method: "POST",
     }),
 
+  createEpisode: (input: {
+    title: string;
+    hook?: string | null;
+    essayId?: string | null;
+    style?: Style;
+  }) =>
+    jsonFetch<EpisodeSummary>("/api/episodes", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
   uploadAudio: async (
     file: File,
     options: { essayId?: string; cover?: File; style?: Style } = {},
@@ -1030,6 +1061,23 @@ export const api = {
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
       };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as EpisodeSummary;
+  },
+
+  uploadEpisodeAudio: async (
+    episodeName: string,
+    file: File,
+  ): Promise<EpisodeSummary> => {
+    const form = new FormData();
+    form.append("audio", file);
+    const res = await fetch(
+      `/api/episodes/${encodeURIComponent(episodeName)}/audio`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
       throw new ApiError(res.status, body.error ?? res.statusText);
     }
     return (await res.json()) as EpisodeSummary;

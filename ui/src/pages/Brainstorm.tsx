@@ -17,6 +17,7 @@ import {
   Mic2,
   Music,
   Plus,
+  Settings2,
   Image as ImageIcon,
   ShieldCheck,
   ShieldAlert,
@@ -62,6 +63,30 @@ export function Brainstorm() {
   const [topic, setTopic] = usePersistedState("brainstorm.topic", "");
   const [tone, setTone] = usePersistedState("brainstorm.tone", TONES[0]);
   const [count, setCount] = usePersistedState("brainstorm.count", 5);
+  // Phase expand: khi true, topic = danh sách ý có sẵn → LLM expand
+  // mỗi ý thành schema 13 field thay vì gen idea mới. Chỉ áp dụng podcast.
+  const [expandUserIdeas, setExpandUserIdeas] = usePersistedState(
+    "brainstorm.expandUserIdeas",
+    false,
+  );
+  // System prompt override — persist riêng per (workspace, mode). Empty = default.
+  const [systemPromptOverride, setSystemPromptOverride] = usePersistedState<string>(
+    `brainstorm.systemPromptOverride.${workspace}.${expandUserIdeas ? "expand" : "brainstorm"}`,
+    "",
+  );
+  const [promptPanelOpen, setPromptPanelOpen] = useState(false);
+  const promptsQ = useQuery({
+    queryKey: ["brainstorm-prompts"],
+    queryFn: () => api.getBrainstormPrompts(),
+    staleTime: Infinity,
+  });
+  const defaultPrompt =
+    workspace === "gallery"
+      ? (promptsQ.data?.gallery ?? "")
+      : expandUserIdeas
+        ? (promptsQ.data?.podcast.expand ?? "")
+        : (promptsQ.data?.podcast.brainstorm ?? "");
+  const isOverriding = systemPromptOverride.trim().length > 0;
   const [provider, setProvider] = usePersistedState<LLMProvider>(
     "brainstorm.provider",
     "openai",
@@ -139,6 +164,9 @@ export function Brainstorm() {
         provider,
         model,
         style: workspace,
+        // Expand mode chỉ áp dụng cho podcast — gallery có schema khác.
+        expandUserIdeas: workspace === "podcast" && expandUserIdeas,
+        systemPromptOverride: isOverriding ? systemPromptOverride : undefined,
       }),
     onSuccess: (newSession) => {
       // Inject newSession vào cache đồng bộ — invalidateQueries refetch
@@ -187,8 +215,36 @@ export function Brainstorm() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.deleteBrainstorm(id),
     onSuccess: (_, deletedId) => {
-      qc.invalidateQueries({ queryKey: ["brainstorm-sessions"] });
+      // setQueryData đồng bộ — invalidateQueries refetch async, trong cửa
+      // sổ này sessions cũ vẫn chứa session đã xoá → auto-select effect
+      // snap về session đã xoá. Sync update đảm bảo render kế tiếp không
+      // còn deleted entry.
+      qc.setQueryData<{ sessions: BrainstormSession[] }>(
+        ["brainstorm-sessions", workspace],
+        (prev) =>
+          prev
+            ? { sessions: prev.sessions.filter((s) => s.id !== deletedId) }
+            : prev,
+      );
       if (activeId === deletedId) setActiveId(null);
+    },
+  });
+
+  const deleteIdeaMut = useMutation({
+    mutationFn: (vars: { id: string; ideaIdx: number }) =>
+      api.deleteBrainstormIdea(vars.id, vars.ideaIdx),
+    onSuccess: (updated) => {
+      qc.setQueryData<{ sessions: BrainstormSession[] }>(
+        ["brainstorm-sessions", workspace],
+        (prev) =>
+          prev
+            ? {
+                sessions: prev.sessions.map((s) =>
+                  s.id === updated.id ? updated : s,
+                ),
+              }
+            : prev,
+      );
     },
   });
 
@@ -243,7 +299,11 @@ export function Brainstorm() {
                 </div>
               )}
               <div>
-                <Label htmlFor="topic">Chủ đề</Label>
+                <Label htmlFor="topic">
+                  {expandUserIdeas && workspace === "podcast"
+                    ? "Danh sách ý tưởng có sẵn"
+                    : "Chủ đề"}
+                </Label>
                 <Textarea
                   id="topic"
                   value={topic}
@@ -251,11 +311,33 @@ export function Brainstorm() {
                   placeholder={
                     workspace === "gallery"
                       ? "VD: Họa sĩ Phục Hưng Ý, Caravaggio và ánh sáng Baroque, Nghệ thuật Hà Lan thế kỷ 17…"
-                      : "VD: Mù loà trước giá trị hiện tại — vì sao con người không nhận ra điều mình đang có cho tới khi mất…"
+                      : expandUserIdeas
+                        ? "Paste danh sách ý tưởng (mỗi ý 1 dòng tiêu đề + 1 dòng mô tả ngắn, hoặc đánh số 1. 2. 3.). VD:\n\n1. Bộ nhớ ngoài thay cho bộ nhớ thật\nGoogle, ChatGPT, Notion nhớ giúp ta.\n2. Khả năng tập trung ngày càng ngắn\nTikTok hóa bộ não.\n…"
+                        : "VD: Mù loà trước giá trị hiện tại — vì sao con người không nhận ra điều mình đang có cho tới khi mất…"
                   }
-                  rows={3}
+                  rows={expandUserIdeas && workspace === "podcast" ? 10 : 3}
                   className="mt-1.5"
                 />
+                {workspace === "podcast" && (
+                  <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={expandUserIdeas}
+                      onChange={(e) => setExpandUserIdeas(e.target.checked)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <span className="text-muted-foreground leading-relaxed">
+                      <span className="font-medium text-foreground">
+                        Giữ nguyên ý tưởng của tôi — chỉ mở rộng theo cấu trúc
+                      </span>
+                      <br />
+                      Paste danh sách ý có sẵn vào ô trên, LLM sẽ expand từng ý
+                      thành đủ 13 field (hook/observation/scores/outline…) mà
+                      KHÔNG sinh ý mới, KHÔNG gộp/cắt/đảo thứ tự. Field "Số ý
+                      tưởng" sẽ bị bỏ qua (tự = số ý bạn liệt kê).
+                    </span>
+                  </label>
+                )}
               </div>
               <div
                 className={cn(
@@ -346,7 +428,13 @@ export function Brainstorm() {
                     id="count"
                     value={count}
                     onChange={(e) => setCount(Number(e.target.value))}
-                    className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    disabled={expandUserIdeas && workspace === "podcast"}
+                    title={
+                      expandUserIdeas && workspace === "podcast"
+                        ? "Expand mode: số ý = số bạn liệt kê"
+                        : ""
+                    }
+                    className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
                     {[3, 5, 7, 10].map((n) => (
                       <option key={n} value={n}>
@@ -356,6 +444,82 @@ export function Brainstorm() {
                   </select>
                 </div>
               </div>
+              {/* System prompt panel — collapsible, cho phép user xem/sửa */}
+              <div className="pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setPromptPanelOpen((v) => !v)}
+                  className="w-full inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+                >
+                  <Settings2 className="size-3.5" />
+                  <span>
+                    System prompt{" "}
+                    <span className="text-muted-foreground">
+                      ({workspace === "gallery"
+                        ? "gallery"
+                        : expandUserIdeas
+                          ? "podcast · expand mode"
+                          : "podcast · brainstorm"})
+                    </span>
+                  </span>
+                  {isOverriding && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                    >
+                      đã sửa
+                    </Badge>
+                  )}
+                  <ChevronDown
+                    className={cn(
+                      "size-3 ml-auto transition-transform",
+                      promptPanelOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {promptPanelOpen && (
+                  <div className="mt-2 space-y-2">
+                    <Textarea
+                      value={isOverriding ? systemPromptOverride : defaultPrompt}
+                      onChange={(e) => setSystemPromptOverride(e.target.value)}
+                      rows={12}
+                      className="font-mono text-xs leading-relaxed"
+                      placeholder="System prompt sẽ inject vào LLM…"
+                    />
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        {workspace === "podcast" && !expandUserIdeas && (
+                          <>
+                            Placeholder <code className="font-mono">{`{N}`}</code> sẽ
+                            được thay bằng số ý tưởng.
+                          </>
+                        )}
+                        {workspace === "gallery" && (
+                          <>
+                            Placeholder <code className="font-mono">{`{N}`}</code> sẽ
+                            được thay bằng số ý tưởng.
+                          </>
+                        )}
+                        {workspace === "podcast" && expandUserIdeas && (
+                          <>Expand mode — SEED_LIST inject vào user message qua code.</>
+                        )}
+                      </p>
+                      {isOverriding && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSystemPromptOverride("")}
+                          className="text-xs h-7"
+                          title="Khôi phục default prompt"
+                        >
+                          Reset default
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-muted-foreground">
                   {provider === "openai"
@@ -401,6 +565,21 @@ export function Brainstorm() {
                 }
               }}
               deleting={deleteMut.isPending}
+              onDeleteIdea={(idx) => {
+                const title =
+                  (activeSession.ideas[idx] as { title?: string })?.title?.slice(
+                    0,
+                    50,
+                  ) ?? `idea #${idx + 1}`;
+                if (window.confirm(`Xoá ý tưởng "${title}"?`)) {
+                  deleteIdeaMut.mutate({ id: activeSession.id, ideaIdx: idx });
+                }
+              }}
+              deletingIdeaIdx={
+                deleteIdeaMut.isPending
+                  ? (deleteIdeaMut.variables?.ideaIdx ?? null)
+                  : null
+              }
             />
           ) : (
             <Card className="p-12 text-center border-dashed">
@@ -571,12 +750,16 @@ function IdeasView({
   pickingIdx,
   onDelete,
   deleting,
+  onDeleteIdea,
+  deletingIdeaIdx,
 }: {
   session: BrainstormSession;
   onPick: (idx: number | null) => void;
   pickingIdx: number | null;
   onDelete: () => void;
   deleting: boolean;
+  onDeleteIdea: (idx: number) => void;
+  deletingIdeaIdx: number | null;
 }) {
   const [topicExpanded, setTopicExpanded] = useState(false);
   // Collapse nếu topic dài > 200 chars (~3 dòng), short topic không show toggle
@@ -666,6 +849,8 @@ function IdeasView({
               picked={session.pickedIdx === idx}
               onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
               loading={pickingIdx === idx}
+              onDelete={() => onDeleteIdea(idx)}
+              deleting={deletingIdeaIdx === idx}
             />
           ))
         : (session.ideas as BrainstormIdea[])
@@ -680,6 +865,8 @@ function IdeasView({
                 picked={session.pickedIdx === idx}
                 onPick={() => onPick(session.pickedIdx === idx ? null : idx)}
                 loading={pickingIdx === idx}
+                onDelete={() => onDeleteIdea(idx)}
+                deleting={deletingIdeaIdx === idx}
               />
             ))}
     </div>
@@ -693,6 +880,8 @@ function IdeaCard({
   picked,
   onPick,
   loading,
+  onDelete,
+  deleting,
 }: {
   idea: BrainstormIdea;
   idx: number;
@@ -700,6 +889,8 @@ function IdeaCard({
   picked: boolean;
   onPick: () => void;
   loading: boolean;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const navigate = useNavigate();
   // Picked → mở mặc định, others collapsed
@@ -915,6 +1106,21 @@ function IdeaCard({
           )}
           {picked ? "Bỏ pick" : "Pick"}
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+          disabled={deleting}
+          title="Xoá ý tưởng này"
+        >
+          {deleting ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="size-3.5" />
+          )}
+          Xoá ý
+        </Button>
       </div>
     </Card>
   );
@@ -1067,6 +1273,8 @@ function GalleryIdeaCard({
   picked,
   onPick,
   loading,
+  onDelete,
+  deleting,
 }: {
   idea: GalleryBrainstormIdea;
   idx: number;
@@ -1074,6 +1282,8 @@ function GalleryIdeaCard({
   picked: boolean;
   onPick: () => void;
   loading: boolean;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -1106,10 +1316,10 @@ function GalleryIdeaCard({
         picked && "ring-2 ring-accent border-accent",
       )}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1.5">
+      {/* Header — pure info, action buttons ở footer */}
+      <div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <Badge variant="outline" className="text-[10px] font-mono">
               #{idx + 1}
             </Badge>
@@ -1141,20 +1351,6 @@ function GalleryIdeaCard({
               ` (Part1 + Part2 mirror, content ${totalChapterMinutes}p)`}
           </p>
         </div>
-        <Button
-          variant={picked ? "default" : "outline"}
-          size="sm"
-          onClick={onPick}
-          disabled={loading}
-          className="shrink-0"
-        >
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : picked ? (
-            <Check className="size-4" />
-          ) : null}
-          {picked ? "Đã chọn" : "Chọn ý này"}
-        </Button>
       </div>
 
       {/* Chapters + KeyWorks expandable */}
@@ -1309,8 +1505,21 @@ function GalleryIdeaCard({
         </div>
       )}
 
-      {/* Phase 3d: Plan workflow CTA — luôn hiện, ngay cả khi card collapsed */}
-      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2">
+      {/* Footer actions — luôn hiện, ngay cả khi card collapsed */}
+      <div className="mt-4 pt-4 border-t flex items-center justify-end gap-2 flex-wrap">
+        <Button
+          variant={picked ? "default" : "outline"}
+          size="sm"
+          onClick={onPick}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : picked ? (
+            <Check className="size-4" />
+          ) : null}
+          {picked ? "Đã chọn" : "Chọn ý này"}
+        </Button>
         {existingPlanId ? (
           <Button
             size="sm"
@@ -1335,6 +1544,21 @@ function GalleryIdeaCard({
             Lập kế hoạch chương
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+          disabled={deleting}
+          title="Xoá ý tưởng này"
+        >
+          {deleting ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="size-3.5" />
+          )}
+          Xoá ý
+        </Button>
       </div>
     </Card>
   );

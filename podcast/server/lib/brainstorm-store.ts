@@ -307,6 +307,35 @@ export async function deleteSession(id: string): Promise<boolean> {
   return result.changes > 0;
 }
 
+/**
+ * Xoá 1 idea khỏi session. Tự dịch pickedIdx nếu cần:
+ * - Xoá idea tại pickedIdx → reset pickedIdx = null.
+ * - Xoá idea TRƯỚC pickedIdx → shift pickedIdx -= 1.
+ * - Xoá idea SAU pickedIdx → giữ nguyên.
+ * Trả về session sau khi xoá, hoặc null nếu session/idea không tồn tại.
+ */
+export async function deleteIdeaAt(
+  id: string,
+  ideaIdx: number,
+): Promise<BrainstormSession | null> {
+  const s = await getSession(id);
+  if (!s) return null;
+  if (!Number.isInteger(ideaIdx) || ideaIdx < 0 || ideaIdx >= s.ideas.length) {
+    const err = new Error("ideaIdx out of range") as Error & { code: string };
+    err.code = "VALIDATION";
+    throw err;
+  }
+  s.ideas = (s.ideas as Array<BrainstormIdea | GalleryBrainstormIdea>).filter(
+    (_, i) => i !== ideaIdx,
+  ) as typeof s.ideas;
+  if (s.pickedIdx !== null) {
+    if (s.pickedIdx === ideaIdx) s.pickedIdx = null;
+    else if (s.pickedIdx > ideaIdx) s.pickedIdx -= 1;
+  }
+  saveSession(s);
+  return s;
+}
+
 export async function updatePickedIdx(
   id: string,
   pickedIdx: number | null,
@@ -329,7 +358,7 @@ export async function updatePickedIdx(
   return s;
 }
 
-const PODCAST_SYSTEM_PROMPT = `Bạn là trợ lý brainstorm cho kênh podcast "ByteCast Tech" — kênh tiếng Việt khám phá những câu hỏi lớn về con người, công nghệ, xã hội, triết học. Phong cách: chiêm nghiệm, sâu sắc, mộc mạc, KHÔNG sáo rỗng.
+export const PODCAST_SYSTEM_PROMPT = `Bạn là trợ lý brainstorm cho kênh podcast "ByteCast Tech" — kênh tiếng Việt khám phá những câu hỏi lớn về con người, công nghệ, xã hội, triết học. Phong cách: chiêm nghiệm, sâu sắc, mộc mạc, KHÔNG sáo rỗng.
 
 YÊU CẦU CHỦ ĐỀ (BẮT BUỘC mỗi idea PHẢI thỏa):
 - Khởi từ MỘT NGHỊCH LÝ hoặc câu hỏi lớn của kiếp người. Không phải "10 mẹo…", không phải "Làm thế nào để…", không phải "5 bước…".
@@ -454,7 +483,171 @@ export type GenerateInput = {
   model?: string;
   /** Phase 2: workspace style — default "podcast". */
   style?: Style;
+  /**
+   * Phase expand: nếu true, topic được parse như danh sách ý tưởng có sẵn
+   * của user — LLM expand từng ý thành 13-field schema, KHÔNG sinh ý mới,
+   * KHÔNG gộp/cắt/đảo thứ tự. Count bị bỏ qua (tự = số seed user liệt kê).
+   * Chỉ áp dụng cho podcast style.
+   */
+  expandUserIdeas?: boolean;
+  /**
+   * Override system prompt — nếu set, dùng prompt này thay vì
+   * PODCAST_SYSTEM_PROMPT / PODCAST_EXPAND_SYSTEM_PROMPT / GALLERY_SYSTEM_PROMPT.
+   * Cho phép user tinh chỉnh prompt qua UI để A/B test. Vẫn áp dụng
+   * placeholder {N} cho podcast brainstorm + gallery mode (KHÔNG cho expand).
+   */
+  systemPromptOverride?: string;
 };
+
+/**
+ * Parse seed list từ topic free-form user paste. Rule deterministic:
+ *  - Split theo newline, trim, bỏ empty
+ *  - Bỏ qua line đầu nếu match "N cách/điều/loại/…" (header tổng quát)
+ *  - Line kết thúc `.` `!` `?` → DESCRIPTION ghép với title trước đó (nếu
+ *    title trước chưa có desc)
+ *  - Line còn lại → TITLE của seed mới
+ *
+ * LLM gpt-4o-mini không tin cậy được khi parse format không đồng đều
+ * (vd 5 seed đầu có desc, 5 seed sau chỉ title) → làm trong JS chắc chắn hơn.
+ */
+export function parseUserIdeaSeeds(
+  topic: string,
+): Array<{ title: string; description: string }> {
+  const lines = topic
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const HEADER_REGEX = /^\d+\s*(cách|điều|thứ|loại|kiểu|lý do|việc)\b/i;
+  const ENDS_SENTENCE = /[.!?]$/;
+
+  const seeds: Array<{ title: string; description: string }> = [];
+  let i = 0;
+  // Skip header line nếu match pattern "10 Cách …" / "5 Điều …"
+  if (HEADER_REGEX.test(lines[0])) i = 1;
+
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    const isDesc = ENDS_SENTENCE.test(line);
+    const prevSeed = seeds[seeds.length - 1];
+    if (isDesc && prevSeed && !prevSeed.description) {
+      prevSeed.description = line;
+    } else {
+      seeds.push({ title: line, description: "" });
+    }
+  }
+  return seeds;
+}
+
+/**
+ * System prompt RIÊNG cho expand mode — KHÔNG dùng PODCAST_SYSTEM_PROMPT
+ * vì prompt brainstorm yêu cầu "đa dạng hoá 5 idea KHÁC NHAU" + "Quy trình
+ * sinh ý tưởng" gây nhiễu LLM. Prompt này focus 1 nhiệm vụ: expand từng
+ * seed user đã liệt kê thành 13-field schema, KHÔNG sáng tạo idea mới.
+ *
+ * Seed list được parse trong JS (parseUserIdeaSeeds) và inject vào user
+ * payload ở key "SEED_LIST" — LLM chỉ việc map 1-1 array → array.
+ */
+export const PODCAST_EXPAND_SYSTEM_PROMPT = `Bạn là trợ lý EXPAND ý tưởng podcast cho kênh "ByteCast Tech" — kênh tiếng Việt chiêm nghiệm về con người, công nghệ, xã hội, triết học.
+
+🚫 BẠN KHÔNG ĐƯỢC BRAINSTORM Ý TƯỞNG MỚI 🚫
+
+User đã có sẵn DANH SÁCH SEED (đã parse cứng trong code, inject vào user message ở key "SEED_LIST"). Mỗi seed có {idx, title, description}. Nhiệm vụ DUY NHẤT: map 1-1 mỗi seed → 1 idea 13-field.
+
+═══ QUY TẮC TUYỆT ĐỐI ═══
+
+R1. **ĐÚNG SỐ LƯỢNG**: output array "ideas" PHẢI có EXACTLY N phần tử, trong đó N = SEED_LIST.length. Đếm trước khi viết. KHÔNG ÍT, KHÔNG NHIỀU.
+
+R2. **ĐÚNG THỨ TỰ**: ideas[i] = expand từ SEED_LIST[i] (cùng index, cùng thứ tự). KHÔNG đảo, KHÔNG sort lại.
+
+R3. **PRESERVE TITLE**: ideas[i].title PHẢI = SEED_LIST[i].title (copy y nguyên, chỉ sửa lỗi chính tả/viết hoa đầu câu nhẹ). CẤM:
+   - Đổi nội dung tiêu đề
+   - Rephrase / paraphrase
+   - Thêm prefix ("Cách 1:", "Khi:", "Làm Thế Nào...")
+   - Dịch / viết lại theo ý mình
+   Title user là TÀI SẢN bất khả xâm phạm.
+
+R4. **PRESERVE DESC làm observation**: nếu SEED_LIST[i].description khác null/empty → ideas[i].observation PHẢI = description đó (y nguyên hoặc tinh chỉnh nhẹ). Nếu description = null → tự viết observation 1 câu dựa trên title.
+
+R5. **KHÔNG GỘP / KHÔNG TÁCH / KHÔNG BỎ / KHÔNG THÊM**: 10 seed → 10 idea, không hơn không kém. Mỗi seed PHẢI có entry trong output, kể cả seed chỉ có title không description.
+
+R6. **ENRICHMENT 11 field còn lại** (hook, angle, why, scores, knowledgeMap, contrarianView, thumbnailHooks, futureConnection, historicalExamples, storyBank, outline) → bạn tự sáng tạo, viết hay đậm phong cách ByteCast (chiêm nghiệm, sâu sắc, gắn AI/triết học/tâm lý).
+
+R7. **CATEGORIES**: field "categories" cấp session (1-3 tag) — chọn từ enum: Meaning, Psychology, Time, AI, Loss, Freedom, Self, Death, Memory, Connection, Power, Technology, Happiness, Solitude, Ethics, Future. Pick tag bao quát chung cho cả danh sách.
+
+═══ VÍ DỤ MAPPING ═══
+
+SEED_LIST (đã parse cứng trong code):
+[
+  {"idx": 1, "title": "Lướt mạng xã hội thay vì đọc sách", "description": "Người ta nuốt 100 mảnh thông tin nhỏ thay vì 1 ý lớn."},
+  {"idx": 2, "title": "Phụ thuộc GPS quên đường đi", "description": null}
+]
+
+→ Output (N=2):
+{
+  "categories": ["Technology", "Memory"],
+  "ideas": [
+    {
+      "title": "Lướt mạng xã hội thay vì đọc sách",   ← Y NGUYÊN seed[0].title
+      "observation": "Người ta nuốt 100 mảnh thông tin nhỏ thay vì 1 ý lớn.",   ← Y NGUYÊN seed[0].description
+      "hook": "...",  ← bạn sáng tạo
+      ... 10 field khác bạn sáng tạo ...
+    },
+    {
+      "title": "Phụ thuộc GPS quên đường đi",   ← Y NGUYÊN seed[1].title
+      "observation": "...",   ← seed[1].description=null → tự viết
+      "hook": "...",
+      ... 10 field khác ...
+    }
+  ]
+}
+
+═══ SCHEMA 13 FIELD ═══
+
+Mỗi idea là object có ĐỦ:
+
+1. "title" (string): TIÊU ĐỀ GỐC CỦA USER (R3 áp dụng — copy y nguyên, chỉ sửa chính tả).
+
+2. "hook" (15-30 từ): 1-2 câu mở Reels gây tò mò. PHẢI là prose 1 dòng, KHÔNG xuống dòng, KHÔNG ký tự "↓"/"→".
+
+3. "angle" (1 câu): góc nhìn riêng cho title này.
+
+4. "why" (1 câu): vì sao resonate với khán giả Việt Nam cụ thể.
+
+5. "observation" (1 câu ~10-20 từ): nếu user có dòng mô tả ngắn cho seed này → dùng làm observation; nếu không → tự viết 1 quan sát đời thường gốc cho title.
+
+6. "scores" (object 5 integer 1-10): {"universal","emotional","philosophical","aiRelevance","originality"}.
+
+7. "knowledgeMap" (string[3-6]): từ enum: "Tâm lý học" / "Tâm lý học hành vi" / "Tâm lý học nhận thức" / "Triết học hiện sinh" / "Triết học đạo đức" / "Xã hội học" / "Văn hoá học" / "Khoa học thần kinh" / "Khoa học nhận thức" / "AI / Học máy" / "Khoa học dữ liệu" / "Kinh tế hành vi" / "Nhân học" / "Lịch sử tư tưởng". Phải có ít nhất 1 trong "AI / Học máy" hoặc "Khoa học dữ liệu".
+
+8. "contrarianView" (1-2 câu, 20-40 từ): luận điểm PHẢN BIỆN chính title.
+
+9. "thumbnailHooks" (string[3-5], mỗi câu 8-18 từ): hook ngắn cho thumbnail Reels.
+
+10. "futureConnection" (1-2 câu, 20-40 từ): câu hỏi AI/AGI projection. Bắt buộc có.
+
+11. "historicalExamples" (string[3-5]): "Tên — 1 câu context cụ thể".
+
+12. "storyBank" (string[3-4]): mix loại "[Hiện đại]" / "[Lịch sử]" / "[Cá nhân]". Phải có ÍT NHẤT 1 "[Cá nhân]" đời thường VN.
+
+13. "outline" (multi-line string ~1000-1800 chars): DÀN Ý ESSAY 12 mục theo ByteCast Framework v1, format:
+   "1. CORE QUESTION\\n<1 câu>\\n\\n2. CORE PARADOX\\n<bề mặt>\\n↓\\n<mâu thuẫn>\\n\\n3. HIỆN TƯỢNG ĐỜI THƯỜNG\\n- ...\\n- ...\\n- ...\\n\\n4. TÂM LÝ HỌC\\nTheory: ...\\nResearch: ...\\n\\n5. THẦN KINH HỌC\\n...\\n\\n6. TRIẾT HỌC\\nThinker: ...\\nIdea: ...\\n\\n7. XÃ HỘI HỌC\\n...\\n\\n8. AI / CÔNG NGHỆ\\n... (bắt buộc)\\n\\n9. THÍ NGHIỆM TƯ DUY\\n...\\n\\n10. QUOTES\\n- \\"...\\"\\n- \\"...\\"\\n- \\"...\\"\\n\\n11. KẾT LUẬN MỞ\\n<câu hỏi mở, KHÔNG advice>\\n\\n12. VISUAL METAPHOR\\n- ...\\n- ...\\n- ..."
+
+═══ OUTPUT FORMAT ═══
+
+JSON CHẶT, KHÔNG markdown wrap, KHÔNG lời mở đầu:
+
+{"categories":["..."],"ideas":[{...},{...}, ... N phần tử ...]}
+
+═══ CHECKLIST TRƯỚC KHI EMIT ═══
+
+✅ N = SEED_LIST.length (đọc từ user message)
+✅ Output array ideas có ĐÚNG N phần tử — không hơn không kém
+✅ ideas[i].title === SEED_LIST[i].title (CHỮ Y NGUYÊN)
+✅ ideas[i].observation === SEED_LIST[i].description nếu có; tự viết nếu null
+✅ Thứ tự khớp index SEED_LIST
+✅ Mỗi idea có đủ 13 field`;
 
 /**
  * Gen ideas qua LLM provider (OpenAI hoặc Ollama) + save vào DB.
@@ -470,12 +663,16 @@ export async function generateAndSave(
   const provider = input.provider ?? DEFAULT_PROVIDER;
   const model = input.model ?? DEFAULT_MODEL;
   const style = input.style ?? "podcast";
+  const expandUserIdeas =
+    style === "podcast" && (input.expandUserIdeas ?? false);
   if (!topic) {
     const err = new Error("Thiếu topic") as Error & { code: string };
     err.code = "VALIDATION";
     throw err;
   }
-  if (count < 3 || count > 10) {
+  // Expand mode: count tự = số seed user liệt kê, không validate range vì
+  // user có thể liệt kê 1-N idea bất kỳ.
+  if (!expandUserIdeas && (count < 3 || count > 10)) {
     const err = new Error("count phải trong 3..10") as Error & { code: string };
     err.code = "VALIDATION";
     throw err;
@@ -509,31 +706,78 @@ export async function generateAndSave(
       model,
       now,
       existingTopics,
+      systemPromptOverride: input.systemPromptOverride,
     });
   }
 
   // ────── Podcast branch ──────
   const userPayload: Record<string, unknown> = { topic, tone };
-  if (existingTopics.length > 0) {
+  if (existingTopics.length > 0 && !expandUserIdeas) {
+    // Expand mode: KHÔNG diversify vì idea là của user, mọi "trùng" đều
+    // intentional. Skip existingTopics injection.
     userPayload["EXISTING TOPICS (avoid duplication, diversify angle)"] =
       existingTopics;
   }
+  // Expand mode: parse seed list trong JS rồi inject vào payload — không
+  // để LLM tự parse free-form text vì gpt-4o-mini không tin cậy được với
+  // format không đồng đều (5 seed đầu có desc, 5 seed sau chỉ title).
+  let parsedSeeds: Array<{ title: string; description: string }> = [];
+  if (expandUserIdeas) {
+    parsedSeeds = parseUserIdeaSeeds(topic);
+    if (parsedSeeds.length === 0) {
+      const err = new Error(
+        "Không parse được seed nào từ topic. Mỗi ý paste 1 dòng tiêu đề; dòng kết thúc dấu '.' '!' '?' được coi là mô tả của ý phía trên.",
+      ) as Error & { code: string };
+      err.code = "VALIDATION";
+      throw err;
+    }
+    userPayload["SEED_LIST"] = parsedSeeds.map((s, idx) => ({
+      idx: idx + 1,
+      title: s.title,
+      description: s.description || null,
+    }));
+    userPayload["INSTRUCTION"] = `User đã có sẵn ${parsedSeeds.length} seed (đã parse trong code, xem field SEED_LIST). Output array "ideas" PHẢI có ĐÚNG ${parsedSeeds.length} phần tử, ideas[i] expand từ SEED_LIST[i] theo R1-R7 ở system prompt.`;
+  }
+
+  // Expand mode dùng prompt RIÊNG (self-contained) — KHÔNG inherit
+  // brainstorm prompt vì các quy tắc "đa dạng hoá idea" / "quy trình sinh"
+  // gây nhiễu LLM. Brainstorm prompt vẫn dùng placeholder {N}.
+  const baseExpandPrompt =
+    input.systemPromptOverride && expandUserIdeas
+      ? input.systemPromptOverride
+      : PODCAST_EXPAND_SYSTEM_PROMPT;
+  const baseBrainstormPrompt =
+    input.systemPromptOverride && !expandUserIdeas
+      ? input.systemPromptOverride
+      : PODCAST_SYSTEM_PROMPT;
+  const expandedPrompt = expandUserIdeas
+    ? baseExpandPrompt
+    : baseBrainstormPrompt.replace("{N}", String(count));
 
   const content = await chat({
     provider,
     model,
-    systemPrompt: PODCAST_SYSTEM_PROMPT.replace("{N}", String(count)),
+    systemPrompt: expandedPrompt,
     userContent: JSON.stringify(userPayload),
-    temperature: 0.9,
+    // Expand mode: temperature thấp (0.3) để LLM bám sát title user, ít drift.
+    // gpt-4o-mini hay rephrase title khi temperature cao.
+    temperature: expandUserIdeas ? 0.3 : 0.9,
     jsonMode: true,
+    // 5 idea × 13 field × ~150 char ≈ 10k char output. Set 12k tokens
+    // (~36k char) để chừa buffer, gpt-4o-mini output limit 16k.
+    maxTokens: 12000,
   });
   const parsed = safeParseJson<{
     ideas?: unknown;
     categories?: unknown;
   }>(content);
   if (!Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
+    console.error(
+      `[brainstorm] LLM trả về không có 'ideas'. Raw (1000 chars):\n${content.slice(0, 1000)}`,
+    );
     throw new Error("LLM response thiếu mảng 'ideas'");
   }
+  const rawIdeaCount = parsed.ideas.length;
   const categories = Array.isArray(parsed.categories)
     ? (parsed.categories as unknown[])
         .filter(
@@ -544,14 +788,19 @@ export async function generateAndSave(
         .slice(0, 3)
     : [];
   const ideas: BrainstormIdea[] = [];
+  const skipReasons: string[] = [];
   for (const raw of parsed.ideas as unknown[]) {
     const o = raw as Partial<BrainstormIdea>;
-    if (
-      typeof o.title !== "string" ||
-      typeof o.hook !== "string" ||
-      typeof o.angle !== "string" ||
-      typeof o.why !== "string"
-    ) {
+    // Nới filter: chỉ require title + hook (2 field cốt lõi). Các field
+    // khác fallback rỗng — user có thể edit sau hoặc Essay gen từ field
+    // đã có. Strict filter cũ (title+hook+angle+why) khiến gpt-4o-mini
+    // hay drop 4/5 idea khi bỏ sót 1-2 field.
+    if (typeof o.title !== "string" || !o.title.trim()) {
+      skipReasons.push("thiếu title");
+      continue;
+    }
+    if (typeof o.hook !== "string" || !o.hook.trim()) {
+      skipReasons.push(`thiếu hook (title="${o.title?.slice(0, 40)}")`);
       continue;
     }
     ideas.push({
@@ -562,8 +811,8 @@ export async function generateAndSave(
         .replace(/\s*\n\s*/g, " ")
         .replace(/\s+/g, " ")
         .trim(),
-      angle: o.angle.trim(),
-      why: o.why.trim(),
+      angle: typeof o.angle === "string" ? o.angle.trim() : "",
+      why: typeof o.why === "string" ? o.why.trim() : "",
       observation:
         typeof o.observation === "string" ? o.observation.trim() : "",
       scores: normalizeScores(o.scores),
@@ -598,8 +847,90 @@ export async function generateAndSave(
       outline: typeof o.outline === "string" ? o.outline.trim() : "",
     });
   }
+  if (ideas.length < rawIdeaCount) {
+    console.warn(
+      `[brainstorm] LLM trả ${rawIdeaCount} idea nhưng chỉ ${ideas.length} qua filter (yêu cầu ${count}). Skipped: ${skipReasons.join("; ")}`,
+    );
+  }
   if (ideas.length === 0) {
+    console.error(
+      `[brainstorm] Tất cả idea bị filter. Raw (1500 chars):\n${content.slice(0, 1500)}`,
+    );
     throw new Error("LLM response không có idea nào parse được");
+  }
+
+  // Expand mode: enforce seed list — override title/observation từ
+  // SEED_LIST authoritative. LLM có thể rephrase title hoặc miss seed, JS
+  // overlay đảm bảo output 1-1 đúng số lượng + đúng title gốc.
+  if (expandUserIdeas && parsedSeeds.length > 0) {
+    const aligned: BrainstormIdea[] = [];
+    for (let i = 0; i < parsedSeeds.length; i++) {
+      const seed = parsedSeeds[i];
+      const llmIdea = ideas[i];
+      if (!llmIdea) {
+        console.warn(
+          `[brainstorm:expand] LLM thiếu idea cho seed #${i + 1} "${seed.title}". Tạo entry rỗng — user phải chỉnh thủ công.`,
+        );
+        aligned.push({
+          title: seed.title,
+          hook: seed.description || `[Chưa có hook — LLM bỏ sót seed này.]`,
+          angle: "",
+          why: "",
+          observation: seed.description,
+          scores: normalizeScores({}),
+          knowledgeMap: [],
+          contrarianView: "",
+          thumbnailHooks: [],
+          futureConnection: "",
+          historicalExamples: [],
+          storyBank: [],
+          outline: "",
+        });
+        continue;
+      }
+      aligned.push({
+        ...llmIdea,
+        title: seed.title, // ép title gốc từ seed
+        observation: seed.description || llmIdea.observation,
+      });
+    }
+    if (ideas.length > parsedSeeds.length) {
+      console.warn(
+        `[brainstorm:expand] LLM trả ${ideas.length} idea nhưng user chỉ liệt kê ${parsedSeeds.length} seed. Dropped ${ideas.length - parsedSeeds.length} idea excess.`,
+      );
+    }
+    ideas.length = 0;
+    ideas.push(...aligned);
+  }
+
+  // Merge với session cùng topic (case-insensitive) — append ideas thay
+  // vì tạo session mới. Giúp user "tạo thêm" trên cùng chủ đề mà không
+  // sinh nhiều entry rời rạc trong History.
+  const normalizedTopic = topic.toLowerCase().trim();
+  const existingForTopic = existing.find(
+    (s) =>
+      s.style === "podcast" &&
+      s.topic.toLowerCase().trim() === normalizedTopic,
+  );
+  if (existingForTopic) {
+    const merged: BrainstormSession = {
+      ...existingForTopic,
+      ideas: [
+        ...(existingForTopic.ideas as BrainstormIdea[]),
+        ...ideas,
+      ],
+      // Update categories: union các category mới (max 3)
+      categories: Array.from(
+        new Set([...existingForTopic.categories, ...categories]),
+      ).slice(0, 3) as TopicCategory[],
+      // Refresh provider/model về lần gen cuối
+      provider,
+      model,
+      // KHÔNG đổi createdAt để giữ vị trí trong history; thêm field
+      // updatedAt sẽ phá schema — skip.
+    };
+    saveSession(merged);
+    return merged;
   }
 
   const session: BrainstormSession = {
@@ -632,6 +963,7 @@ type GalleryGenContext = {
   model: string;
   now: Date;
   existingTopics: string[];
+  systemPromptOverride?: string;
 };
 
 async function generateGalleryAndSave(
@@ -643,10 +975,11 @@ async function generateGalleryAndSave(
     ctx.existingTopics,
   );
 
+  const basePrompt = ctx.systemPromptOverride ?? GALLERY_SYSTEM_PROMPT;
   const content = await chat({
     provider: ctx.provider,
     model: ctx.model,
-    systemPrompt: GALLERY_SYSTEM_PROMPT.replace("{N}", String(ctx.count)),
+    systemPrompt: basePrompt.replace("{N}", String(ctx.count)),
     userContent,
     temperature: 0.7,
     jsonMode: true,

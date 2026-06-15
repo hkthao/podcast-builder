@@ -165,7 +165,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             />
           </Field>
 
-          <Field label="Mood override">
+          <Field label="Tâm trạng (override)">
             <select
               value={form.moodOverride ?? ""}
               onChange={(e) =>
@@ -174,7 +174,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
                 })
               }
               className={cn(
-                "flex h-12 w-full rounded-md border border-input bg-background px-3 text-base shadow-sm",
+                "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               )}
             >
