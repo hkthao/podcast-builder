@@ -140,6 +140,38 @@ const toAiStudioModel = (m: string | undefined): string => {
   return LEGACY_MODEL_MAP[raw] ?? raw;
 };
 
+/**
+ * Parse retry delay từ Google API 429 response. Hỗ trợ 2 nguồn:
+ *  1. body.error.details[].retryDelay = "53.4s" (Google standard)
+ *  2. body.error.message chứa "retry in 53.426s" (text fallback)
+ * Default 30s nếu không parse được.
+ */
+function parseRetryDelaySec(rawBody: string): number {
+  try {
+    const parsed = JSON.parse(rawBody) as {
+      error?: {
+        message?: string;
+        details?: Array<{ "@type"?: string; retryDelay?: string }>;
+      };
+    };
+    const details = parsed.error?.details ?? [];
+    for (const d of details) {
+      if (d.retryDelay) {
+        const m = d.retryDelay.match(/^([\d.]+)s?$/);
+        if (m) return Math.ceil(parseFloat(m[1]));
+      }
+    }
+    const msg = parsed.error?.message ?? "";
+    const m = msg.match(/retry in ([\d.]+)s/i);
+    if (m) return Math.ceil(parseFloat(m[1]));
+  } catch {
+    /* not JSON or parse error → fall through */
+  }
+  return 30;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
   audio: Buffer;
   /** Cho caller biết format input ffmpeg. */
@@ -177,38 +209,62 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
     },
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // Retry tối đa 3 lần khi gặp 429 — đọc retryDelay từ Google API response.
+  // Free tier limit 10 req/min cho gemini-3.1-flash-tts; loop TTS turn-by-turn
+  // (30-60 turns/script) sẽ hit limit này → tự pace + chờ.
+  const MAX_429_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(
-      `Gemini TTS API error ${res.status}: ${errText.slice(0, 500)}`,
-    );
+    if (res.status === 429) {
+      if (attempt === MAX_429_RETRIES) {
+        const errText = await res.text();
+        throw new Error(
+          `Gemini TTS quota exceeded (429) sau ${MAX_429_RETRIES + 1} lần thử. Đợi 1 phút rồi gen lại, hoặc upgrade quota. Raw: ${errText.slice(0, 300)}`,
+        );
+      }
+      const errText = await res.text();
+      const waitSec = Math.min(90, parseRetryDelaySec(errText));
+      console.warn(
+        `[gemini-tts] 429 quota exceeded — đợi ${waitSec}s rồi retry (attempt ${attempt + 1}/${MAX_429_RETRIES + 1})`,
+      );
+      await sleep(waitSec * 1000);
+      continue;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(
+        `Gemini TTS API error ${res.status}: ${errText.slice(0, 500)}`,
+      );
+    }
+
+    const data = (await res.json()) as AiStudioResponse;
+    if (data.error) {
+      throw new Error(
+        `Gemini TTS API: ${data.error.message ?? "unknown error"} (code ${data.error.code ?? "?"})`,
+      );
+    }
+
+    const audioBase64 =
+      data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!audioBase64) {
+      throw new Error(
+        `Gemini TTS response thiếu audio — ${JSON.stringify(data).slice(0, 300)}`,
+      );
+    }
+
+    return {
+      audio: Buffer.from(audioBase64, "base64"),
+      encoding: "PCM_S16LE_24K",
+    };
   }
-
-  const data = (await res.json()) as AiStudioResponse;
-  if (data.error) {
-    throw new Error(
-      `Gemini TTS API: ${data.error.message ?? "unknown error"} (code ${data.error.code ?? "?"})`,
-    );
-  }
-
-  const audioBase64 =
-    data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!audioBase64) {
-    throw new Error(
-      `Gemini TTS response thiếu audio — ${JSON.stringify(data).slice(0, 300)}`,
-    );
-  }
-
-  return {
-    audio: Buffer.from(audioBase64, "base64"),
-    encoding: "PCM_S16LE_24K",
-  };
+  // Unreachable vì loop sẽ throw hoặc return trong attempt cuối
+  throw new Error("Gemini TTS retry loop bị thoát bất thường");
 }
 
 /**
