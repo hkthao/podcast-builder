@@ -186,6 +186,16 @@ function initSchema(db: Database.Database): void {
     }
   }
 
+  // Prompt overrides — user-edited system prompts per key. Fallback về
+  // default constant trong code khi không có override row.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prompt_overrides (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Gallery asset library — Phase 26a cross-episode reuse (link-only)
   db.exec(`
     CREATE TABLE IF NOT EXISTS gallery_assets (

@@ -18,6 +18,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { PATHS } from "../../../shared/studio-core/paths";
 import { chat, type LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import { safeParseJson } from "../../../shared/lib/safe-json";
 import { getEssay } from "./essay-store";
 import { getSession as getBrainstormSession } from "./brainstorm-store";
@@ -146,7 +147,7 @@ export async function deleteScript(episodeName: string): Promise<boolean> {
 
 // ────── LLM gen ──────
 
-const SCRIPT_SYSTEM_PROMPT = `Bạn là Gemini Podcast Studio Vietnam — chuyên giả lập NotebookLM Audio Overview style nhưng bằng tiếng Việt. Nhiệm vụ: viết kịch bản hội thoại podcast cực kỳ tự nhiên giữa 2 host dựa trên TÀI LIỆU NGUỒN do user cung cấp.
+export const SCRIPT_SYSTEM_PROMPT = `Bạn là Gemini Podcast Studio Vietnam — chuyên giả lập NotebookLM Audio Overview style nhưng bằng tiếng Việt. Nhiệm vụ: viết kịch bản hội thoại podcast cực kỳ tự nhiên giữa 2 host dựa trên TÀI LIỆU NGUỒN do user cung cấp.
 
 2 HOST:
 1. Host Nam (giọng Bắc, thông minh, đặt câu hỏi gợi mở, phong cách dí dỏm, hay thắc mắc "thật vậy à?", "thế ạ", "nhưng mà...").
@@ -327,7 +328,7 @@ export async function generateScript(
   const content = await chat({
     provider: input.provider,
     model: input.model,
-    systemPrompt: SCRIPT_SYSTEM_PROMPT,
+    systemPrompt: getEffectivePrompt("podcast.script"),
     userContent: userPrompt,
     temperature: 0.75,
     jsonMode: true,

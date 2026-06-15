@@ -187,34 +187,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
           </Field>
         </div>
 
-        <Field
-          label="Đường dẫn BGM"
-          hint="Đường dẫn relative tới audio (vd ./assets/bgm/contemplative.mp3). Để trống = không nhạc nền."
-        >
-          <Input
-            value={form.bgm ?? ""}
-            onChange={(e) => update({ bgm: e.target.value || null })}
-            placeholder="./assets/bgm/..."
-          />
-        </Field>
-
-        <Field
-          label={`Âm lượng BGM: ${form.bgmVolumeDb} dB`}
-          hint="-28 dB là mặc định. Ducking 35% khi có lời (xem Phase 7 PLAN)."
-        >
-          <input
-            type="range"
-            min={-40}
-            max={-10}
-            step={1}
-            value={form.bgmVolumeDb}
-            onChange={(e) =>
-              update({ bgmVolumeDb: Number(e.target.value) })
-            }
-            disabled={!form.bgm}
-            className="w-full accent-primary disabled:opacity-40"
-          />
-        </Field>
+        {/* BGM (file + volume) đã chuyển sang BgmPanel ngay dưới Meta cards. */}
 
         <div className="grid grid-cols-2 gap-5 pt-2">
           <SwitchRow

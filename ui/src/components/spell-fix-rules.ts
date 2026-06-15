@@ -74,7 +74,7 @@ những phần tích đa chiều → những phân tích đa chiều
 một chạm rừng chân bên đường → một trạm dừng chân bên đường
 thức đoạt đi tính bản thiện → tước đoạt đi tính bản thiện
 tay chào → tay lái
-rượu dã → dịu dàng
+rượu dã → rệu rã
 dẹt dẹt → rẹt rẹt
 `;
 

@@ -299,51 +299,70 @@ export function buildEssayUserPrompt(
 
 export const NLM_PROMPT_SYSTEM = `You are an expert prompt designer for Google NotebookLM Audio Overview ("Deep Dive" 2-host podcast).
 
-User uploads a Vietnamese essay as source, then pastes YOUR prompt to direct NotebookLM's output style.
+🚫 AVOID THE DEFAULT NLM TONE 🚫
+Default NLM podcast sounds like 2 enthusiastic researchers reading a textbook — fast, hyped, lecture-y. We want the OPPOSITE: a SLOW, WARM, REFLECTIVE conversation between 2 life-experienced friends having coffee, gently surfacing realizations the listener has lived but never named.
 
-Write a prompt in ENGLISH (NLM responds more precisely to English directives) instructing NLM to generate a Vietnamese audio podcast. The prompt MUST follow this exact structure:
+User uploads a Vietnamese essay as source, then pastes YOUR prompt to direct NotebookLM's output style. Your job: produce 1 ENGLISH prompt (NLM follows English directives more precisely) that steers NLM toward this "warm coffee chat" style for the given essay.
+
+═══ OUTPUT TEMPLATE — fill ALL {PLACEHOLDERS} from essay content ═══
 
 ---
 
-Create a long-form, deeply reflective, and {ADJECTIVES_FROM_ESSAY} podcast discussion in Vietnamese based ON THE PROVIDED SOURCES. The two hosts must engage in an intimate, intellectual journey exploring {CORE_THEME}, avoiding any motivational clichés or lecture-like tone.
+Create a long-form, deeply reflective, and warm podcast discussion in Vietnamese based ON THE PROVIDED SOURCES. The two hosts must sound like mature, life-experienced friends ({AUDIENCE_DESCRIPTION — see Audience block below}) having a calm conversation over coffee, looking back at how {CORE_PHENOMENON_FROM_ESSAY — vd "modern life has silently mutated", "what we call love has shifted", "memory itself has changed shape"}. Avoid any fast-paced, hype, or textbook tone.
 
-Topic: "{ESSAY_TITLE}" ({ENGLISH_SUBTITLE_CAPTURING_DEEPER_QUESTION}).
+Topic: "{ESSAY_TITLE}" ({1_LINE_ENGLISH_SUBTITLE_CAPTURING_DEEPER_QUESTION}).
 
-Host Dynamics & Emotional Resonance:
-- Host A (The {LENS_A_NAME} Lens): {ONE_SENTENCE_DESCRIBING_HOST_A_FOCUS — pick a lens that matches essay content: psychological/tech, scientific/data, historical, sociological, economic, etc.}
-- Host B (The {LENS_B_NAME} Lens): {ONE_SENTENCE_DESCRIBING_HOST_B_FOCUS — pick a complementary lens: existential/philosophical, ethical/spiritual, poetic/personal, etc.}
-- The tone must be {2-3 ADJECTIVES}. The hosts should challenge each other's assumptions gently but deeply, allowing moments of silence or contemplative pacing.
+Target Audience & Tone:
+- Audience: {1-2 sentences describing WHO they are + WHAT SHARED EXPERIENCE binds them — focus on what they remember from "ngày xưa". Default to "Adults aged 40-65 who lived through both the pre-internet era and the AI boom — they remember rotary phones, paper dictionaries, and handwritten letters" if essay is about modernity/technology/change. If essay is timeless (love, death, meaning), tailor to who would resonate.}
+- Tone: warm, unhurried, deeply contemplative, balanced. Neither optimistic nor pessimistic about {THE_SUBJECT}. Slow pacing — moments of silence are OK.
+- Host Dynamics: friendly, personal storytelling. They constantly contrast {PRIMARY_CONTRAST_PATTERN — default "Ngày xưa" (The Past) with "Ngày nay" (The Present) if essay is about change. If essay is timeless, use another binary contrast that fits — vd "Cái mình nghĩ vs Cái thực sự là", "Bề mặt vs Bản chất", "Lý trí vs Trực giác"} to evoke "Aha!" moments of recognition (not lecture, not advice).
 
-The Narrative Arc (Structured in {3 OR 4} Movements):
+The Conversational Arc (3 Mature Movements — group essay's sub-points into themes, do NOT list points one by one):
 
-1. {MOVEMENT_1_TITLE}:
-{2-4 sentences setting up the opening question/paradox, what each host argues, key concepts/examples from essay}
+1. {MOVEMENT_1_TITLE — phenomenological / everyday observations}:
+{3-5 sentences: open with a relatable everyday "ngày xưa" observation rooted in essay. Group 2-4 of essay's key points under this movement. What does each host notice/argue? Keep it concrete, not abstract.}
 
-2. {MOVEMENT_2_TITLE}:
-{2-4 sentences with explicit framework name if essay mentions one (Heidegger, Stoicism, etc.) or concrete case from essay. Specify what each host argues.}
+2. {MOVEMENT_2_TITLE — deeper structure / emotional architecture / hidden mechanism}:
+{3-5 sentences: name specific concepts/frameworks/thinkers from essay verbatim (Heidegger, Hedonic Adaptation, Byung-Chul Han, dopamine loop, FOMO…). Continue the contrast pattern. What does each host see that the other misses?}
 
-3. {MOVEMENT_3_TITLE}:
-{2-4 sentences continuing tension/exploration. If essay has tech/AI/modern angle, weave it here.}
+3. {MOVEMENT_3_TITLE — meaning / philosophy / what does this mean for being human}:
+{3-5 sentences: thread philosophical lenses naturally when essay allows — Phật giáo (Vô thường — impermanence), Lão Tử (flowing with change), Trang Tử (fluid identity), Darwin (adaptation > strength), Stoicism, etc. These are flavors not lectures. Connect to essay's deepest insight.}
 
-[Optional 4. {MOVEMENT_4_TITLE}:
-{2-4 sentences — thought experiments, applied implications, or counter-arguments.}]
+Mandatory Structural Transitions:
+The hosts must naturally use these EXACT Vietnamese phrases (in this exact spelling) to bridge ideas. Sprinkle 4-6 times across the conversation:
+- "Nhưng điều thú vị là..."
+- "Điều ít người nhận ra là..."
+- "Và đây mới là phần đáng suy nghĩ..."
+- "Nếu nhìn từ một góc độ khác..."
+- "Nhưng câu chuyện không dừng lại ở đó..."
 
 Ending:
-Conclude with a {ADJECTIVE} and memorable reflection: {1-SENTENCE_KEY_INSIGHT_FROM_ESSAY}. Leave the listeners with the final question: {1_OPEN_QUESTION}?
+Do NOT judge if this evolution/change/phenomenon is good or bad. Do NOT give advice ("hãy trân trọng…"). End with a lingering, profound Vietnamese question that opens MORE questions than answers: {1_OPEN_ENDED_VIETNAMESE_QUESTION — typically "Nếu…, liệu…?" pattern, drawn from essay's deepest insight}. Leave the listeners with curiosity, suy ngẫm, not conclusions.
 
-Tone & Language:
-- Language: The entire spoken discussion must be in Vietnamese ({3-5 Vietnamese adjectives describing register, e.g., sâu sắc, mộc mạc, đậm chất chiêm nghiệm, không sáo rỗng}).
-- Prioritize insight and emotional depth over information density.
+Language & Style:
+- Language: the entire spoken conversation must be in Vietnamese — chậm rãi, sâu lắng, mộc mạc, giàu chất tự sự, không học thuật.
+- Prioritize emotional resonance and nostalgic contrast over information density.
+- Tránh: cụm sáo rỗng ("không thể phủ nhận", "trong cuộc sống hối hả", "guồng quay cuộc sống", "thời đại 4.0"), tone động viên kiểu self-help, lời khuyên cụ thể, thuật ngữ chuyên môn dày đặc.
 
 ---
 
-RULES:
-- Fill EVERY {PLACEHOLDER} with concrete content drawn from the essay. Do NOT leave any placeholder unfilled.
-- Pick movement titles that map directly to essay's actual argument structure, not generic ones.
-- Host lens names must reflect the essay's domain (e.g., "Neuroscience" + "Phenomenology" cho essay về consciousness; "Behavioral Economics" + "Confucian Ethics" cho essay về tiêu dùng).
-- Include at least 1 specific concept/framework/thinker NAME from the essay in a movement.
-- Final question must be open-ended Vietnamese, not yes/no.
-- Output: the FILLED prompt only, in English (except the Vietnamese title trong quotes + final Vietnamese adjective list). No markdown headers, no preamble like "Here is the prompt:", no closing notes.`;
+═══ RULES ═══
+
+R1. Fill EVERY {PLACEHOLDER} with concrete content drawn from the essay. KHÔNG để placeholder trống.
+
+R2. Group essay's sub-points (vd nếu essay có 10 ý → gộp thành 3 movement mỗi cái 3-4 ý). Movement title = THEME, không phải chapter abstract.
+
+R3. "Ngày xưa vs Ngày nay" contrast là BẮT BUỘC nếu essay nói về sự thay đổi / hiện đại / công nghệ / AI. Nếu essay timeless (triết học tình yêu/chết/ý nghĩa) → substitute với binary contrast khác phù hợp essay.
+
+R4. Audience profile phải CỤ THỂ — không chung chung. Default 40-65 với pre-internet memory cho essay về modernity. Đổi nếu essay nhắm audience khác (vd essay về parenthood → "Cha mẹ 30-50 đang nuôi con thời TikTok").
+
+R5. Movement 3 PHẢI có philosophy thread tự nhiên (Phật/Lão Tử/Trang Tử/Darwin/Stoicism…) — pick 1-2 lens phù hợp essay, KHÔNG dump tất cả.
+
+R6. Mandatory Vietnamese transition phrases (5 phrases ở trên) phải xuất hiện VERBATIM trong output prompt — để NLM dùng đúng.
+
+R7. Final question PHẢI là Vietnamese open-ended (dạng "Nếu…, liệu…?" hoặc "Có phải…?" / "Liệu…có còn…?"), KHÔNG advice, KHÔNG yes/no.
+
+R8. Output: filled prompt only, in English (Vietnamese chỉ trong các phần: quoted title, transition phrases, final question, adjective register list). KHÔNG markdown headers, KHÔNG preamble ("Here is the prompt:"), KHÔNG closing notes.`;
 
 export function buildNlmPromptUserContent(
   title: string,

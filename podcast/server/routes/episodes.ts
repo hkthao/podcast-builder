@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import {
   AUDIO_EXTENSIONS,
+  BGM_EXTENSIONS,
   COVER_EXTENSIONS,
   createEmptyEpisode,
   deleteCover,
+  deleteEpisodeBgm,
   deleteEpisodeFile,
   replaceEpisodeAudio,
+  uploadEpisodeBgm,
   getEpisode,
   getPlan,
   getTranscript,
@@ -33,6 +36,9 @@ import {
   generateScriptAudio,
   type TtsVoiceConfig,
 } from "../../../shared/studio-core/podcast-script-tts";
+import { buildCoverPromptUserContent } from "../lib/cover-prompt-store";
+import { chat } from "../../../shared/studio-core/llm-providers";
+import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import {
   ALL_VOICES,
   DEFAULT_HOST_NAM_VOICE,
@@ -211,6 +217,53 @@ episodesRoutes.post("/:name/audio", async (c) => {
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
     const summary = await replaceEpisodeAudio(name, file.name, buf);
+    return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Upload BGM cho episode. Multipart, field "bgm". Ghi `input/{slug}.bgm.{ext}`,
+ * update config.bgm = filename.
+ */
+episodesRoutes.post("/:name/bgm", async (c) => {
+  const name = c.req.param("name");
+  const body = await c.req.parseBody();
+  const file = body["bgm"];
+  if (!file || typeof file === "string" || !(file instanceof File)) {
+    return c.json({ error: "Thiếu field 'bgm' (file)" }, 400);
+  }
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!BGM_EXTENSIONS.includes(ext as (typeof BGM_EXTENSIONS)[number])) {
+    return c.json(
+      {
+        error: `BGM ext không hỗ trợ: .${ext}`,
+        accepted: BGM_EXTENSIONS.map((e) => `.${e}`),
+      },
+      400,
+    );
+  }
+  const buf = new Uint8Array(await file.arrayBuffer());
+  try {
+    const summary = await uploadEpisodeBgm(name, file.name, buf);
+    return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/** Xoá BGM file + clear config.bgm. */
+episodesRoutes.delete("/:name/bgm", async (c) => {
+  const name = c.req.param("name");
+  try {
+    const summary = await deleteEpisodeBgm(name);
     return c.json(summary);
   } catch (e) {
     const err = e as Error & { code?: string };
@@ -616,6 +669,45 @@ episodesRoutes.post("/:name/script/audio", async (c) => {
       turnCount: result.turnCount,
       bgmMixed: bgmMixed !== null,
     });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status = err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Gen prompt tạo ảnh cover (Midjourney/Flux/DALL-E) cho episode. LLM dùng
+ * system prompt từ /prompts (key "podcast.cover-prompt") + title + hook.
+ * Trả về text prompt. KHÔNG persist — user copy hoặc edit.
+ */
+episodesRoutes.post("/:name/cover-prompt", async (c) => {
+  const name = c.req.param("name");
+  const ep = await getEpisode(name);
+  if (!ep) return c.json({ error: `Episode not found: ${name}` }, 404);
+
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as { provider?: string; model?: string };
+  if (body.provider !== "openai" && body.provider !== "ollama") {
+    return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
+  }
+  if (typeof body.model !== "string" || !body.model.trim()) {
+    return c.json({ error: "Thiếu model" }, 400);
+  }
+  try {
+    const content = await chat({
+      provider: body.provider as LLMProvider,
+      model: body.model.trim(),
+      systemPrompt: getEffectivePrompt("podcast.cover-prompt"),
+      userContent: buildCoverPromptUserContent(ep.config.title, ep.config.hook),
+      temperature: 0.7,
+    });
+    return c.json({ prompt: content.trim() });
   } catch (e) {
     const err = e as Error & { code?: string };
     const status = err.code === "VALIDATION" ? 400 : 500;

@@ -58,14 +58,15 @@ const TONES = [
 
 export function Brainstorm() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { workspace } = useWorkspace();
   // Persist form state qua localStorage để reload không mất draft
   const [topic, setTopic] = usePersistedState("brainstorm.topic", "");
-  const [tone, setTone] = usePersistedState("brainstorm.tone", TONES[0]);
+  const [tone] = usePersistedState("brainstorm.tone", TONES[0]);
   const [count, setCount] = usePersistedState("brainstorm.count", 5);
-  // Phase expand: khi true, topic = danh sách ý có sẵn → LLM expand
-  // mỗi ý thành schema 13 field thay vì gen idea mới. Chỉ áp dụng podcast.
-  const [expandUserIdeas, setExpandUserIdeas] = usePersistedState(
+  // Expand mode trước đây dành cho podcast — gallery không dùng nên giữ
+  // false. Để biến tồn tại tránh phá schema localStorage key cũ.
+  const [expandUserIdeas] = usePersistedState(
     "brainstorm.expandUserIdeas",
     false,
   );
@@ -248,6 +249,44 @@ export function Brainstorm() {
     },
   });
 
+  // Brainstorm cho podcast đã bị bỏ — workflow podcast giờ dùng ChatGPT
+  // web để ra idea, paste vào tab Kịch bản của Episode (Essay + Tài liệu
+  // bổ sung). Gallery vẫn giữ vì gallery_chapter_plans phụ thuộc cứng.
+  if (workspace === "podcast") {
+    return (
+      <div className="container max-w-2xl py-10">
+        <Card className="p-6">
+          <div className="flex items-start gap-3">
+            <Lightbulb className="size-6 text-accent mt-1 shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-xl font-serif">
+                Brainstorm cho podcast đã chuyển hướng
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                Phần này đã được gỡ vì ChatGPT web ra ý tưởng tốt hơn. Dùng
+                ChatGPT/Claude web để brainstorm idea, sau đó paste vào tab{" "}
+                <strong>Kịch bản</strong> trong Episode (ô{" "}
+                <em>"Tài liệu bổ sung"</em>) hoặc viết Bài luận trước.
+              </p>
+              <div className="mt-4 flex gap-2 flex-wrap">
+                <Button onClick={() => navigate("/")} size="sm">
+                  Đi tới danh sách tập
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/essay")}
+                >
+                  Đi tới Bài luận
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container max-w-6xl py-10">
       <header className="mb-6">
@@ -256,17 +295,8 @@ export function Brainstorm() {
           Brainstorm
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
-          {workspace === "gallery" ? (
-            <>
-              Generate ý tưởng video tài liệu nghệ thuật từ chủ đề. Sau khi pick →
-              "Lập kế hoạch chương" để gen transcript + visual beats per chương.
-            </>
-          ) : (
-            <>
-              Generate 5 ý tưởng tập từ chủ đề + tone. Sau khi pick → copy
-              title/hook, upload audio NotebookLM rồi điền vào episode config.
-            </>
-          )}
+          Generate ý tưởng video tài liệu nghệ thuật từ chủ đề. Sau khi pick →
+          "Lập kế hoạch chương" để gen transcript + visual beats per chương.
         </p>
       </header>
 
@@ -299,73 +329,18 @@ export function Brainstorm() {
                 </div>
               )}
               <div>
-                <Label htmlFor="topic">
-                  {expandUserIdeas && workspace === "podcast"
-                    ? "Danh sách ý tưởng có sẵn"
-                    : "Chủ đề"}
-                </Label>
+                <Label htmlFor="topic">Chủ đề</Label>
                 <Textarea
                   id="topic"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder={
-                    workspace === "gallery"
-                      ? "VD: Họa sĩ Phục Hưng Ý, Caravaggio và ánh sáng Baroque, Nghệ thuật Hà Lan thế kỷ 17…"
-                      : expandUserIdeas
-                        ? "Paste danh sách ý tưởng (mỗi ý 1 dòng tiêu đề + 1 dòng mô tả ngắn, hoặc đánh số 1. 2. 3.). VD:\n\n1. Bộ nhớ ngoài thay cho bộ nhớ thật\nGoogle, ChatGPT, Notion nhớ giúp ta.\n2. Khả năng tập trung ngày càng ngắn\nTikTok hóa bộ não.\n…"
-                        : "VD: Mù loà trước giá trị hiện tại — vì sao con người không nhận ra điều mình đang có cho tới khi mất…"
-                  }
-                  rows={expandUserIdeas && workspace === "podcast" ? 10 : 3}
+                  placeholder="VD: Họa sĩ Phục Hưng Ý, Caravaggio và ánh sáng Baroque, Nghệ thuật Hà Lan thế kỷ 17…"
+                  rows={3}
                   className="mt-1.5"
                 />
-                {workspace === "podcast" && (
-                  <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={expandUserIdeas}
-                      onChange={(e) => setExpandUserIdeas(e.target.checked)}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <span className="text-muted-foreground leading-relaxed">
-                      <span className="font-medium text-foreground">
-                        Giữ nguyên ý tưởng của tôi — chỉ mở rộng theo cấu trúc
-                      </span>
-                      <br />
-                      Paste danh sách ý có sẵn vào ô trên, LLM sẽ expand từng ý
-                      thành đủ 13 field (hook/observation/scores/outline…) mà
-                      KHÔNG sinh ý mới, KHÔNG gộp/cắt/đảo thứ tự. Field "Số ý
-                      tưởng" sẽ bị bỏ qua (tự = số ý bạn liệt kê).
-                    </span>
-                  </label>
-                )}
               </div>
-              <div
-                className={cn(
-                  "grid gap-3",
-                  // Gallery bỏ field Tone (art-historian persona cố định trong
-                  // system prompt) → còn 3 cột thay vì 4
-                  workspace === "gallery"
-                    ? "grid-cols-1 md:grid-cols-3"
-                    : "grid-cols-2 md:grid-cols-4",
-                )}
-              >
-                {workspace === "podcast" && (
-                  <div>
-                    <Label htmlFor="tone">Tone</Label>
-                    <select
-                      id="tone"
-                      value={tone}
-                      onChange={(e) => setTone(e.target.value)}
-                      className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {TONES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
+                {/* Gallery bỏ field Tone (art-historian persona cố định trong system prompt) */}
                 <div>
                   <Label htmlFor="provider">Provider</Label>
                   <select
@@ -428,12 +403,6 @@ export function Brainstorm() {
                     id="count"
                     value={count}
                     onChange={(e) => setCount(Number(e.target.value))}
-                    disabled={expandUserIdeas && workspace === "podcast"}
-                    title={
-                      expandUserIdeas && workspace === "podcast"
-                        ? "Expand mode: số ý = số bạn liệt kê"
-                        : ""
-                    }
                     className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
                     {[3, 5, 7, 10].map((n) => (
@@ -454,13 +423,7 @@ export function Brainstorm() {
                   <Settings2 className="size-3.5" />
                   <span>
                     System prompt{" "}
-                    <span className="text-muted-foreground">
-                      ({workspace === "gallery"
-                        ? "gallery"
-                        : expandUserIdeas
-                          ? "podcast · expand mode"
-                          : "podcast · brainstorm"})
-                    </span>
+                    <span className="text-muted-foreground">(gallery)</span>
                   </span>
                   {isOverriding && (
                     <Badge
@@ -488,21 +451,8 @@ export function Brainstorm() {
                     />
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p className="text-[10px] text-muted-foreground leading-relaxed">
-                        {workspace === "podcast" && !expandUserIdeas && (
-                          <>
-                            Placeholder <code className="font-mono">{`{N}`}</code> sẽ
-                            được thay bằng số ý tưởng.
-                          </>
-                        )}
-                        {workspace === "gallery" && (
-                          <>
-                            Placeholder <code className="font-mono">{`{N}`}</code> sẽ
-                            được thay bằng số ý tưởng.
-                          </>
-                        )}
-                        {workspace === "podcast" && expandUserIdeas && (
-                          <>Expand mode — SEED_LIST inject vào user message qua code.</>
-                        )}
+                        Placeholder <code className="font-mono">{`{N}`}</code> sẽ
+                        được thay bằng số ý tưởng.
                       </p>
                       {isOverriding && (
                         <Button

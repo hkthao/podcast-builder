@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
-  Upload,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -15,7 +14,6 @@ import { api, type EpisodeStatus, type EpisodeSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 
 export function EpisodeList() {
@@ -27,14 +25,6 @@ export function EpisodeList() {
     queryFn: () => api.listEpisodes(workspace),
   });
 
-  const upload = useMutation({
-    mutationFn: (file: File) => api.uploadAudio(file, { style: workspace }),
-    onSuccess: (ep) => {
-      qc.invalidateQueries({ queryKey: ["episodes"] });
-      navigate(`/episodes/${encodeURIComponent(ep.name)}`);
-    },
-  });
-
   const createEpisode = useMutation({
     mutationFn: (title: string) =>
       api.createEpisode({ title, style: workspace }),
@@ -44,32 +34,10 @@ export function EpisodeList() {
     },
   });
 
-  const [dragOver, setDragOver] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    const audio = files.find((f) => /\.(m4a|mp3|wav)$/i.test(f.name));
-    if (!audio) return;
-    upload.mutate(audio);
-  };
-
   return (
-    <div
-      onDragEnter={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={onDrop}
-      className={cn(
-        "min-h-screen relative",
-        dragOver && "bg-secondary/40",
-      )}
-    >
+    <div className="min-h-screen relative">
       <div className="container max-w-5xl py-10">
         <header className="mb-8 flex items-center justify-between gap-6">
           <div>
@@ -77,34 +45,19 @@ export function EpisodeList() {
             <p className="mt-1 text-muted-foreground text-sm">
               {data ? `${data.episodes.length} tập` : "Đang tải…"}
               {" · "}
-              Kéo audio (.m4a/.mp3/.wav) vào trang để tạo tập mới
+              Tạo tập mới rồi upload audio (hoặc gen TTS) trong trang chi tiết
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              variant="outline"
               onClick={() => setCreateOpen(true)}
               disabled={createEpisode.isPending}
             >
               <Plus className="size-4" />
               Tạo tập mới
             </Button>
-            <UploadButton
-              onPick={(f) => upload.mutate(f)}
-              isUploading={upload.isPending}
-            />
           </div>
         </header>
-
-        {upload.isError && (
-          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-destructive">
-            <div className="flex items-center gap-2 font-medium">
-              <AlertCircle className="size-5" />
-              Upload thất bại
-            </div>
-            <p className="mt-1 text-sm">{String(upload.error)}</p>
-          </div>
-        )}
 
         {isLoading && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -127,12 +80,13 @@ export function EpisodeList() {
           </Card>
         )}
 
-        {data && data.episodes.length === 0 && !upload.isPending && (
+        {data && data.episodes.length === 0 && (
           <Card className="border-dashed p-12 text-center">
             <FileAudio2 className="mx-auto mb-4 size-12 text-muted-foreground" />
             <h2 className="mb-2 text-xl font-serif">Chưa có tập nào</h2>
             <p className="text-muted-foreground">
-              Kéo file audio đầu tiên vào trang, hoặc bấm nút "Upload" ở góc.
+              Bấm <strong>"Tạo tập mới"</strong> ở góc trên — nhập title rồi
+              vào trang chi tiết để upload audio hoặc gen TTS từ kịch bản.
             </p>
           </Card>
         )}
@@ -154,26 +108,6 @@ export function EpisodeList() {
           pending={createEpisode.isPending}
           error={createEpisode.isError ? String(createEpisode.error) : null}
         />
-      )}
-
-      {/* Drag overlay */}
-      {dragOver && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Card className="border-primary border-dashed border-2 px-10 py-12 text-center">
-            <Upload className="mx-auto mb-3 size-12 text-primary" />
-            <p className="text-xl font-medium">Thả audio để tạo tập mới</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              .m4a / .mp3 / .wav
-            </p>
-          </Card>
-        </div>
-      )}
-
-      {upload.isPending && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border bg-card px-5 py-3 shadow-lg">
-          <div className="size-3 animate-pulse rounded-full bg-primary" />
-          <span>Đang upload…</span>
-        </div>
       )}
     </div>
   );
@@ -265,33 +199,6 @@ function CreateEpisodeDialog({
         </div>
       </Card>
     </div>
-  );
-}
-
-function UploadButton({
-  onPick,
-  isUploading,
-}: {
-  onPick: (f: File) => void;
-  isUploading: boolean;
-}) {
-  return (
-    <Button asChild disabled={isUploading} variant="default">
-      <label className="cursor-pointer">
-        <Upload className="size-5" />
-        Upload audio
-        <input
-          type="file"
-          accept=".m4a,.mp3,.wav,audio/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onPick(f);
-            e.target.value = "";
-          }}
-        />
-      </label>
-    </Button>
   );
 }
 

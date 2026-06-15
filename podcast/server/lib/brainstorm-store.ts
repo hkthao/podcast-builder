@@ -8,10 +8,10 @@
  */
 import { chat, type LLMProvider } from "../../../shared/studio-core/llm-providers";
 import { getDb } from "../../../shared/studio-core/db";
+import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import { safeParseJson } from "../../../shared/lib/safe-json";
 import {
   GalleryBrainstormIdeaSchema,
-  GALLERY_SYSTEM_PROMPT,
   buildGalleryUserPrompt,
   type GalleryBrainstormIdea,
 } from "../../../gallery/src/brainstorm-idea";
@@ -742,14 +742,15 @@ export async function generateAndSave(
   // Expand mode dùng prompt RIÊNG (self-contained) — KHÔNG inherit
   // brainstorm prompt vì các quy tắc "đa dạng hoá idea" / "quy trình sinh"
   // gây nhiễu LLM. Brainstorm prompt vẫn dùng placeholder {N}.
+  // Resolution: per-call override > DB override > default constant.
   const baseExpandPrompt =
     input.systemPromptOverride && expandUserIdeas
       ? input.systemPromptOverride
-      : PODCAST_EXPAND_SYSTEM_PROMPT;
+      : getEffectivePrompt("podcast.brainstorm-expand");
   const baseBrainstormPrompt =
     input.systemPromptOverride && !expandUserIdeas
       ? input.systemPromptOverride
-      : PODCAST_SYSTEM_PROMPT;
+      : getEffectivePrompt("podcast.brainstorm");
   const expandedPrompt = expandUserIdeas
     ? baseExpandPrompt
     : baseBrainstormPrompt.replace("{N}", String(count));
@@ -975,7 +976,8 @@ async function generateGalleryAndSave(
     ctx.existingTopics,
   );
 
-  const basePrompt = ctx.systemPromptOverride ?? GALLERY_SYSTEM_PROMPT;
+  const basePrompt =
+    ctx.systemPromptOverride ?? getEffectivePrompt("gallery.brainstorm");
   const content = await chat({
     provider: ctx.provider,
     model: ctx.model,

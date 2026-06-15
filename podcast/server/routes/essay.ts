@@ -4,11 +4,9 @@ import {
   buildEssayUserPrompt,
   buildNlmPromptUserContent,
   deleteEssay,
-  ESSAY_SYSTEM_PROMPT,
   getEssay,
   listEssays,
   newEssayId,
-  NLM_PROMPT_SYSTEM,
   saveEssay,
   saveEssayDerivative,
   updateEssayContent,
@@ -18,6 +16,7 @@ import {
   type ShortsScript,
 } from "../lib/essay-store";
 import { chat, chatStream, type LLMProvider } from "../../../shared/studio-core/llm-providers";
+import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import { safeParseJson } from "../../../shared/lib/safe-json";
 import {
   BLOG_SYSTEM,
@@ -103,7 +102,7 @@ essayRoutes.post("/:id/nlm-prompt", async (c) => {
     const content = await chat({
       provider: body.provider as LLMProvider,
       model: body.model.trim(),
-      systemPrompt: NLM_PROMPT_SYSTEM,
+      systemPrompt: getEffectivePrompt("podcast.nlm-prompt"),
       userContent: buildNlmPromptUserContent(essay.title, essay.content),
       temperature: 0.7,
     });
@@ -216,7 +215,7 @@ essayRoutes.post("/stream", async (c) => {
         {
           provider,
           model,
-          systemPrompt: ESSAY_SYSTEM_PROMPT,
+          systemPrompt: getEffectivePrompt("podcast.essay"),
           userContent: buildEssayUserPrompt(title, outline),
           temperature: 0.8,
         },

@@ -13,6 +13,7 @@ const { INPUT_DIR, OUTPUT_DIR, TMP_DIR } = PATHS;
 
 const AUDIO_EXTS = ["m4a", "mp3", "wav"] as const;
 const COVER_EXTS = ["jpg", "jpeg", "png", "webp"] as const;
+const BGM_EXTS = ["mp3", "m4a", "wav", "aac"] as const;
 
 export type EpisodeStatus =
   | "no-audio"   // chỉ có .json, chưa kéo audio vào
@@ -762,6 +763,93 @@ export async function getPlan(name: string): Promise<PlanPayload> {
 export { PATHS } from "../../../shared/studio-core/paths";
 export const AUDIO_EXTENSIONS = AUDIO_EXTS;
 export const COVER_EXTENSIONS = COVER_EXTS;
+export const BGM_EXTENSIONS = BGM_EXTS;
+
+/**
+ * Upload BGM file cho episode CÓ SẴN. Lưu vào `input/{slug}.bgm.{ext}`,
+ * update config.bgm = filename. Xoá BGM cũ khác extension trước khi ghi.
+ */
+export async function uploadEpisodeBgm(
+  name: string,
+  originalName: string,
+  buffer: Uint8Array,
+): Promise<EpisodeSummary> {
+  const summary = await loadSummary(name);
+  if (!summary) {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  const ext = (originalName.split(".").pop() ?? "").toLowerCase();
+  if (!BGM_EXTS.includes(ext as (typeof BGM_EXTS)[number])) {
+    const err = new Error(
+      `BGM ext không hỗ trợ: ${ext}. Hợp lệ: ${BGM_EXTS.join(", ")}`,
+    );
+    (err as Error & { code: string }).code = "VALIDATION";
+    throw err;
+  }
+
+  // Xoá BGM cũ khác extension (kể cả file cũ user đã set bằng tên khác)
+  for (const oldExt of BGM_EXTS) {
+    const oldPath = path.join(INPUT_DIR, `${name}.bgm.${oldExt}`);
+    if (`${name}.bgm.${oldExt}` === `${name}.bgm.${ext}`) continue;
+    await fs.unlink(oldPath).catch(() => {
+      /* ignore */
+    });
+  }
+
+  await fs.mkdir(INPUT_DIR, { recursive: true });
+  const filename = `${name}.bgm.${ext}`;
+  const bgmPath = path.join(INPUT_DIR, filename);
+  await fs.writeFile(bgmPath, buffer);
+
+  // Update config.bgm
+  const configPath = path.join(INPUT_DIR, `${name}.json`);
+  const config = { ...summary.config, bgm: filename };
+  await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+
+  const updated = await loadSummary(name);
+  if (!updated) throw new Error(`BGM OK nhưng không load lại: ${name}`);
+  return updated;
+}
+
+/**
+ * Xoá BGM file + clear config.bgm. Idempotent — không lỗi nếu file đã
+ * không tồn tại.
+ */
+export async function deleteEpisodeBgm(
+  name: string,
+): Promise<EpisodeSummary> {
+  const summary = await loadSummary(name);
+  if (!summary) {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  // Xoá mọi BGM file extension (file có thể không match config.bgm vì
+  // user edit manual config trước đó)
+  for (const ext of BGM_EXTS) {
+    const bgmPath = path.join(INPUT_DIR, `${name}.bgm.${ext}`);
+    await fs.unlink(bgmPath).catch(() => {
+      /* ignore */
+    });
+  }
+  // Cũng xoá file theo tên trong config.bgm (case user đặt tên khác convention)
+  if (summary.config.bgm) {
+    const customPath = path.join(INPUT_DIR, summary.config.bgm);
+    await fs.unlink(customPath).catch(() => {
+      /* ignore */
+    });
+  }
+  // Clear config.bgm
+  const configPath = path.join(INPUT_DIR, `${name}.json`);
+  const config = { ...summary.config, bgm: null };
+  await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+
+  const updated = await loadSummary(name);
+  if (!updated) throw new Error(`Xoá BGM OK nhưng không load lại: ${name}`);
+  return updated;
+}
 
 export type EpisodeFile = {
   /** Relative filename, vd "mu-loa….m4a" hoặc "mu-loa….mp4" */

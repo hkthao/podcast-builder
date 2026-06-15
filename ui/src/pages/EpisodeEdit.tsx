@@ -26,6 +26,7 @@ import {
   Copy,
   Check,
   Send,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   api,
@@ -38,6 +39,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { EpisodeConfigForm } from "@/components/EpisodeConfigForm";
 import { RenderTab } from "@/components/RenderTab";
 import { SpellFixPanel } from "@/components/SpellFixPanel";
@@ -175,6 +178,12 @@ export function EpisodeEdit() {
 
       {/* Audio uploader — luôn hiện. Prompt mạnh nếu chưa có audio. */}
       <AudioUploadPanel ep={ep} />
+
+      {/* BGM (nhạc nền) — luôn hiện, optional. */}
+      <BgmPanel ep={ep} />
+
+      {/* Cover prompt — gen prompt Midjourney/Flux thumbnail 9:16 */}
+      <CoverPromptPanel ep={ep} />
 
 
       {/* Tabs — 5 top-level (gộp 3 production stage thành "Nội dung") */}
@@ -416,6 +425,325 @@ function AudioUploadPanel({ ep }: { ep: EpisodeSummary }) {
   );
 }
 
+function CoverPromptPanel({ ep }: { ep: EpisodeSummary }) {
+  const modelsQ = useQuery({
+    queryKey: ["llm-models"],
+    queryFn: () => api.listLLMModels(),
+    staleTime: 60_000,
+  });
+  const [provider, setProvider] = useState<"openai" | "ollama">("openai");
+  const [model, setModel] = useState<string>("gpt-4o");
+  const [generated, setGenerated] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const list = modelsQ.data?.[provider] ?? [];
+    if (list.length > 0 && !list.some((m) => m.id === model)) {
+      setModel(list[0].id);
+    }
+  }, [provider, modelsQ.data, model]);
+
+  const genMut = useMutation({
+    mutationFn: () => api.genEpisodeCoverPrompt(ep.name, { provider, model }),
+    onSuccess: (res) => setGenerated(res.prompt),
+  });
+
+  const copyPrompt = async () => {
+    if (!generated) return;
+    try {
+      await navigator.clipboard.writeText(generated);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      alert("Clipboard không khả dụng — copy thủ công.");
+    }
+  };
+
+  return (
+    <Card className="p-5 mb-6">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <ImageIcon className="size-4 text-accent" />
+        <h3 className="font-medium">Prompt tạo ảnh cover (9:16)</h3>
+        {generated && (
+          <Badge variant="outline" className="text-[10px] ml-auto">
+            {generated.length.toLocaleString("vi-VN")} ký tự
+          </Badge>
+        )}
+      </div>
+
+      {generated ? (
+        <Textarea
+          value={generated}
+          onChange={(e) => setGenerated(e.target.value)}
+          rows={Math.min(20, Math.max(8, generated.split("\n").length + 1))}
+          className="font-mono text-xs leading-relaxed"
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Sinh prompt cho Midjourney / Flux / DALL-E để tạo thumbnail style 3D
+          clay render pastel ByteCast. LLM fill title + 5 tickets + 1 notebook
+          phrase theo nội dung tập. Style/material/color giữ nguyên xuyên suốt
+          — bạn có thể sửa system prompt qua{" "}
+          <strong>Settings → System prompts</strong>.
+        </p>
+      )}
+
+      {genMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(genMut.error)}</span>
+        </div>
+      )}
+
+      {/* Footer actions — căn phải */}
+      <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2 flex-wrap">
+        <select
+          value={provider}
+          onChange={(e) => setProvider(e.target.value as "openai" | "ollama")}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+          title="LLM provider"
+        >
+          <option
+            value="openai"
+            disabled={!!modelsQ.data && modelsQ.data.openai.length === 0}
+          >
+            OpenAI
+          </option>
+          <option
+            value="ollama"
+            disabled={!!modelsQ.data && modelsQ.data.ollama.length === 0}
+          >
+            Ollama
+          </option>
+        </select>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs max-w-[200px]"
+          title="LLM model"
+        >
+          {(modelsQ.data?.[provider] ?? []).map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        {generated && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={copyPrompt}
+            title="Copy prompt vào clipboard"
+          >
+            {copied ? (
+              <Check className="size-3.5 text-accent" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+            {copied ? "Đã copy" : "Copy"}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => genMut.mutate()}
+          disabled={genMut.isPending || !model}
+        >
+          {genMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          {genMut.isPending
+            ? "Đang gen…"
+            : generated
+              ? "Gen lại"
+              : "Gen prompt"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function BgmPanel({ ep }: { ep: EpisodeSummary }) {
+  const qc = useQueryClient();
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => api.uploadEpisodeBgm(ep.name, file),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["episode-files", ep.name] });
+    },
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteEpisodeBgm(ep.name),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["episode-files", ep.name] });
+    },
+  });
+  // Volume slider — debounce save xuống server qua saveEpisodeConfig.
+  // Local state để slider mượt; commit khi blur/mouseup hoặc dirty 800ms.
+  const [localVolume, setLocalVolume] = useState(ep.config.bgmVolumeDb);
+  useEffect(() => {
+    setLocalVolume(ep.config.bgmVolumeDb);
+  }, [ep.config.bgmVolumeDb]);
+  const volumeMut = useMutation({
+    mutationFn: (vol: number) =>
+      api.saveEpisodeConfig(ep.name, { ...ep.config, bgmVolumeDb: vol }),
+    onSuccess: (updated) => qc.setQueryData(["episode", ep.name], updated),
+  });
+  const volumeDirty = localVolume !== ep.config.bgmVolumeDb;
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) uploadMut.mutate(f);
+    e.target.value = "";
+  };
+
+  const hasBgm = !!ep.config.bgm;
+  const bgmUrl = hasBgm
+    ? `/input/${encodeURIComponent(ep.config.bgm!)}`
+    : null;
+  const isPending =
+    uploadMut.isPending || deleteMut.isPending || volumeMut.isPending;
+
+  return (
+    <Card className="p-5 mb-6">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Volume2 className="size-4 text-accent" />
+        <h3 className="font-medium">Nhạc nền (BGM)</h3>
+        {hasBgm && (
+          <code className="text-xs font-mono text-muted-foreground truncate ml-auto">
+            {ep.config.bgm}
+          </code>
+        )}
+      </div>
+
+      {hasBgm && bgmUrl ? (
+        <div className="space-y-4">
+          <audio
+            controls
+            preload="metadata"
+            src={bgmUrl}
+            className="w-full h-10"
+          />
+          {/* Volume slider — control bgmVolumeDb config */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-sm">
+                Âm lượng BGM:{" "}
+                <span className="font-mono">{localVolume} dB</span>
+              </Label>
+              {volumeDirty && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => volumeMut.mutate(localVolume)}
+                  disabled={volumeMut.isPending}
+                  className="h-7 text-xs"
+                >
+                  {volumeMut.isPending ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : null}
+                  Lưu
+                </Button>
+              )}
+            </div>
+            <input
+              type="range"
+              min={-40}
+              max={-10}
+              step={1}
+              value={localVolume}
+              onChange={(e) => setLocalVolume(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">
+              -28 dB mặc định cho Remotion render. Khi gen audio TTS bật "Mix
+              BGM", auto-ducking + EQ notch 1-4kHz dùng config riêng (-22 dB
+              base, +10 dB bump intro/outro 3s).
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          BGM (tuỳ chọn) — tải lên <code className="font-mono">.mp3</code> /{" "}
+          <code className="font-mono">.m4a</code> /{" "}
+          <code className="font-mono">.wav</code> /{" "}
+          <code className="font-mono">.aac</code>. Khi render video hoặc gen
+          audio TTS với "Mix BGM" bật, nhạc nền sẽ tự ducking (giảm âm khi
+          voice nói) + EQ notch 1-4kHz để giọng nói rõ hơn.
+        </p>
+      )}
+
+      {uploadMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(uploadMut.error)}</span>
+        </div>
+      )}
+      {deleteMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(deleteMut.error)}</span>
+        </div>
+      )}
+
+      {/* Footer actions — căn phải */}
+      <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2">
+        {hasBgm && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => {
+              if (window.confirm("Xoá BGM của episode này?")) {
+                deleteMut.mutate();
+              }
+            }}
+            disabled={isPending}
+          >
+            {deleteMut.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="size-3.5" />
+            )}
+            Xoá BGM
+          </Button>
+        )}
+        <label>
+          <input
+            type="file"
+            accept=".mp3,.m4a,.wav,.aac,audio/*"
+            onChange={onPick}
+            disabled={isPending}
+            className="hidden"
+          />
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+          >
+            <span className="cursor-pointer">
+              {uploadMut.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Volume2 className="size-3.5" />
+              )}
+              {uploadMut.isPending
+                ? "Đang tải lên…"
+                : hasBgm
+                  ? "Thay BGM"
+                  : "Tải BGM lên"}
+            </span>
+          </Button>
+        </label>
+      </div>
+    </Card>
+  );
+}
+
 function TabButton({
   active,
   onClick,
@@ -528,6 +856,38 @@ function ScenesPanel({
     saveMutation.mutate(next);
   };
 
+  // Sửa chính tả: apply user-pasted dictionary lên text mọi scene
+  const [showSpellFix, setShowSpellFix] = useState(false);
+  const runSpellFix = (
+    rules: SpellFixRule[],
+  ): { wrong: string; right: string; count: number; note?: string }[] => {
+    const aggregated = new Map<
+      string,
+      { wrong: string; right: string; count: number; note?: string }
+    >();
+    const nextScenes = scenes.map((s) => {
+      const { text, applied } = applySpellFix(s.text, rules);
+      for (const a of applied) {
+        const prev = aggregated.get(a.wrong);
+        if (prev) prev.count += a.count;
+        else aggregated.set(a.wrong, { ...a });
+      }
+      return { ...s, text };
+    });
+    const report = Array.from(aggregated.values()).sort(
+      (a, b) => b.count - a.count,
+    );
+    if (
+      report.length > 0 &&
+      window.confirm(
+        `Sửa ${report.reduce((s, r) => s + r.count, 0)} lỗi (${report.length} luật) trong ${scenes.length} cảnh?`,
+      )
+    ) {
+      saveMutation.mutate(nextScenes);
+    }
+    return report;
+  };
+
   if (loading) {
     return <Card className="h-64 animate-pulse bg-muted/30" />;
   }
@@ -612,6 +972,16 @@ function ScenesPanel({
             Tạo lại plan
           </Button>
           <Button
+            variant={showSpellFix ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowSpellFix((v) => !v)}
+            disabled={saveMutation.isPending}
+            title="Mở dictionary các lỗi chính tả — user paste cặp wrong → right"
+          >
+            <SpellCheck className="size-3.5" />
+            Sửa chính tả
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={() => genThumbsMut.mutate()}
@@ -627,6 +997,14 @@ function ScenesPanel({
           </Button>
         </div>
       </div>
+      {showSpellFix && (
+        <SpellFixPanel
+          storageKey="scenes.spell-fix-rules"
+          pending={saveMutation.isPending}
+          onApply={runSpellFix}
+          onClose={() => setShowSpellFix(false)}
+        />
+      )}
       {(saveMutation.isError ||
         genThumbsMut.isError ||
         planJobMut.isError) && (

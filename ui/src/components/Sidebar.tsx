@@ -7,7 +7,6 @@ import {
   Library,
   Lightbulb,
   FileText,
-  Workflow as WorkflowIcon,
   Network,
   Image as ImageIcon,
   Film,
@@ -56,14 +55,8 @@ export function Sidebar() {
 
   // Items chỉ thuộc 1 workspace — switch workspace mà đang ở page only-of-other
   // → navigate về "/" (route "/" tự branch theo workspace mới).
-  const PODCAST_ONLY_PATHS = [
-    "/scenes",
-    "/workflow",
-    "/essay",
-    "/knowledge",
-    "/visual",
-  ];
-  const GALLERY_ONLY_PATHS = ["/research", "/gallery/"];
+  const PODCAST_ONLY_PATHS = ["/scenes", "/essay", "/knowledge", "/visual"];
+  const GALLERY_ONLY_PATHS = ["/research", "/gallery/", "/brainstorm"];
   const switchWorkspace = (next: Workspace) => {
     if (next === workspace) return;
     setWorkspace(next);
@@ -127,16 +120,6 @@ export function Sidebar() {
             <div className="space-y-0.5">
               <SectionLabel>Chung</SectionLabel>
               <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
-              <NavItem
-                to="/workflow"
-                icon={<WorkflowIcon className="size-4" />}
-                label="Workflow"
-              />
-              <NavItem
-                to="/brainstorm"
-                icon={<Lightbulb className="size-4" />}
-                label="Brainstorm"
-              />
               <NavItem
                 to="/essay"
                 icon={<FileText className="size-4" />}
@@ -318,6 +301,19 @@ export function Sidebar() {
       )}
 
       <div className="border-t p-3 space-y-2">
+        <NavLink
+          to="/prompts"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
+              "hover:bg-secondary",
+              isActive && "bg-secondary font-medium",
+            )
+          }
+        >
+          <Lightbulb className="size-3.5" />
+          System prompts
+        </NavLink>
         <NavLink
           to="/settings"
           className={({ isActive }) =>

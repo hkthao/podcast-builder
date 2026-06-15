@@ -12,6 +12,7 @@
  */
 import { getDb } from "./db";
 import { chat, type LLMProvider } from "./llm-providers";
+import { getEffectivePrompt } from "./prompt-overrides-store";
 import type {
   GalleryBrainstormIdea,
   GalleryChapter,
@@ -413,7 +414,7 @@ export async function updatePlanChapters(
 
 // ────── LLM gen transcript per chapter ──────
 
-const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu nghệ thuật tiếng Việt + visual director. Bạn vừa viết voiceover, vừa chỉ định hình ảnh nào hiện song song với từng phần của voiceover — như Khan Academy Smarthistory hoặc Waldemar Januszczak.
+export const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu nghệ thuật tiếng Việt + visual director. Bạn vừa viết voiceover, vừa chỉ định hình ảnh nào hiện song song với từng phần của voiceover — như Khan Academy Smarthistory hoặc Waldemar Januszczak.
 
 Nhiệm vụ: viết VOICEOVER + VISUAL BEATS cho 1 chương của video tài liệu nghệ thuật.
 
@@ -549,7 +550,7 @@ export async function generateChapterTranscript(input: {
   const content = await chat({
     provider: input.provider,
     model: input.model,
-    systemPrompt: TRANSCRIPT_SYSTEM_PROMPT,
+    systemPrompt: getEffectivePrompt("gallery.transcript"),
     userContent: buildTranscriptUserPrompt(
       plan.ideaSnapshot,
       chapter,

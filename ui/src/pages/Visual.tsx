@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import {
   ImageIcon,
   Search,
@@ -171,14 +170,12 @@ function MetaphorCard({ entry }: { entry: VisualEntry }) {
     <div className="rounded border bg-background p-3 flex flex-col gap-2 group hover:border-accent/60 transition-colors">
       <p className="text-sm leading-relaxed flex-1">{entry.metaphor}</p>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Link
-          to="/brainstorm"
-          state={{ jumpToSessionId: entry.sessionId }}
-          className="truncate hover:text-accent hover:underline flex-1"
+        <span
+          className="truncate flex-1"
           title={entry.sessionTopic}
         >
           ← {entry.sessionTopic}
-        </Link>
+        </span>
         <Button
           variant="ghost"
           size="sm"

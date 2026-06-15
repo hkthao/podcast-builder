@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import {
   Network,
   Search,
@@ -171,13 +170,9 @@ function EntryRow({ entry }: { entry: KnowledgeEntry }) {
               className="flex items-center gap-3 text-sm py-1"
             >
               <Sparkles className="size-3 text-accent shrink-0" />
-              <Link
-                to="/brainstorm"
-                state={{ jumpToSessionId: s.id }}
-                className="hover:text-accent hover:underline truncate flex-1"
-              >
+              <span className="truncate flex-1 text-muted-foreground">
                 {s.topic}
-              </Link>
+              </span>
               <span className="text-xs text-muted-foreground font-mono shrink-0">
                 {s.createdAt.slice(0, 10)}
               </span>

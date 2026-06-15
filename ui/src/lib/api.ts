@@ -481,38 +481,6 @@ export type KnowledgeGraph = {
   total: number;
 };
 
-export type WorkflowChain = {
-  id: string;
-  source: "brainstorm" | "essay" | "episode";
-  topic: string;
-  brainstorm: {
-    id: string;
-    topic: string;
-    pickedIdx: number | null;
-    ideaCount: number;
-    tone: string;
-    createdAt: string;
-    categories: string[];
-    topScore: number | null;
-  } | null;
-  essay: {
-    id: string;
-    title: string;
-    wordCount: number;
-    hasNlmPrompt: boolean;
-    updatedAt: string;
-  } | null;
-  episode: {
-    name: string;
-    title: string;
-    hasAudio: boolean;
-    hasOutput: boolean;
-    status: EpisodeStatus;
-  } | null;
-  refsCount: number;
-  updatedAt: string;
-};
-
 export type RenderPhase =
   | "queued"
   | "process-audio"
@@ -854,9 +822,6 @@ export const api = {
   clearServerErrors: () =>
     jsonFetch<{ ok: boolean }>("/api/health/errors", { method: "DELETE" }),
 
-  listWorkflow: (style?: Style) =>
-    jsonFetch<{ chains: WorkflowChain[] }>(`/api/workflow${styleQuery(style)}`),
-
   getKnowledgeGraph: () => jsonFetch<KnowledgeGraph>("/api/knowledge"),
 
   getVisualLibrary: () => jsonFetch<VisualLibrary>("/api/visual"),
@@ -1065,6 +1030,38 @@ export const api = {
     }
     return (await res.json()) as EpisodeSummary;
   },
+
+  uploadEpisodeBgm: async (
+    episodeName: string,
+    file: File,
+  ): Promise<EpisodeSummary> => {
+    const form = new FormData();
+    form.append("bgm", file);
+    const res = await fetch(
+      `/api/episodes/${encodeURIComponent(episodeName)}/bgm`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as EpisodeSummary;
+  },
+
+  deleteEpisodeBgm: (episodeName: string) =>
+    jsonFetch<EpisodeSummary>(
+      `/api/episodes/${encodeURIComponent(episodeName)}/bgm`,
+      { method: "DELETE" },
+    ),
+
+  genEpisodeCoverPrompt: (
+    episodeName: string,
+    input: { provider: LLMProvider; model: string },
+  ) =>
+    jsonFetch<{ prompt: string }>(
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover-prompt`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
 
   uploadEpisodeAudio: async (
     episodeName: string,
@@ -1379,6 +1376,20 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  // ─── System prompts management ──────────────────────────────────────
+  listPrompts: () => jsonFetch<{ prompts: PromptMeta[] }>("/api/prompts"),
+  getPrompt: (key: string) =>
+    jsonFetch<PromptMeta>(`/api/prompts/${encodeURIComponent(key)}`),
+  savePromptOverride: (key: string, value: string) =>
+    jsonFetch<PromptMeta>(`/api/prompts/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+  resetPromptOverride: (key: string) =>
+    jsonFetch<PromptMeta>(`/api/prompts/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    }),
+
   // ─── Phase 4b'' — API keys settings ─────────────────────────────────
   listApiKeys: () =>
     jsonFetch<{ keys: ApiKeyStatus[] }>("/api/settings/keys"),
@@ -1392,6 +1403,16 @@ export const api = {
       `/api/settings/keys/${encodeURIComponent(provider)}`,
       { method: "DELETE" },
     ),
+};
+
+export type PromptMeta = {
+  key: string;
+  label: string;
+  description: string;
+  usedBy: string;
+  defaultValue: string;
+  override: string | null;
+  updatedAt: string | null;
 };
 
 export type ApiKeyProvider = "openai" | "gemini" | "anthropic";
