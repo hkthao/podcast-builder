@@ -62,6 +62,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
+import { StoryboardEditor } from "@/components/StoryboardEditor";
 
 const STATUS_META: Record<
   StoryboardChapter["status"],
@@ -333,6 +334,8 @@ function ChapterCard({
   const [transcript, setTranscript] = useState(chapter.transcript);
   const [dirty, setDirty] = useState(false);
   const saveTimer = useRef<number | null>(null);
+  // Storyboard timeline editor modal — drag-drop visual editor cho shots.
+  const [storyboardOpen, setStoryboardOpen] = useState(false);
 
   // Sync khi parent refresh chapter (sau gen) — nhưng giữ pending edit
   useEffect(() => {
@@ -560,7 +563,7 @@ function ChapterCard({
             onMutate={onMutate}
           />
 
-          {/* Phase 4a: visual beats editor */}
+          {/* Shots editor list view + Storyboard timeline editor modal */}
           <ShotsEditor
             beats={chapter.shots}
             transcript={transcript}
@@ -571,7 +574,24 @@ function ChapterCard({
             )}
             onSave={(beats) => saveMut.mutate({ shots: beats })}
             saving={saveMut.isPending}
+            onOpenTimeline={() => setStoryboardOpen(true)}
           />
+
+          {storyboardOpen && (
+            <StoryboardEditor
+              chapterTitle={chapter.title}
+              chapterIdx={chapterIdx}
+              initialShots={chapter.shots}
+              transcript={chapter.transcript}
+              audioDurationMs={chapter.audioDurationMs ?? 0}
+              onSave={(shots) => {
+                saveMut.mutate({ shots });
+                setStoryboardOpen(false);
+              }}
+              onClose={() => setStoryboardOpen(false)}
+              saving={saveMut.isPending}
+            />
+          )}
 
           {/* Documentary Phase 4: multi-backend asset resolver */}
           <ResolvePanel
@@ -1187,6 +1207,7 @@ function ShotsEditor({
   keywordSuggestions,
   onSave,
   saving,
+  onOpenTimeline,
 }: {
   beats: Shot[];
   transcript: string;
@@ -1194,6 +1215,7 @@ function ShotsEditor({
   keywordSuggestions: string[];
   onSave: (beats: Shot[]) => void;
   saving: boolean;
+  onOpenTimeline?: () => void;
 }) {
   const [expanded, setExpanded] = useState(beats.length > 0);
   const sentences = splitIntoSentences(transcript);
@@ -1345,6 +1367,18 @@ function ShotsEditor({
                 <Loader2 className="size-3 animate-spin" />
                 Đang lưu…
               </span>
+            )}
+            {onOpenTimeline && beats.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onOpenTimeline}
+                disabled={saving}
+                title="Mở storyboard editor — drag-drop kéo thả timeline"
+              >
+                <ImageIcon className="size-3.5" />
+                Storyboard editor
+              </Button>
             )}
             <Button
               size="sm"

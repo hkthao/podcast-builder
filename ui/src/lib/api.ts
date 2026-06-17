@@ -590,6 +590,12 @@ export type Shot = {
   kenBurns: KenBurnsMode;
   durationMs: number | null;
   note: string;
+  // Documentary direction (Phase 1+) — optional additive fields, mirror
+  // gallery/src/shot.ts. Backend backfills defaults in rowToStoryboard.
+  role?: "establishing" | "subject" | "detail" | "concept" | "transition" | "payoff";
+  assetType?: "stock" | "ai" | "archive" | "motion";
+  aiPrompt?: string;
+  transitionIn?: "cut" | "crossfade" | "fadeblack" | "whippan";
 };
 
 export type WordTimestamp = {
