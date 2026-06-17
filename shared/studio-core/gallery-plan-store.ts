@@ -22,6 +22,10 @@ import {
   type VisualBeat,
 } from "../../gallery/src/visual-beat";
 import {
+  classifyBeatSync,
+  loadKnowledgeGraph,
+} from "../../gallery/src/shot-heuristic";
+import {
   WordTimestampSchema,
   type WordTimestamp,
 } from "../../gallery/src/word-timestamp";
@@ -456,21 +460,35 @@ Mỗi beat phải có:
   * "pan-up": cho tranh dọc/altarpiece cao
   * "pan-down": từ trời xuống đất (rare)
   * "static": chỉ dùng cho text overlay/diagram (hiếm)
+- "role": vai trò shot trong mạch kể tài liệu (CHỌN 1 trong 6):
+  * "establishing": mở không gian/thời gian (1 chapter chỉ 1-2 establishing đầu)
+  * "subject": chân dung họa sĩ, tượng nhân vật, ảnh tác phẩm cụ thể
+  * "detail": cận cảnh, nhấn 1 chi tiết (chữ ký, nét cọ, ngón tay)
+  * "concept": ý trừu tượng → motion graphic (perspective, chiaroscuro)
+  * "transition": cầu nối ngắn giữa 2 đoạn
+  * "payoff": câu chốt, quote, cao trào (mỗi chương 1-2 cái)
+- "assetType": nguồn asset cần fetch (CHỌN 1 trong 4):
+  * "archive": tranh/tượng public-domain → search Wikimedia Commons
+  * "stock": footage cảnh thật ngày nay → Pexels (vd "Padua Italy aerial")
+  * "ai": cảnh không quay/không có archive → Draw Things gen (vd "Giotto workshop 14th century")
+  * "motion": Remotion vẽ động (Quote, Timeline, PerspectiveDiagram, …)
 - "note": (optional, "" nếu không cần) — gợi ý cho asset team, vd "ưu tiên ảnh restoration 2002".
 
 Quy tắc beat:
 - Beat đầu (sentenceIdx=0) PHẢI có — establish shot mở chương.
-- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có beat của tác phẩm đó.
+- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có beat của tác phẩm đó (role="subject", assetType="archive").
 - KHÔNG để gap > 4 câu giữa 2 beats (khán giả sẽ nhìn 1 hình quá lâu).
 - Đa dạng kenBurns — không dồn hết zoom-in.
+- Đa dạng assetType — KHÔNG để 4+ beat archive liên tiếp; chèn motion ("concept" role) khi giải thích khái niệm, hoặc stock ("establishing") khi nhắc địa danh ngày nay.
 
 OUTPUT JSON CHẶT (KHÔNG markdown wrap, KHÔNG meta-text):
 
 {
   "transcript": "Câu 1. Câu 2. ... Câu N.",
   "visualBeats": [
-    {"sentenceIdx": 0, "keyword": "...", "kenBurns": "zoom-in", "note": ""},
-    {"sentenceIdx": 3, "keyword": "...", "kenBurns": "pan-right", "note": ""},
+    {"sentenceIdx": 0, "keyword": "Arena Chapel interior wide angle", "kenBurns": "zoom-out", "role": "establishing", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 3, "keyword": "Giotto Lamentation full fresco", "kenBurns": "pan-right", "role": "subject", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 8, "keyword": "perspective diagram axial lines", "kenBurns": "static", "role": "concept", "assetType": "motion", "note": ""},
     ...
   ]
 }`;
@@ -574,10 +592,22 @@ export async function generateChapterTranscript(input: {
     );
   }
   const sentenceCount = countSentences(transcript);
-  const visualBeats: VisualBeat[] = Array.isArray(parsed.visualBeats)
+  const parsedBeats: VisualBeat[] = Array.isArray(parsed.visualBeats)
     ? (parsed.visualBeats as unknown[])
         .map((b) => {
-          const r = VisualBeatSchema.safeParse(b);
+          // Soft-coerce documentary fields trước Zod parse: LLM đôi khi
+          // trả enum sai → tránh reject toàn beat, chỉ drop field xấu.
+          const obj = (b && typeof b === "object" ? { ...b } : {}) as Record<
+            string,
+            unknown
+          >;
+          for (const k of ["role", "assetType", "transitionIn"] as const) {
+            if (k in obj && typeof obj[k] !== "string") delete obj[k];
+          }
+          if ("aiPrompt" in obj && typeof obj.aiPrompt !== "string") {
+            delete obj.aiPrompt;
+          }
+          const r = VisualBeatSchema.safeParse(obj);
           return r.success ? r.data : null;
         })
         .filter((b): b is VisualBeat => b !== null)
@@ -589,6 +619,35 @@ export async function generateChapterTranscript(input: {
         // Đảm bảo monotonic tăng — LLM đôi khi lộn xộn
         .sort((a, b) => a.sentenceIdx - b.sentenceIdx)
     : [];
+
+  // Documentary direction Phase 2: chạy heuristic classifier per-beat trên
+  // câu narration thực tế. Override LLM choices khi heuristic confidence cao
+  // (matched knowledge graph entry); chỉ FILL field undefined cho beats LLM
+  // bỏ qua. Series infer từ idea title — first proper noun → slug.
+  const sentences = splitTranscriptSentences(transcript);
+  const series = inferSeriesSlug(plan.ideaSnapshot.title);
+  const graph = await loadKnowledgeGraph(series);
+  const visualBeats: VisualBeat[] = parsedBeats.map((beat) => {
+    const sentence = sentences[beat.sentenceIdx] ?? "";
+    if (!sentence.trim()) return beat;
+    const c = classifyBeatSync({ sentence, graph });
+    // High confidence (≥ 0.8): heuristic override LLM choice. Match cụ thể
+    // tên tác phẩm/người/địa danh → đáng tin hơn LLM context-based judgment.
+    // Lower confidence: chỉ fill khi LLM bỏ trống.
+    const trustHeuristic = c.confidence >= 0.8;
+    return {
+      ...beat,
+      role: trustHeuristic ? c.role : beat.role,
+      assetType:
+        beat.assetType === undefined
+          ? c.assetType
+          : trustHeuristic
+            ? c.assetType
+            : beat.assetType,
+      aiPrompt:
+        beat.aiPrompt ?? (c.assetType === "ai" ? c.aiPrompt : beat.aiPrompt),
+    };
+  });
 
   chapter.transcript = transcript;
   chapter.visualBeats = visualBeats;
@@ -610,6 +669,64 @@ export function countSentences(transcript: string): number {
     .split(/[.!?]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0).length;
+}
+
+/**
+ * Split transcript → sentences array. Index trả về 0-based, đồng bộ với
+ * sentenceIdx ở VisualBeat. Documentary Phase 2 dùng để classify per-beat.
+ */
+export function splitTranscriptSentences(transcript: string): string[] {
+  if (!transcript.trim()) return [];
+  return transcript
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * Suy series slug từ title brainstorm idea → key để load knowledge graph
+ * trong `gallery/data/seasons/<slug>.json`. Heuristic: lấy first proper-noun
+ * (chữ đầu hoa) trong title sau khi strip articles. Vd:
+ *   "Giotto di Bondone — Tiền-Phục Hưng Ý" → "giotto"
+ *   "Caravaggio và bóng tối" → "caravaggio"
+ *   "Một câu chuyện về Vermeer" → "vermeer"
+ * Trả null nếu không tìm được proper-noun rõ ràng (knowledge graph fallback
+ * sẽ empty, heuristic về detail+archive).
+ */
+export function inferSeriesSlug(title: string): string | null {
+  // Strip Vietnamese articles + common filler words
+  const skipWords = new Set([
+    "một",
+    "câu",
+    "chuyện",
+    "về",
+    "của",
+    "và",
+    "the",
+    "a",
+    "an",
+    "le",
+    "la",
+    "el",
+  ]);
+  const tokens = title
+    .replace(/[—–\-,:]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  for (const w of tokens) {
+    if (skipWords.has(w.toLowerCase())) continue;
+    // Proper noun heuristic: chữ cái đầu hoa, không phải digit
+    if (/^[A-ZÀ-Ỹ]/.test(w)) {
+      return w
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/đ/gi, "d")
+        .replace(/[^a-z0-9]/g, "");
+    }
+  }
+  return null;
 }
 
 // ────── Phase 4b: TTS + Whisper alignment ──────
