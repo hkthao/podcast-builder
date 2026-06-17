@@ -32,7 +32,7 @@ import {
   loadKnowledgeGraph,
   type KnowledgeGraph,
 } from "../../gallery/src/shot-heuristic";
-import type { VisualBeat } from "../../gallery/src/visual-beat";
+import type { Shot } from "../../gallery/src/shot";
 import { getApiKey } from "./api-keys-store";
 
 // ── Public types ─────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ async function exists(p: string): Promise<boolean> {
 function hashBeat(input: {
   planId: string;
   chapterIdx: number;
-  beat: VisualBeat;
+  beat: Shot;
   beatOrdinal: number;
   /** Source string đặc trưng — query Wikimedia, query Pexels, prompt AI, recipe motion. */
   source: string;
@@ -390,7 +390,7 @@ async function writePromptFile(input: {
 async function resolveOneBeat(input: {
   planId: string;
   chapterIdx: number;
-  beat: VisualBeat;
+  beat: Shot;
   beatIdx: number;
   beatOrdinal: number;
   sentence: string;
@@ -643,7 +643,7 @@ async function resolveOneBeat(input: {
  *
  * Caller pass:
  *  - planId + chapterIdx (cho hash determinism)
- *  - chapter object (transcript + visualBeats[])
+ *  - chapter object (transcript + shots[])
  *  - series slug (cho heuristic re-derive queries)
  *  - options (cacheDir, pexelsKey, watchDir, dimensions)
  */
@@ -652,7 +652,7 @@ export async function resolveChapterAssets(input: {
   chapterIdx: number;
   chapter: {
     transcript: string;
-    visualBeats: VisualBeat[];
+    shots: Shot[];
   };
   series: string | null;
   options: ResolverOptions;
@@ -665,12 +665,12 @@ export async function resolveChapterAssets(input: {
   const pending: PendingBeat[] = [];
   const failed: FailedBeat[] = [];
 
-  // Track ordinal beats with same sentence (cho AI hash determinism — 2 beat
+  // Track ordinal shots with same sentence (cho AI hash determinism — 2 shots
   // AI trong cùng sentence sẽ có hash khác → 2 ảnh khác)
   const sentenceCounter = new Map<number, number>();
 
-  for (let i = 0; i < input.chapter.visualBeats.length; i++) {
-    const beat = input.chapter.visualBeats[i];
+  for (let i = 0; i < input.chapter.shots.length; i++) {
+    const beat = input.chapter.shots[i];
     const ord = sentenceCounter.get(beat.sentenceIdx) ?? 0;
     sentenceCounter.set(beat.sentenceIdx, ord + 1);
     const sentence = sentences[beat.sentenceIdx] ?? "";

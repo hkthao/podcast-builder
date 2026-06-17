@@ -133,7 +133,9 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
   const body = raw as {
     transcript?: string;
     status?: GalleryPlanChapter["status"];
-    visualBeats?: GalleryPlanChapter["visualBeats"];
+    shots?: GalleryPlanChapter["shots"];
+    /** @deprecated Legacy alias for shots — vẫn accept để client cũ work. */
+    visualBeats?: GalleryPlanChapter["shots"];
   };
   if (
     body.status !== undefined &&
@@ -146,8 +148,9 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
       400,
     );
   }
-  if (body.visualBeats !== undefined && !Array.isArray(body.visualBeats)) {
-    return c.json({ error: "visualBeats phải là array" }, 400);
+  const shotsInBody = body.shots ?? body.visualBeats;
+  if (shotsInBody !== undefined && !Array.isArray(shotsInBody)) {
+    return c.json({ error: "shots phải là array" }, 400);
   }
   try {
     const plan = await updateChapter(id, idx, body);
@@ -347,7 +350,7 @@ galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
       400,
     );
   }
-  if (chapter.visualBeats.length === 0) {
+  if (chapter.shots.length === 0) {
     return c.json(
       { error: "Chapter chưa có visualBeats — gen transcript trước" },
       400,
@@ -408,7 +411,7 @@ galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
       attached++;
     }
     if (beatPatches.length > 0) {
-      const newBeats = chapter.visualBeats.map((b, i) => {
+      const newBeats = chapter.shots.map((b, i) => {
         const patch = beatPatches.find((p) => p.beatIdx === i);
         return patch ? { ...b, assetIdRef: patch.assetId } : b;
       });

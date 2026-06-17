@@ -1,17 +1,21 @@
 /**
- * Visual beat — Phase 4a.
+ * Shot — đơn vị hình ảnh nhỏ nhất trong storyboard (đổi tên từ "VisualBeat"
+ * để đồng bộ thuật ngữ video-making, theo PLAN_STORYBOARD + ViMax convention).
  *
- * Khi user duyệt 1 narration chapter, LLM sinh KÈM:
+ * Khi user duyệt 1 narration chapter của storyboard, LLM sinh KÈM:
  *   - transcript (prose) cho TTS đọc
- *   - visualBeats (sidecar) — danh sách "khoảnh khắc hình ảnh" anchored
- *     theo sentence index trong transcript
+ *   - shots (sidecar) — danh sách "khoảnh khắc hình ảnh" anchored theo
+ *     sentence index trong transcript
  *
- * Lúc render (Phase 4d), beats được align với word timestamps từ TTS+Whisper
- * (Phase 4b) để biết MỖI BEAT bắt đầu/kết thúc tại millisecond nào trong audio.
+ * Lúc render, shots được align với word timestamps từ TTS+Whisper để biết
+ * MỖI SHOT bắt đầu/kết thúc tại millisecond nào trong audio.
  *
  * Anchor design: dùng sentenceIdx (0-indexed sau khi split bằng [.!?]) thay vì
  * char range. Fragile hơn token nhưng survive edit nhẹ (sửa chính tả, từ vựng).
- * Nếu user edit nặng → mismatch → UI hiện cảnh báo + nút "Re-suggest beats".
+ * Nếu user edit nặng → mismatch → UI hiện cảnh báo + nút "Re-suggest shots".
+ *
+ * Backward-compat: legacy data trong DB có field "visualBeats" — store layer
+ * tự nhận biết khi rowToStoryboard load JSON (đọc cả 2 tên, prefer "shots").
  */
 import { z } from "zod";
 
@@ -127,10 +131,10 @@ export const SHOT_DURATION_MS: Record<ShotRole, { min: number; max: number }> =
     payoff: { min: 3000, max: 6000 },
   };
 
-export const VisualBeatSchema = z.object({
+export const ShotSchema = z.object({
   /**
    * Sentence index (0-based) trong transcript chapter. Anchor để biết
-   * beat bắt đầu ở câu nào. Render engine align với TTS word timestamps
+   * shot bắt đầu ở câu nào. Render engine align với TTS word timestamps
    * để tính ms.
    */
   sentenceIdx: z.number().int().min(0),
@@ -140,28 +144,28 @@ export const VisualBeatSchema = z.object({
    * interior wide shot", "Lamentation Mary cradling Christ detail".
    * NÊN dùng tiếng Anh để search engine ra ảnh đúng (tên tác phẩm gốc).
    *
-   * Allow empty cho beat user thêm thủ công ("Thêm beat" trên UI) — sẽ
+   * Allow empty cho shot user thêm thủ công ("Thêm shot" trên UI) — sẽ
    * fill keyword sau. Render thấy keyword rỗng → placeholder text.
    */
   keyword: z.string().default(""),
   /**
    * Asset đã pin/save trong Research library — link tới gallery_assets.id.
-   * Null = chưa attach, beat chỉ có keyword. User attach sau khi review.
+   * Null = chưa attach, shot chỉ có keyword. User attach sau khi review.
    */
   assetIdRef: z.string().nullable().default(null),
   /** Camera motion. Default "zoom-in" cho ảnh chân dung/portrait. */
   kenBurns: z.enum(KEN_BURNS_MODES).default("zoom-in"),
   /**
    * Override thời lượng (ms). null = auto = từ start của câu này đến start
-   * câu của beat sau (hoặc end audio). Set khi muốn beat ngắn/dài thủ công.
+   * câu của shot sau (hoặc end audio). Set khi muốn shot ngắn/dài thủ công.
    */
   durationMs: z.number().int().nullable().default(null),
   /** Note tự do cho asset team — vd "ảnh phải có chữ ký Giotto trong góc". */
   note: z.string().default(""),
 
   // ── Documentary direction (Phase 1) — optional, backward-compatible ──
-  // Beats cũ load qua rowToPlan → safeParse: thiếu các field này thì Zod
-  // áp default ("detail" cho role) hoặc giữ undefined (assetType/aiPrompt/
+  // Shots cũ load qua rowToStoryboard → safeParse: thiếu các field này thì
+  // Zod áp default ("detail" cho role) hoặc giữ undefined (assetType/aiPrompt/
   // transitionIn). Tránh `.optional()` cho role vì nó đáng có default rõ.
 
   /**
@@ -173,7 +177,7 @@ export const VisualBeatSchema = z.object({
   /**
    * Nguồn asset cần resolver fetch. Undefined = chưa classify; resolver
    * suy ra từ assetIdRef nếu user đã pin asset từ Research library, hoặc
-   * skip beat khỏi resolve queue.
+   * skip shot khỏi resolve queue.
    */
   assetType: AssetTypeSchema.optional(),
 
@@ -185,10 +189,18 @@ export const VisualBeatSchema = z.object({
   aiPrompt: z.string().optional(),
 
   /**
-   * Transition VÀO beat này. Undefined = render dùng DEFAULT_TRANSITION_BY_ROLE.
-   * Cho phép user override per-beat khi cần nhịp đặc biệt (vd whippan trước
+   * Transition VÀO shot này. Undefined = render dùng DEFAULT_TRANSITION_BY_ROLE.
+   * Cho phép user override per-shot khi cần nhịp đặc biệt (vd whippan trước
    * payoff thay vì crossfade mặc định cho subject).
    */
   transitionIn: TransitionSchema.optional(),
 });
-export type VisualBeat = z.infer<typeof VisualBeatSchema>;
+export type Shot = z.infer<typeof ShotSchema>;
+
+// ── Legacy alias — backward-compat for in-flight imports ─────────────────
+// VisualBeat đã rename thành Shot (PLAN_STORYBOARD sync). Giữ alias để
+// downstream files có thể migrate dần, không phải rename cùng commit.
+/** @deprecated Use `Shot` */
+export type VisualBeat = Shot;
+/** @deprecated Use `ShotSchema` */
+export const VisualBeatSchema = ShotSchema;

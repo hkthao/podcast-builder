@@ -14,7 +14,7 @@
  * pipeline (Phase 22) tải vào shared/asset-cache/ khi cần.
  */
 import { z } from "zod";
-import { AssetTypeSchema } from "./visual-beat";
+import { AssetTypeSchema } from "./shot";
 
 export const ChapterMoodSchema = z.enum([
   "reverent",

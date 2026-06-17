@@ -28,7 +28,7 @@ import { prefetchAssetsBatch } from "./gallery-asset-prefetch";
 import { bus } from "./events";
 import { getAsset } from "./gallery-asset-store";
 import { PATHS } from "./paths";
-import type { VisualBeat } from "../../gallery/src/visual-beat";
+import type { Shot } from "../../gallery/src/shot";
 import type { WordTimestamp } from "../../gallery/src/word-timestamp";
 import type {
   GalleryChapterProps,
@@ -89,7 +89,7 @@ function computeSentenceStartMs(
  * Tính endMs cho beat thứ i = startMs của beat i+1 hoặc audio end.
  */
 function computeBeatRanges(
-  beats: VisualBeat[],
+  beats: Shot[],
   sentenceStartMs: number[],
   audioDurationMs: number,
 ): Array<{ startMs: number; endMs: number }> {
@@ -145,7 +145,7 @@ export async function buildChapterProps(
       audioDurationMs,
     );
     const ranges = computeBeatRanges(
-      chapter.visualBeats,
+      chapter.shots,
       sentenceStartMs,
       audioDurationMs,
     );
@@ -153,7 +153,7 @@ export async function buildChapterProps(
     // Phase 4d.x: prefetch assets về local /tmp/ trước render để Remotion
     // fetch từ localhost (tránh Wikimedia/Met CDN timeout/UA-block).
     const assetsToFetch: Array<{ assetId: string; remoteUrl: string }> = [];
-    for (const b of chapter.visualBeats) {
+    for (const b of chapter.shots) {
       if (!b.assetIdRef) continue;
       const asset = getAsset(b.assetIdRef);
       if (asset?.fullUrl) {
@@ -165,7 +165,7 @@ export async function buildChapterProps(
     }
     const localPathMap = await prefetchAssetsBatch(assetsToFetch);
 
-    resolvedBeats = chapter.visualBeats.map((b, i) => {
+    resolvedBeats = chapter.shots.map((b, i) => {
       const range = ranges[i];
       const startFrame = Math.floor((range.startMs / 1000) * FPS);
       const endFrame = Math.floor((range.endMs / 1000) * FPS);

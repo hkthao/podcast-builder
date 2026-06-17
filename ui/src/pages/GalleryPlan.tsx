@@ -53,7 +53,7 @@ import {
   type KenBurnsMode,
   type LLMProvider,
   type SavedAsset,
-  type VisualBeat,
+  type Shot,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -561,15 +561,15 @@ function ChapterCard({
           />
 
           {/* Phase 4a: visual beats editor */}
-          <VisualBeatsEditor
-            beats={chapter.visualBeats}
+          <ShotsEditor
+            beats={chapter.shots}
             transcript={transcript}
             sentenceCount={countSentences(transcript)}
             keywordSuggestions={buildBeatKeywordSuggestions(
               chapter,
               ideaSnapshot,
             )}
-            onSave={(beats) => saveMut.mutate({ visualBeats: beats })}
+            onSave={(beats) => saveMut.mutate({ shots: beats })}
             saving={saveMut.isPending}
           />
 
@@ -577,7 +577,7 @@ function ChapterCard({
           <ResolvePanel
             planId={planId}
             chapterIdx={chapterIdx}
-            beats={chapter.visualBeats}
+            beats={chapter.shots}
             onMutate={onMutate}
           />
 
@@ -1000,8 +1000,8 @@ function VideoPanel({
   const isMusic = chapter.kind === "music";
   const hasVideo = chapter.videoFilename !== null;
   const hasAudio = chapter.audioFilename !== null;
-  const beatsCount = chapter.visualBeats.length;
-  const beatsWithAsset = chapter.visualBeats.filter(
+  const beatsCount = chapter.shots.length;
+  const beatsWithAsset = chapter.shots.filter(
     (b) => b.assetIdRef !== null,
   ).length;
   const durSec = chapter.videoDurationMs
@@ -1180,7 +1180,7 @@ function buildBeatKeywordSuggestions(
   return out;
 }
 
-function VisualBeatsEditor({
+function ShotsEditor({
   beats,
   transcript,
   sentenceCount,
@@ -1188,11 +1188,11 @@ function VisualBeatsEditor({
   onSave,
   saving,
 }: {
-  beats: VisualBeat[];
+  beats: Shot[];
   transcript: string;
   sentenceCount: number;
   keywordSuggestions: string[];
-  onSave: (beats: VisualBeat[]) => void;
+  onSave: (beats: Shot[]) => void;
   saving: boolean;
 }) {
   const [expanded, setExpanded] = useState(beats.length > 0);
@@ -1203,7 +1203,7 @@ function VisualBeatsEditor({
     (b) => b.sentenceIdx < 0 || b.sentenceIdx >= sentenceCount,
   );
 
-  const updateBeat = (i: number, patch: Partial<VisualBeat>) => {
+  const updateBeat = (i: number, patch: Partial<Shot>) => {
     const next = beats.map((b, j) => (j === i ? { ...b, ...patch } : b));
     onSave(next);
   };
@@ -1245,7 +1245,7 @@ function VisualBeatsEditor({
     const keywordPool =
       keywordSuggestions.length > 0 ? keywordSuggestions : [""];
     const stride = Math.max(1, sentenceCount / targetBeatCount);
-    const added: VisualBeat[] = [];
+    const added: Shot[] = [];
     for (let i = 0; i < targetBeatCount && added.length < needed; i++) {
       const idx = Math.min(
         sentenceCount - 1,
@@ -1396,13 +1396,13 @@ function BeatRow({
   onDelete,
   disabled,
 }: {
-  beat: VisualBeat;
+  beat: Shot;
   idx: number;
   totalBeats: number;
   sentences: string[];
   sentenceCount: number;
   keywordSuggestions: string[];
-  onUpdate: (patch: Partial<VisualBeat>) => void;
+  onUpdate: (patch: Partial<Shot>) => void;
   onDelete: () => void;
   disabled: boolean;
 }) {
@@ -1517,7 +1517,7 @@ function BeatAssetSlot({
   onDetach,
   disabled,
 }: {
-  beat: VisualBeat;
+  beat: Shot;
   keywordSuggestions: string[];
   onAttach: (assetId: string) => void;
   onDetach: () => void;
@@ -2378,7 +2378,7 @@ function ResolvePanel({
 }: {
   planId: string;
   chapterIdx: number;
-  beats: import("@/lib/api").VisualBeat[];
+  beats: import("@/lib/api").Shot[];
   onMutate: (plan: GalleryChapterPlan) => void;
 }) {
   const [expanded, setExpanded] = useState(false);

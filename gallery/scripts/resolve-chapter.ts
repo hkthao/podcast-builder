@@ -115,7 +115,7 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
-  if (chapter.visualBeats.length === 0) {
+  if (chapter.shots.length === 0) {
     console.error(
       `✗ Chapter ${chapterIdx} chưa có visualBeats — gen transcript trước.`,
     );
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
   console.log(`Title     : ${plan.ideaSnapshot.title}`);
   console.log(`Series    : ${series ?? "<none>"}`);
   console.log(`Chapter   : ${chapterIdx + 1}/${plan.chapters.length} — ${chapter.title}`);
-  console.log(`Beats     : ${chapter.visualBeats.length}`);
+  console.log(`Beats     : ${chapter.shots.length}`);
 
   const opts = defaultResolverOptions({ planId });
   if (watchDir) opts.drawThingsWatchDir = watchDir;

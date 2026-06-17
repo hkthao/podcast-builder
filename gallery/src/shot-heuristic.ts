@@ -20,7 +20,7 @@ import path from "node:path";
 import type {
   AssetType,
   ShotRole,
-} from "./visual-beat";
+} from "./shot";
 
 // ── Knowledge graph schema (per-series JSON) ──────────────────────────────
 

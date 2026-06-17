@@ -583,7 +583,7 @@ export type KenBurnsMode =
   | "pan-down"
   | "static";
 
-export type VisualBeat = {
+export type Shot = {
   sentenceIdx: number;
   keyword: string;
   assetIdRef: string | null;
@@ -601,7 +601,7 @@ export type WordTimestamp = {
 export type GalleryPlanChapter = GalleryChapter & {
   transcript: string;
   /** Phase 4a: visual beats sidecar — anchored bằng sentenceIdx. */
-  visualBeats: VisualBeat[];
+  shots: Shot[];
   status: "pending" | "draft" | "approved";
   /** Phase 4b: TTS audio filename (trong /tmp/) + duration + word timestamps. */
   audioFilename: string | null;
@@ -1263,7 +1263,7 @@ export const api = {
     patch: {
       transcript?: string;
       status?: GalleryPlanChapter["status"];
-      visualBeats?: VisualBeat[];
+      shots?: Shot[];
     },
   ) =>
     jsonFetch<GalleryChapterPlan>(
