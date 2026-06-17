@@ -1297,6 +1297,10 @@ function BeatAssetSlot({
   );
 }
 
+// Picker tabs — Library = saved assets DB; live tabs filter research search
+// theo single provider để user nhanh chóng kiểm 1 nguồn.
+type PickerTab = "library" | "wikimedia" | "pexels";
+
 function BeatAssetPicker({
   initialQuery,
   suggestions,
@@ -1310,7 +1314,16 @@ function BeatAssetPicker({
 }) {
   const qc = useQueryClient();
   const [q, setQ] = useState(initialQuery);
-  const [tab, setTab] = useState<"library" | "live">("library");
+  const [tab, setTab] = useState<PickerTab>("library");
+
+  // Provider availability — biết tab nào enable (vd Pexels cần API key).
+  const providersQ = useQuery({
+    queryKey: ["research-providers"],
+    queryFn: () => api.listResearchProviders(),
+    staleTime: 60_000,
+  });
+  const providerEnabled = (id: string): boolean =>
+    providersQ.data?.providers.find((p) => p.id === id)?.enabled ?? true;
 
   const libraryQ = useQuery({
     queryKey: ["research-library-pick", q],
@@ -1318,21 +1331,24 @@ function BeatAssetPicker({
     enabled: tab === "library",
   });
 
+  const liveTab = tab === "wikimedia" || tab === "pexels" ? tab : null;
   const searchQ = useQuery({
-    queryKey: ["research-search-pick", q],
+    queryKey: ["research-search-pick", liveTab, q],
     queryFn: () =>
       api.searchResearch({
         q,
         kind: "image",
+        providers: liveTab ? [liveTab] : undefined,
         page: 1,
         pageSize: 12,
       }),
-    enabled: tab === "live" && q.trim().length >= 2,
+    enabled:
+      liveTab !== null && q.trim().length >= 2 && providerEnabled(liveTab),
     // Live search có rate limit — không auto refetch
     staleTime: 5 * 60_000,
+    retry: false,
   });
 
-  // Save + attach trong 1 click cho live search result (chưa trong library)
   const saveMut = useMutation({
     mutationFn: (asset: AssetResult) => api.saveResearchAsset(asset),
     onSuccess: (saved) => {
@@ -1343,54 +1359,60 @@ function BeatAssetPicker({
 
   return (
     <div className="mt-2 pt-3 border-t space-y-2">
+      {/* Row 1 compact: tabs + search + close */}
       <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0 p-0.5 rounded border bg-secondary/30 shrink-0">
+          {(
+            [
+              { id: "library", label: "Library" },
+              { id: "wikimedia", label: "Wikimedia" },
+              { id: "pexels", label: "Pexels" },
+            ] as const
+          ).map((t) => {
+            const disabled =
+              (t.id === "wikimedia" || t.id === "pexels") &&
+              !providerEnabled(t.id);
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                disabled={disabled}
+                title={disabled ? "Provider chưa enable (cần API key)" : undefined}
+                className={cn(
+                  "px-2 py-1 text-xs rounded transition-colors",
+                  tab === t.id
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                  disabled && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
+                )}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
         <input
           type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search keyword (tiếng Anh)…"
-          className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+          className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs"
         />
-        <div className="flex items-center gap-0.5 p-0.5 rounded border bg-secondary/30">
-          <button
-            onClick={() => setTab("library")}
-            className={cn(
-              "px-2 py-1 text-xs rounded transition-colors",
-              tab === "library"
-                ? "bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Library
-          </button>
-          <button
-            onClick={() => setTab("live")}
-            className={cn(
-              "px-2 py-1 text-xs rounded transition-colors",
-              tab === "live"
-                ? "bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Wikimedia/Met
-          </button>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 w-8 p-0"
+        <button
+          type="button"
           onClick={onClose}
+          className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-secondary text-muted-foreground"
           title="Đóng"
         >
           <X className="size-3.5" />
-        </Button>
+        </button>
       </div>
 
-      {/* Gợi ý keyword từ plan / chapter — click để fill search */}
+      {/* Row 2 compact: suggestions chips scroll-x */}
       {suggestions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 items-center">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground self-center">
-            Gợi ý:
+        <div className="flex gap-1 items-center overflow-x-auto pb-1 -mx-0.5 px-0.5">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground self-center shrink-0 mr-1">
+            Gợi ý
           </span>
           {suggestions.map((s) => (
             <button
@@ -1398,7 +1420,7 @@ function BeatAssetPicker({
               type="button"
               onClick={() => setQ(s)}
               className={cn(
-                "h-7 px-2 rounded-md border text-xs transition-colors max-w-[260px] truncate",
+                "h-6 px-2 rounded border text-[11px] transition-colors max-w-[220px] truncate shrink-0",
                 q === s
                   ? "border-accent bg-accent/20 text-foreground"
                   : "border-input hover:bg-secondary text-muted-foreground",
@@ -1411,33 +1433,43 @@ function BeatAssetPicker({
         </div>
       )}
 
+      {/* Grid */}
       {tab === "library" && (
         <AssetGrid
           items={libraryQ.data?.assets ?? []}
           isLoading={libraryQ.isLoading}
           emptyMsg={
             q.trim()
-              ? `Library chưa có ảnh khớp "${q}". Thử tab "Wikimedia/Met".`
+              ? `Library chưa có ảnh khớp "${q}". Thử tab Wikimedia hoặc Pexels.`
               : "Library chưa có ảnh nào."
           }
           onPick={(asset) => onPick(asset.id)}
         />
       )}
 
-      {tab === "live" && (
-        <AssetGrid
-          items={searchQ.data?.results ?? []}
-          isLoading={searchQ.isLoading}
-          emptyMsg={
-            q.trim().length < 2
-              ? "Nhập keyword tối thiểu 2 chars."
-              : `Không tìm thấy kết quả cho "${q}".`
-          }
-          onPick={(asset) => saveMut.mutate(asset)}
-          actionLabel="Save + Attach"
-          saving={saveMut.isPending}
-        />
-      )}
+      {liveTab !== null &&
+        (providerEnabled(liveTab) ? (
+          <AssetGrid
+            items={searchQ.data?.results ?? []}
+            isLoading={searchQ.isLoading}
+            emptyMsg={
+              searchQ.error
+                ? `Lỗi: ${(searchQ.error as Error).message}`
+                : q.trim().length < 2
+                  ? "Nhập keyword tối thiểu 2 chars."
+                  : `Không tìm thấy kết quả cho "${q}" trên ${liveTab}.`
+            }
+            onPick={(asset) => saveMut.mutate(asset)}
+            actionLabel="Save + Attach"
+            saving={saveMut.isPending}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground py-3">
+            {liveTab === "pexels"
+              ? "Pexels chưa có API key. Settings → Pexels (key free tại pexels.com/api)."
+              : `Provider ${liveTab} chưa enable.`}
+          </p>
+        ))}
     </div>
   );
 }
