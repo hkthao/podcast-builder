@@ -295,6 +295,17 @@ async function pexelsImageSearch(
   };
 }
 
+/**
+ * Pexels video search với multi-candidate scoring.
+ *
+ * Tăng `per_page` từ 3 → 15 để có nhiều ứng viên hơn, rồi score:
+ *  - Resolution gần height target (vd 1080) — match render res, giảm file size
+ *  - Duration 5-15s lý tưởng cho 1 shot tài liệu (quá ngắn cắt cứng, quá dài
+ *    Ken Burns không cần)
+ *  - Landscape orientation (đã filter API-side qua param)
+ *
+ * Pick video có score CAO nhất, rồi trong videos đó pick file ≤ height target.
+ */
 async function pexelsVideoSearch(
   query: string,
   opt: { apiKey: string; height: number },
@@ -303,7 +314,7 @@ async function pexelsVideoSearch(
     "https://api.pexels.com/videos/search?" +
     new URLSearchParams({
       query,
-      per_page: "3",
+      per_page: "15",
       orientation: "landscape",
       size: "medium",
     });
@@ -313,14 +324,34 @@ async function pexelsVideoSearch(
     videos?: Array<{
       id: number;
       url: string;
+      duration?: number;
+      width?: number;
+      height?: number;
       user?: { name?: string };
       video_files?: Array<{ link: string; height?: number; width?: number }>;
     }>;
   };
-  const video = data.videos?.[0];
-  if (!video?.video_files?.length) return null;
-  // Pick file gần height target nhất → giảm file size + match render res.
-  const file = [...video.video_files].sort(
+  const videos = data.videos ?? [];
+  if (videos.length === 0) return null;
+
+  // Score video: gần duration 8s nhất + height ≥ 720p + có file ≤ target.
+  const scored = videos
+    .filter((v) => v.video_files && v.video_files.length > 0)
+    .map((v) => {
+      const dur = v.duration ?? 0;
+      // Duration ideal 8s. Phạt cách điểm linear.
+      const durScore = 1 - Math.min(1, Math.abs(dur - 8) / 12);
+      // Resolution OK = video gốc width ≥ 1280 (tránh upscale)
+      const resScore = (v.width ?? 0) >= 1280 ? 1 : 0.5;
+      return { video: v, score: durScore * 0.6 + resScore * 0.4 };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const best = scored[0]?.video;
+  if (!best?.video_files?.length) return null;
+
+  // Pick file ≤ target height, hoặc gần target nhất.
+  const file = [...best.video_files].sort(
     (a, b) =>
       Math.abs((a.height ?? 0) - opt.height) -
       Math.abs((b.height ?? 0) - opt.height),
@@ -328,9 +359,9 @@ async function pexelsVideoSearch(
   return {
     url: file.link,
     isVideo: true,
-    title: `Pexels video ${video.id}`,
-    author: video.user?.name,
-    sourceUrl: video.url,
+    title: `Pexels video ${best.id}`,
+    author: best.user?.name,
+    sourceUrl: best.url,
   };
 }
 
@@ -486,8 +517,10 @@ async function attemptSource(
   if (!query) {
     return { kind: "failed", failed: { beatIdx, reason: "stock: thiếu query" } };
   }
-  const preferVideo =
-    beat.role === "establishing" || beat.role === "transition";
+  // Documentary direction: video-first cho mọi stock shot. Pexels search
+  // tự fallback sang image nếu không tìm thấy video phù hợp. User có thể
+  // pin ảnh tĩnh per-shot qua attach asset library / set assetType="archive".
+  const preferVideo = true;
   const hash = hashBeat({
     planId: input.planId,
     chapterIdx: input.chapterIdx,
@@ -565,7 +598,9 @@ async function resolveOneBeat(input: {
   | { kind: "failed"; failed: FailedBeat }
 > {
   const { beat, beatIdx, options } = input;
-  const assetType = beat.assetType ?? "archive";
+  // Default = stock (Pexels video). Documentary direction: video-first.
+  // Beats cũ chưa có assetType → đi đường stock + fallback archive nếu fail.
+  const assetType = beat.assetType ?? "stock";
 
   // ── Motion: no fetch, return placeholder ──
   if (assetType === "motion") {

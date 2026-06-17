@@ -297,21 +297,27 @@ function runClassifier(input: ClassifyInput): ClassifyResult {
     };
   }
 
-  // Niên đại → establishing archive (timeline graphic hoặc map archive).
+  // Niên đại → establishing stock (cảnh thời kỳ thay vì timeline tĩnh).
+  // Lý do: user muốn video-first. Timeline graphic vẫn user pick được qua
+  // Inspector (assetType="motion") nếu muốn.
   if (ENGLISH_NUMBER_LIKE_YEAR.test(text) || VN_NUMBER_LIKE_YEAR.test(text)) {
     return {
       role: "establishing",
-      assetType: "motion",
-      motionRecipe: "Timeline",
-      confidence: 0.6,
+      assetType: "stock",
+      stockQuery: `${graph.series || "historical"} period footage`,
+      confidence: 0.55,
     };
   }
 
-  // Fallback: detail + archive (Wikimedia art history catch-all).
+  // Fallback: stock video (Pexels). Documentary direction default — chỉ
+  // works/portraits cụ thể (đã match ở các nhánh trên) mới dùng archive
+  // ảnh tĩnh; còn lại video từ Pexels match theo transcript snippet.
+  // Series + 4-6 từ đầu câu thường đủ context để Pexels trả footage phù hợp.
+  const snippet = text.split(/\s+/).slice(0, 6).join(" ");
   return {
     role: "detail",
-    assetType: "archive",
-    archiveQuery: `${graph.series || "art history"} ${text.split(/\s+/).slice(0, 4).join(" ")}`,
+    assetType: "stock",
+    stockQuery: `${graph.series || ""} ${snippet}`.trim(),
     confidence: 0.3,
   };
 }

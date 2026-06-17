@@ -484,27 +484,28 @@ Mỗi shot phải có:
   * "concept": ý trừu tượng → motion graphic (perspective, chiaroscuro)
   * "transition": cầu nối ngắn giữa 2 đoạn
   * "payoff": câu chốt, quote, cao trào (mỗi chương 1-2 cái)
-- "assetType": nguồn asset cần fetch (CHỌN 1 trong 4):
-  * "archive": tranh/tượng public-domain → search Wikimedia Commons
-  * "stock": footage cảnh thật ngày nay → Pexels (vd "Padua Italy aerial")
-  * "ai": cảnh không quay/không có archive → Draw Things gen (vd "Giotto workshop 14th century")
-  * "motion": Remotion vẽ động (Quote, Timeline, PerspectiveDiagram, …)
+- "assetType": nguồn asset cần fetch (CHỌN 1 trong 4) — DEFAULT phải là "stock" cho video động, chỉ "archive" khi nhắc tên tác phẩm/họa sĩ CỤ THỂ:
+  * "stock" (DEFAULT — dùng cho 60-70% shots): video Pexels match keyword tiếng Anh. Documentary modern style — luôn ưu tiên video động hơn ảnh tĩnh. Vd "candlelight cathedral interior", "old book hand turning pages", "italian renaissance city aerial".
+  * "archive": ảnh tĩnh public-domain Wikimedia — CHỈ khi câu nhắc TÊN tác phẩm/họa sĩ cụ thể cần show đúng bức đó (Lamentation, Mona Lisa, Giotto portrait).
+  * "ai": cảnh không quay/không có archive → Draw Things gen (vd "Giotto workshop 14th century").
+  * "motion": Remotion vẽ động (Quote, Timeline, PerspectiveDiagram, …).
 - "note": (optional, "" nếu không cần) — gợi ý cho asset team, vd "ưu tiên ảnh restoration 2002".
 
 Quy tắc shot:
-- Shot đầu (sentenceIdx=0) PHẢI có — establish shot mở chương.
-- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có shot của tác phẩm đó (role="subject", assetType="archive").
+- Shot đầu (sentenceIdx=0) PHẢI có — establish shot mở chương, DÙNG STOCK VIDEO (vd aerial cathedral, candlelit museum hall).
+- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có shot của tác phẩm đó (role="subject", assetType="archive"). Đây là exception duy nhất cho archive.
 - KHÔNG để gap > 4 câu giữa 2 shots (khán giả sẽ nhìn 1 hình quá lâu).
 - Đa dạng kenBurns — không dồn hết zoom-in.
-- Đa dạng assetType — KHÔNG để 4+ shot archive liên tiếp; chèn motion ("concept" role) khi giải thích khái niệm, hoặc stock ("establishing") khi nhắc địa danh ngày nay.
+- Mục tiêu mix: ~60-70% stock video, ~20% archive (khi nhắc tác phẩm), ~10% motion (quote/concept), 0-10% ai. Cả chương chỉ NÊN có 1-2 shot ảnh tĩnh archive trừ khi tập trung phân tích 1 tác phẩm.
 
 OUTPUT JSON CHẶT (KHÔNG markdown wrap, KHÔNG meta-text):
 
 {
   "transcript": "Câu 1. Câu 2. ... Câu N.",
   "shots": [
-    {"sentenceIdx": 0, "keyword": "Arena Chapel interior wide angle", "kenBurns": "zoom-out", "role": "establishing", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 0, "keyword": "padua italy aerial morning fog", "kenBurns": "pan-right", "role": "establishing", "assetType": "stock", "note": ""},
     {"sentenceIdx": 3, "keyword": "Giotto Lamentation full fresco", "kenBurns": "pan-right", "role": "subject", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 6, "keyword": "candle flame slow flicker close up", "kenBurns": "static", "role": "detail", "assetType": "stock", "note": ""},
     {"sentenceIdx": 8, "keyword": "perspective diagram axial lines", "kenBurns": "static", "role": "concept", "assetType": "motion", "note": ""},
     ...
   ]
