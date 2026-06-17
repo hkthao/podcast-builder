@@ -199,8 +199,11 @@ export function Brainstorm() {
     mutationFn: (vars: { id: string; pickedIdx: number | null }) =>
       api.pickBrainstormIdea(vars.id, vars.pickedIdx),
     onSuccess: (updated) => {
+      // Bug fix: sessionsQ dùng key ["brainstorm-sessions", workspace] —
+      // setQueryData phải dùng cùng key, không thì cache update miss → UI
+      // không re-render → button "Chọn ý này" stuck dù API success.
       qc.setQueryData<{ sessions: BrainstormSession[] }>(
-        ["brainstorm-sessions"],
+        ["brainstorm-sessions", workspace],
         (prev) =>
           prev
             ? {
