@@ -388,12 +388,14 @@ galleryStoryboardRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
       const filename = path.basename(a.localPath);
       const hash = filename.split(".")[0];
       const assetId = `${a.source}:${hash}`;
-      // For Wikimedia/Pexels: fullUrl = remote URL (prefetch tải về local).
-      // For Draw Things AI: fullUrl = local-served URL (studio serves /tmp/).
-      const fullUrl =
-        a.source === "drawthings"
-          ? `/tmp/gallery-assets/${plan.id}/${filename}`
-          : (a.remoteUrl ?? a.localPath);
+      // Local-served URL cho mọi source — resolver đã tải file về cacheDir
+      // (`tmp/gallery-assets/<planId>/<hash>.<ext>`), studio serve qua /tmp/.
+      // Tránh dùng remoteUrl trực tiếp vì:
+      //  1) localPath absolute filesystem path → Remotion treat as URL prefix
+      //     `http://localhost:3002/Users/...` → 404.
+      //  2) remoteUrl (Wikimedia/Pexels) có thể 429 / rate-limit khi prefetch
+      //     hàng loạt — local file ổn định hơn.
+      const fullUrl = `/tmp/gallery-assets/${plan.id}/${filename}`;
       saveAsset({
         id: assetId,
         provider: a.source,

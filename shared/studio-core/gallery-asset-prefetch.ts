@@ -104,6 +104,16 @@ export async function prefetchAsset(input: {
   assetId: string;
   remoteUrl: string;
 }): Promise<PrefetchResult> {
+  // Short-circuit khi remoteUrl đã là local /tmp/ URL (vd resolver-cached
+  // gallery assets: /tmp/gallery-assets/<plan>/<hash>.jpg). File đã ở disk,
+  // không cần download — trả thẳng path cho render fetch qua studio static.
+  if (input.remoteUrl.startsWith("/tmp/")) {
+    return {
+      filename: path.basename(input.remoteUrl),
+      localPath: input.remoteUrl,
+      fromCache: true,
+    };
+  }
   const filename = localFilenameFor(input.assetId, input.remoteUrl);
   const filePath = path.join(PREFETCH_DIR, filename);
 

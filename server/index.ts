@@ -155,6 +155,30 @@ app.get("/input/:filename", serveStatic(INPUT_DIR));
 app.get("/tmp/:filename", serveStatic(TMP_DIR));
 app.get("/scene-catalog/:filename", serveStatic(SCENE_CATALOG_DIR));
 
+// Gallery documentary direction — assets resolver tải về
+// `tmp/gallery-assets/<planId>/<hash>.<ext>`. Render đọc qua fullUrl =
+// "/tmp/gallery-assets/<planId>/<filename>" nên cần route riêng (single-
+// segment /tmp/:filename không match được path 3 cấp).
+app.get("/tmp/gallery-assets/:planId/:filename", async (c) => {
+  const planId = c.req.param("planId");
+  const filename = c.req.param("filename");
+  if (
+    !planId ||
+    !filename ||
+    planId.includes("..") ||
+    planId.includes("/") ||
+    filename.includes("..") ||
+    filename.includes("/") ||
+    filename.startsWith(".")
+  ) {
+    return c.json({ error: "invalid path" }, 400);
+  }
+  const dir = path.join(TMP_DIR, "gallery-assets", planId);
+  const handler = serveStatic(dir);
+  // Trick: serveStatic đọc c.req.param("filename") — đúng key ta đã set.
+  return handler(c);
+});
+
 startFsWatcher();
 
 app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
