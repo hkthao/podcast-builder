@@ -14,6 +14,7 @@
  * pipeline (Phase 22) tải vào shared/asset-cache/ khi cần.
  */
 import { z } from "zod";
+import { AssetTypeSchema } from "./visual-beat";
 
 export const ChapterMoodSchema = z.enum([
   "reverent",
@@ -65,6 +66,22 @@ export const ChapterAssetSchema = z.object({
   kenBurns: KenBurnsModeSchema.default("zoomIn"),
   /** Thời gian hiển thị (ms). Bỏ trống → chia đều trong chương. */
   holdMs: z.number().int().positive().optional(),
+
+  // ── Documentary direction (Phase 1) — optional, backward-compatible ──
+
+  /**
+   * Nguồn asset (stock/ai/archive/motion). Phân biệt với `kind` (image/
+   * video/audio = file format) ở trên: assetType chỉ nguồn lấy về.
+   * Undefined cho asset cũ chưa được classify. Resolver mới (Phase 3) sẽ
+   * fill khi tải về tự động.
+   */
+  assetType: AssetTypeSchema.optional(),
+
+  /**
+   * Prompt sinh ảnh AI — chỉ có khi assetType="ai" (Draw Things manual
+   * workflow). Lưu để audit + re-gen sau khi tinh chỉnh.
+   */
+  aiPrompt: z.string().optional(),
 });
 
 export const ChapterSchema = z.object({
