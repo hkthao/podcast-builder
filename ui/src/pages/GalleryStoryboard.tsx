@@ -1,6 +1,6 @@
 /**
- * GalleryPlan page — Phase 3d.
- * Route: /gallery/plans/:id
+ * Gallery Storyboard page.
+ * Route: /gallery/storyboards/:id
  *
  * Sau khi user pick 1 gallery brainstorm idea + tạo plan, page này hiện
  * danh sách chapter trong order + transcript editor inline.
@@ -48,8 +48,8 @@ import {
 import {
   api,
   type AssetResult,
-  type GalleryChapterPlan,
-  type GalleryPlanChapter,
+  type Storyboard,
+  type StoryboardChapter,
   type KenBurnsMode,
   type LLMProvider,
   type SavedAsset,
@@ -64,7 +64,7 @@ import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
 
 const STATUS_META: Record<
-  GalleryPlanChapter["status"],
+  StoryboardChapter["status"],
   { label: string; icon: React.ElementType; cls: string }
 > = {
   pending: {
@@ -130,14 +130,14 @@ const GEMINI_TTS_MODELS = [
 const DEFAULT_STYLE =
   "Hồ sơ âm thanh — narrator phim tài liệu nghệ thuật: giọng nam miền Bắc, trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ, pacing chậm rãi như Khan Academy Smarthistory";
 
-export function GalleryPlanPage() {
+export function GalleryStoryboardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   const planQ = useQuery({
     queryKey: ["gallery-plan", id],
-    queryFn: () => api.getGalleryPlan(id!),
+    queryFn: () => api.getStoryboard(id!),
     enabled: !!id,
   });
 
@@ -149,7 +149,7 @@ export function GalleryPlanPage() {
 
 
   const deleteMut = useMutation({
-    mutationFn: () => api.deleteGalleryPlan(id!),
+    mutationFn: () => api.deleteStoryboard(id!),
     onSuccess: () => {
       navigate("/brainstorm");
     },
@@ -250,7 +250,7 @@ export function GalleryPlanPage() {
       <BgmPanel
         plan={plan}
         onMutate={(updated) =>
-          qc.setQueryData<GalleryChapterPlan>(
+          qc.setQueryData<Storyboard>(
             ["gallery-plan", plan.id],
             updated,
           )
@@ -269,7 +269,7 @@ export function GalleryPlanPage() {
             ideaSnapshot={plan.ideaSnapshot}
             modelsData={modelsQ.data}
             onMutate={(updated) => {
-              qc.setQueryData<GalleryChapterPlan>(
+              qc.setQueryData<Storyboard>(
                 ["gallery-plan", plan.id],
                 updated,
               );
@@ -282,7 +282,7 @@ export function GalleryPlanPage() {
       <ExportPanel
         plan={plan}
         onMutate={(updated) =>
-          qc.setQueryData<GalleryChapterPlan>(
+          qc.setQueryData<Storyboard>(
             ["gallery-plan", plan.id],
             updated,
           )
@@ -300,12 +300,12 @@ function ChapterCard({
   modelsData,
   onMutate,
 }: {
-  chapter: GalleryPlanChapter;
+  chapter: StoryboardChapter;
   chapterIdx: number;
   planId: string;
   ideaSnapshot: import("@/lib/api").GalleryBrainstormIdea;
   modelsData: import("@/lib/api").LLMModels | undefined;
-  onMutate: (plan: GalleryChapterPlan) => void;
+  onMutate: (plan: Storyboard) => void;
 }) {
   // Phase: per-chapter LLM provider/model. Persist riêng per (plan, chapter)
   // vì mỗi chương có thể cần model khác (vd intro dùng mini cho rẻ, deep
@@ -341,7 +341,7 @@ function ChapterCard({
 
   const genMut = useMutation({
     mutationFn: () =>
-      api.genGalleryPlanChapter(planId, chapterIdx, { provider, model }),
+      api.genStoryboardChapter(planId, chapterIdx, { provider, model }),
     onSuccess: (plan) => {
       onMutate(plan);
       setDirty(false);
@@ -349,8 +349,8 @@ function ChapterCard({
   });
 
   const saveMut = useMutation({
-    mutationFn: (patch: Parameters<typeof api.updateGalleryPlanChapter>[2]) =>
-      api.updateGalleryPlanChapter(planId, chapterIdx, patch),
+    mutationFn: (patch: Parameters<typeof api.updateStoryboardChapter>[2]) =>
+      api.updateStoryboardChapter(planId, chapterIdx, patch),
     onSuccess: (plan) => {
       onMutate(plan);
       setDirty(false);
@@ -359,7 +359,7 @@ function ChapterCard({
 
   // Phase 4d.2: Remotion render
   const renderMut = useMutation({
-    mutationFn: () => api.renderGalleryPlanChapter(planId, chapterIdx),
+    mutationFn: () => api.renderStoryboardChapter(planId, chapterIdx),
     onSuccess: (res) => onMutate(res.plan),
   });
 
@@ -674,10 +674,10 @@ function AudioPanel({
   chapterIdx,
   onMutate,
 }: {
-  chapter: GalleryPlanChapter;
+  chapter: StoryboardChapter;
   planId: string;
   chapterIdx: number;
-  onMutate: (plan: GalleryChapterPlan) => void;
+  onMutate: (plan: Storyboard) => void;
 }) {
   // Per-chapter TTS state — persisted độc lập với chapter khác
   const stateKey = `gallery-plan.${planId}.ch${chapterIdx}`;
@@ -719,7 +719,7 @@ function AudioPanel({
 
   const audioMut = useMutation({
     mutationFn: (force: boolean) =>
-      api.genGalleryPlanChapterAudio(planId, chapterIdx, {
+      api.genStoryboardChapterAudio(planId, chapterIdx, {
         ttsProvider,
         voice: ttsVoice,
         ttsModel: ttsProvider === "gemini" ? ttsModel : undefined,
@@ -953,7 +953,7 @@ function VideoPanel({
   renderPending,
   renderError,
 }: {
-  chapter: GalleryPlanChapter;
+  chapter: StoryboardChapter;
   planId: string;
   chapterIdx: number;
   onRender: () => void;
@@ -1145,7 +1145,7 @@ function VideoPanel({
  * Format: "{title} {medium} {year}" — đủ specific để Wikimedia/Met ra đúng ảnh.
  */
 function buildBeatKeywordSuggestions(
-  chapter: GalleryPlanChapter,
+  chapter: StoryboardChapter,
   idea: import("@/lib/api").GalleryBrainstormIdea,
 ): string[] {
   const seen = new Set<string>();
@@ -1869,11 +1869,11 @@ function ExportPanel({
   plan,
   onMutate,
 }: {
-  plan: GalleryChapterPlan;
-  onMutate: (plan: GalleryChapterPlan) => void;
+  plan: Storyboard;
+  onMutate: (plan: Storyboard) => void;
 }) {
   const exportMut = useMutation({
-    mutationFn: () => api.exportGalleryPlan(plan.id),
+    mutationFn: () => api.exportStoryboard(plan.id),
     onSuccess: (res) => onMutate(res.plan),
   });
 
@@ -2165,8 +2165,8 @@ function BgmPanel({
   plan,
   onMutate,
 }: {
-  plan: GalleryChapterPlan;
-  onMutate: (plan: GalleryChapterPlan) => void;
+  plan: Storyboard;
+  onMutate: (plan: Storyboard) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2176,7 +2176,7 @@ function BgmPanel({
   });
 
   const deleteMut = useMutation({
-    mutationFn: () => api.deleteGalleryPlanBgm(plan.id),
+    mutationFn: () => api.deleteStoryboardBgm(plan.id),
     onSuccess: (updated) => onMutate(updated),
   });
 
@@ -2379,7 +2379,7 @@ function ResolvePanel({
   planId: string;
   chapterIdx: number;
   beats: import("@/lib/api").Shot[];
-  onMutate: (plan: GalleryChapterPlan) => void;
+  onMutate: (plan: Storyboard) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [lastResult, setLastResult] = useState<{
@@ -2391,7 +2391,7 @@ function ResolvePanel({
   } | null>(null);
 
   const resolveMut = useMutation({
-    mutationFn: () => api.resolveGalleryChapter(planId, chapterIdx),
+    mutationFn: () => api.resolveStoryboardChapter(planId, chapterIdx),
     onSuccess: (data) => {
       setLastResult({
         resolved: data.resolved,

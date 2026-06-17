@@ -37,7 +37,7 @@ import { safeParseJson } from "../lib/safe-json";
  * Field name `shots` (thuật ngữ video-making, ViMax-aligned). Legacy data
  * trong DB có field `visualBeats` — rowToPlan tự migrate khi load.
  */
-export type GalleryPlanChapter = GalleryChapter & {
+export type StoryboardChapter = GalleryChapter & {
   /** Voiceover script tiếng Việt cho narration. "" cho music interlude. */
   transcript: string;
   /**
@@ -75,13 +75,13 @@ export type GalleryPlanChapter = GalleryChapter & {
   renderedAt: string | null;
 };
 
-export type GalleryChapterPlan = {
+export type Storyboard = {
   id: string;
   brainstormId: string;
   ideaIdx: number;
   /** Snapshot idea lúc tạo plan — stable kể cả khi brainstorm bị edit/xoá. */
   ideaSnapshot: GalleryBrainstormIdea;
-  chapters: GalleryPlanChapter[];
+  chapters: StoryboardChapter[];
   provider: LLMProvider | null;
   model: string | null;
   createdAt: string;
@@ -124,9 +124,9 @@ const slugify = (s: string): string =>
     .replace(/^-|-$/g, "")
     .slice(0, 60);
 
-const rowToPlan = (r: DbRow): GalleryChapterPlan => {
+const rowToStoryboard = (r: DbRow): Storyboard => {
   const chapters = JSON.parse(r.chapters_json) as Array<
-    GalleryPlanChapter & {
+    StoryboardChapter & {
       visualBeats?: unknown;
       shots?: unknown;
       audioFilename?: unknown;
@@ -180,7 +180,7 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
     brainstormId: r.brainstorm_id,
     ideaIdx: r.idea_idx,
     ideaSnapshot: JSON.parse(r.idea_snapshot_json) as GalleryBrainstormIdea,
-    chapters: chapters as GalleryPlanChapter[],
+    chapters: chapters as StoryboardChapter[],
     provider: (r.provider ?? null) as LLMProvider | null,
     model: r.model,
     createdAt: r.created_at,
@@ -192,7 +192,7 @@ const rowToPlan = (r: DbRow): GalleryChapterPlan => {
   };
 };
 
-const savePlan = (p: GalleryChapterPlan): void => {
+const saveStoryboard = (p: Storyboard): void => {
   getDb()
     .prepare(
       `INSERT OR REPLACE INTO gallery_chapter_plans
@@ -219,7 +219,7 @@ const savePlan = (p: GalleryChapterPlan): void => {
 };
 
 /** Phase 4e.x: filename cố định cho BGM file uploaded. */
-export const galleryPlanBgmFilename = (
+export const storyboardBgmFilename = (
   planId: string,
   ext: string,
 ): string => `gallery-${planId}-bgm.${ext.toLowerCase().replace(/^\./, "")}`;
@@ -228,49 +228,49 @@ export const galleryPlanBgmFilename = (
  * Phase 4e.x: set BGM filename cho plan. File phải đã được lưu trong TMP_DIR
  * trước khi gọi (route handler responsibility).
  */
-export async function setPlanBgm(
+export async function setStoryboardBgm(
   planId: string,
   filename: string,
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   plan.bgmFilename = filename;
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
-export async function clearPlanBgm(
+export async function clearStoryboardBgm(
   planId: string,
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   plan.bgmFilename = null;
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
 /**
  * Phase 4e: persist plan-level final output sau khi concat xong.
  */
-export async function updatePlanOutput(
+export async function updateStoryboardOutput(
   planId: string,
   output: { outputFilename: string; outputDurationMs: number },
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   plan.outputFilename = output.outputFilename;
   plan.outputDurationMs = output.outputDurationMs;
   plan.exportedAt = new Date().toISOString();
   plan.updatedAt = plan.exportedAt;
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
-export async function listPlans(
+export async function listStoryboards(
   filter: { brainstormId?: string } = {},
-): Promise<GalleryChapterPlan[]> {
+): Promise<Storyboard[]> {
   let sql = "SELECT * FROM gallery_chapter_plans";
   const params: string[] = [];
   if (filter.brainstormId) {
@@ -279,28 +279,28 @@ export async function listPlans(
   }
   sql += " ORDER BY updated_at DESC";
   const rows = getDb().prepare(sql).all(...params) as DbRow[];
-  return rows.map(rowToPlan);
+  return rows.map(rowToStoryboard);
 }
 
-export async function getPlan(
+export async function getStoryboard(
   id: string,
-): Promise<GalleryChapterPlan | null> {
+): Promise<Storyboard | null> {
   const row = getDb()
     .prepare("SELECT * FROM gallery_chapter_plans WHERE id = ?")
     .get(id) as DbRow | undefined;
-  return row ? rowToPlan(row) : null;
+  return row ? rowToStoryboard(row) : null;
 }
 
-export async function findPlanBySource(
+export async function findStoryboardBySource(
   brainstormId: string,
   ideaIdx: number,
-): Promise<GalleryChapterPlan | null> {
+): Promise<Storyboard | null> {
   const row = getDb()
     .prepare(
       "SELECT * FROM gallery_chapter_plans WHERE brainstorm_id = ? AND idea_idx = ?",
     )
     .get(brainstormId, ideaIdx) as DbRow | undefined;
-  return row ? rowToPlan(row) : null;
+  return row ? rowToStoryboard(row) : null;
 }
 
 export async function deletePlan(id: string): Promise<boolean> {
@@ -317,13 +317,13 @@ export async function deletePlan(id: string): Promise<boolean> {
  *
  * Nếu plan đã tồn tại với (brainstormId, ideaIdx) → return plan cũ (idempotent).
  */
-export async function createPlanFromIdea(input: {
+export async function createStoryboardFromIdea(input: {
   brainstormId: string;
   ideaIdx: number;
   idea: GalleryBrainstormIdea;
-}): Promise<GalleryChapterPlan> {
+}): Promise<Storyboard> {
   // Idempotent: nếu đã có plan cho (brainstormId, ideaIdx), return cũ
-  const existing = await findPlanBySource(input.brainstormId, input.ideaIdx);
+  const existing = await findStoryboardBySource(input.brainstormId, input.ideaIdx);
   if (existing) return existing;
 
   const now = new Date();
@@ -337,7 +337,7 @@ export async function createPlanFromIdea(input: {
     String(now.getSeconds()).padStart(2, "0");
   const id = `${ts}-${slugify(input.idea.title) || "plan"}`;
 
-  const chapters: GalleryPlanChapter[] = input.idea.chapters.map((ch) => ({
+  const chapters: StoryboardChapter[] = input.idea.chapters.map((ch) => ({
     ...ch,
     transcript: "",
     shots: [], // empty cho đến khi gen
@@ -352,7 +352,7 @@ export async function createPlanFromIdea(input: {
     status: ch.kind === "music" ? "draft" : "pending",
   }));
 
-  const plan: GalleryChapterPlan = {
+  const plan: Storyboard = {
     id,
     brainstormId: input.brainstormId,
     ideaIdx: input.ideaIdx,
@@ -367,7 +367,7 @@ export async function createPlanFromIdea(input: {
     exportedAt: null,
     bgmFilename: null,
   };
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
@@ -379,13 +379,13 @@ export async function updateChapter(
   chapterIdx: number,
   patch: {
     transcript?: string;
-    status?: GalleryPlanChapter["status"];
+    status?: StoryboardChapter["status"];
     shots?: Shot[];
     /** @deprecated use `shots` — legacy field, still accepted. */
     visualBeats?: Shot[];
   },
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   if (chapterIdx < 0 || chapterIdx >= plan.chapters.length) {
     const err = new Error("chapterIdx out of range") as Error & { code: string };
@@ -407,18 +407,18 @@ export async function updateChapter(
       .filter((b): b is Shot => b !== null);
   }
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
 /**
  * Save toàn bộ chapters (bulk edit từ UI sau khi user sửa nhiều chương).
  */
-export async function updatePlanChapters(
+export async function updateStoryboardChapters(
   planId: string,
-  chapters: GalleryPlanChapter[],
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+  chapters: StoryboardChapter[],
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   if (chapters.length !== plan.chapters.length) {
     const err = new Error(
@@ -429,7 +429,7 @@ export async function updatePlanChapters(
   }
   plan.chapters = chapters;
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
@@ -512,9 +512,9 @@ OUTPUT JSON CHẶT (KHÔNG markdown wrap, KHÔNG meta-text):
 
 const buildTranscriptUserPrompt = (
   idea: GalleryBrainstormIdea,
-  chapter: GalleryPlanChapter,
+  chapter: StoryboardChapter,
   chapterIdx: number,
-  adjacentChapters: GalleryPlanChapter[],
+  adjacentChapters: StoryboardChapter[],
 ): string => {
   // Truncate keyWorks list theo chapter để giảm context
   const chapterKeyWorks = idea.keyWorks.filter((kw) =>
@@ -557,8 +557,8 @@ export async function generateChapterTranscript(input: {
   chapterIdx: number;
   provider: LLMProvider;
   model: string;
-}): Promise<GalleryChapterPlan> {
-  const plan = await getPlan(input.planId);
+}): Promise<Storyboard> {
+  const plan = await getStoryboard(input.planId);
   if (!plan) {
     const err = new Error(`Plan không tồn tại: ${input.planId}`) as Error & {
       code: string;
@@ -677,7 +677,7 @@ export async function generateChapterTranscript(input: {
   plan.provider = input.provider;
   plan.model = input.model;
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
@@ -766,8 +766,8 @@ export async function updateChapterVideo(
   planId: string,
   chapterIdx: number,
   video: { videoFilename: string; videoDurationMs: number },
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   if (chapterIdx < 0 || chapterIdx >= plan.chapters.length) {
     const err = new Error("chapterIdx out of range") as Error & { code: string };
@@ -779,7 +779,7 @@ export async function updateChapterVideo(
   ch.videoDurationMs = video.videoDurationMs;
   ch.renderedAt = new Date().toISOString();
   plan.updatedAt = ch.renderedAt;
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }
 
@@ -794,8 +794,8 @@ export async function updateChapterAudio(
     audioDurationMs: number;
     wordTimestamps: WordTimestamp[];
   },
-): Promise<GalleryChapterPlan | null> {
-  const plan = await getPlan(planId);
+): Promise<Storyboard | null> {
+  const plan = await getStoryboard(planId);
   if (!plan) return null;
   if (chapterIdx < 0 || chapterIdx >= plan.chapters.length) {
     const err = new Error("chapterIdx out of range") as Error & { code: string };
@@ -807,6 +807,6 @@ export async function updateChapterAudio(
   ch.audioDurationMs = audio.audioDurationMs;
   ch.wordTimestamps = audio.wordTimestamps;
   plan.updatedAt = new Date().toISOString();
-  savePlan(plan);
+  saveStoryboard(plan);
   return plan;
 }

@@ -299,7 +299,7 @@ export function Brainstorm() {
         </h1>
         <p className="mt-1 text-muted-foreground text-sm">
           Generate ý tưởng video tài liệu nghệ thuật từ chủ đề. Sau khi pick →
-          "Lập kế hoạch chương" để gen transcript + visual beats per chương.
+          "Tạo storyboard" để gen transcript + visual beats per chương.
         </p>
       </header>
 
@@ -1247,16 +1247,16 @@ function GalleryIdeaCard({
     0,
   );
 
-  // Phase 3d: lookup plan đã có để toggle nút "Mở plan" vs "Lập plan mới"
+  // Phase 3d: lookup storyboard đã có để toggle nút "Mở storyboard" vs "Tạo mới"
   const existingPlanQ = useQuery({
     queryKey: ["gallery-plan-lookup", sessionId, idx],
-    queryFn: () => api.lookupGalleryPlan(sessionId, idx),
+    queryFn: () => api.lookupStoryboard(sessionId, idx),
   });
 
   const createPlanMut = useMutation({
-    mutationFn: () => api.createGalleryPlan(sessionId, idx),
+    mutationFn: () => api.createStoryboard(sessionId, idx),
     onSuccess: (plan) => {
-      navigate(`/gallery/plans/${plan.id}`);
+      navigate(`/gallery/storyboards/${plan.id}`);
     },
   });
 
@@ -1477,10 +1477,10 @@ function GalleryIdeaCard({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => navigate(`/gallery/plans/${existingPlanId}`)}
+            onClick={() => navigate(`/gallery/storyboards/${existingPlanId}`)}
           >
             <FileText className="size-4" />
-            Mở plan đã có
+            Mở storyboard
           </Button>
         ) : (
           <Button
@@ -1494,7 +1494,7 @@ function GalleryIdeaCard({
             ) : (
               <FileText className="size-4" />
             )}
-            Lập kế hoạch chương
+            Tạo storyboard
           </Button>
         )}
         <Button

@@ -45,7 +45,7 @@ export function Sidebar() {
   // Gallery: list plans cho "Pinned + Recent" bottom panel
   const { data: galleryPlansData } = useQuery({
     queryKey: ["gallery-plans"],
-    queryFn: () => api.listGalleryPlans(),
+    queryFn: () => api.listStoryboards(),
     enabled: workspace === "gallery",
   });
   const [pinned, setPinned] = usePersistedState<string[]>(
@@ -271,7 +271,7 @@ export function Sidebar() {
                 .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
                 .slice(0, 8)
                 .map((p) => {
-                  const path = `/gallery/plans/${encodeURIComponent(p.id)}`;
+                  const path = `/gallery/storyboards/${encodeURIComponent(p.id)}`;
                   const active = location.pathname === path;
                   const exported = p.outputFilename !== null;
                   return (

@@ -18,7 +18,7 @@ import { ESSAY_SYSTEM_PROMPT, NLM_PROMPT_SYSTEM } from "../../podcast/server/lib
 import { SCRIPT_SYSTEM_PROMPT } from "../../podcast/server/lib/script-store";
 import { COVER_PROMPT_SYSTEM_PROMPT } from "../../podcast/server/lib/cover-prompt-store";
 import { GALLERY_SYSTEM_PROMPT } from "../../gallery/src/brainstorm-idea";
-import { TRANSCRIPT_SYSTEM_PROMPT } from "./gallery-plan-store";
+import { TRANSCRIPT_SYSTEM_PROMPT } from "./gallery-storyboard-store";
 
 export type PromptKey =
   | "podcast.brainstorm"
@@ -112,7 +112,7 @@ const REGISTRY: Array<{
     label: "Gallery transcript (voiceover + visual beats)",
     description:
       "System prompt cho LLM viết voiceover tiếng Việt cho 1 chương + visual beats sidecar. Khan Academy Smarthistory style.",
-    usedBy: "shared/studio-core/gallery-plan-store.ts → generateChapterTranscript",
+    usedBy: "shared/studio-core/gallery-storyboard-store.ts → generateChapterTranscript",
     getDefault: () => TRANSCRIPT_SYSTEM_PROMPT,
   },
 ];

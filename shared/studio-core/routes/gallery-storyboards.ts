@@ -4,20 +4,20 @@
  */
 import { Hono } from "hono";
 import {
-  clearPlanBgm,
-  createPlanFromIdea,
+  clearStoryboardBgm,
+  createStoryboardFromIdea,
   deletePlan,
-  findPlanBySource,
-  galleryPlanBgmFilename,
+  findStoryboardBySource,
+  storyboardBgmFilename,
   generateChapterTranscript,
-  getPlan,
+  getStoryboard,
   inferSeriesSlug,
-  listPlans,
-  setPlanBgm,
+  listStoryboards,
+  setStoryboardBgm,
   updateChapter,
-  updatePlanChapters,
-  type GalleryPlanChapter,
-} from "../gallery-plan-store";
+  updateStoryboardChapters,
+  type StoryboardChapter,
+} from "../gallery-storyboard-store";
 import { generateChapterAudio } from "../gallery-chapter-audio";
 import { renderChapter } from "../gallery-render";
 import { exportPlan } from "../gallery-concat";
@@ -35,17 +35,17 @@ import {
 } from "../../../podcast/server/lib/brainstorm-store";
 import type { LLMProvider } from "../llm-providers";
 
-export const galleryPlanRoutes = new Hono();
+export const galleryStoryboardRoutes = new Hono();
 
-galleryPlanRoutes.get("/", async (c) => {
+galleryStoryboardRoutes.get("/", async (c) => {
   const brainstormId = c.req.query("brainstormId") || undefined;
-  const plans = await listPlans(brainstormId ? { brainstormId } : {});
+  const plans = await listStoryboards(brainstormId ? { brainstormId } : {});
   return c.json({ plans });
 });
 
-galleryPlanRoutes.get("/:id", async (c) => {
+galleryStoryboardRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const plan = await getPlan(id);
+  const plan = await getStoryboard(id);
   if (!plan) return c.json({ error: "Plan not found" }, 404);
   return c.json(plan);
 });
@@ -54,7 +54,7 @@ galleryPlanRoutes.get("/:id", async (c) => {
  * Lookup plan theo source (brainstormId + ideaIdx). UI dùng để check
  * "đã có plan chưa" trước khi tạo mới.
  */
-galleryPlanRoutes.get("/_/lookup", async (c) => {
+galleryStoryboardRoutes.get("/_/lookup", async (c) => {
   const brainstormId = c.req.query("brainstormId");
   const ideaIdxStr = c.req.query("ideaIdx");
   if (!brainstormId || ideaIdxStr === undefined) {
@@ -64,7 +64,7 @@ galleryPlanRoutes.get("/_/lookup", async (c) => {
   if (!Number.isInteger(ideaIdx) || ideaIdx < 0) {
     return c.json({ error: "ideaIdx phải là integer ≥ 0" }, 400);
   }
-  const plan = await findPlanBySource(brainstormId, ideaIdx);
+  const plan = await findStoryboardBySource(brainstormId, ideaIdx);
   return c.json({ plan });
 });
 
@@ -73,7 +73,7 @@ galleryPlanRoutes.get("/_/lookup", async (c) => {
  * Body: { brainstormId, ideaIdx }
  * Idempotent: nếu plan đã tồn tại → return plan cũ.
  */
-galleryPlanRoutes.post("/", async (c) => {
+galleryStoryboardRoutes.post("/", async (c) => {
   let raw: unknown;
   try {
     raw = await c.req.json();
@@ -104,7 +104,7 @@ galleryPlanRoutes.post("/", async (c) => {
   if (!idea) return c.json({ error: "ideaIdx out of range" }, 400);
 
   try {
-    const plan = await createPlanFromIdea({
+    const plan = await createStoryboardFromIdea({
       brainstormId: body.brainstormId,
       ideaIdx: body.ideaIdx,
       idea,
@@ -118,7 +118,7 @@ galleryPlanRoutes.post("/", async (c) => {
 /**
  * PUT 1 chapter — patch transcript/status. Body: { transcript?, status? }
  */
-galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
+galleryStoryboardRoutes.put("/:id/chapters/:idx", async (c) => {
   const id = c.req.param("id");
   const idx = Number(c.req.param("idx"));
   if (!Number.isInteger(idx) || idx < 0) {
@@ -132,10 +132,10 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
   }
   const body = raw as {
     transcript?: string;
-    status?: GalleryPlanChapter["status"];
-    shots?: GalleryPlanChapter["shots"];
+    status?: StoryboardChapter["status"];
+    shots?: StoryboardChapter["shots"];
     /** @deprecated Legacy alias for shots — vẫn accept để client cũ work. */
-    visualBeats?: GalleryPlanChapter["shots"];
+    visualBeats?: StoryboardChapter["shots"];
   };
   if (
     body.status !== undefined &&
@@ -164,9 +164,9 @@ galleryPlanRoutes.put("/:id/chapters/:idx", async (c) => {
 });
 
 /**
- * PUT bulk chapters — body: { chapters: GalleryPlanChapter[] }
+ * PUT bulk chapters — body: { chapters: StoryboardChapter[] }
  */
-galleryPlanRoutes.put("/:id/chapters", async (c) => {
+galleryStoryboardRoutes.put("/:id/chapters", async (c) => {
   const id = c.req.param("id");
   let raw: unknown;
   try {
@@ -174,12 +174,12 @@ galleryPlanRoutes.put("/:id/chapters", async (c) => {
   } catch {
     return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
   }
-  const body = raw as { chapters?: GalleryPlanChapter[] };
+  const body = raw as { chapters?: StoryboardChapter[] };
   if (!Array.isArray(body.chapters)) {
     return c.json({ error: "Body phải có field 'chapters' là array" }, 400);
   }
   try {
-    const plan = await updatePlanChapters(id, body.chapters);
+    const plan = await updateStoryboardChapters(id, body.chapters);
     if (!plan) return c.json({ error: "Plan not found" }, 404);
     return c.json(plan);
   } catch (e) {
@@ -193,7 +193,7 @@ galleryPlanRoutes.put("/:id/chapters", async (c) => {
  * LLM gen transcript cho 1 chapter narration. Body: { provider, model }.
  * Sync — chờ LLM xong rồi trả plan đã update.
  */
-galleryPlanRoutes.post("/:id/chapters/:idx/generate", async (c) => {
+galleryStoryboardRoutes.post("/:id/chapters/:idx/generate", async (c) => {
   const id = c.req.param("id");
   const idx = Number(c.req.param("idx"));
   if (!Number.isInteger(idx) || idx < 0) {
@@ -232,7 +232,7 @@ galleryPlanRoutes.post("/:id/chapters/:idx/generate", async (c) => {
  * Phase 4b: TTS + loudnorm + Whisper alignment cho 1 chapter narration.
  * Body: { voice?, ttsModel?, force? }. Sync (chờ 30-60s).
  */
-galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
+galleryStoryboardRoutes.post("/:id/chapters/:idx/audio", async (c) => {
   const id = c.req.param("id");
   const idx = Number(c.req.param("idx"));
   if (!Number.isInteger(idx) || idx < 0) {
@@ -285,7 +285,7 @@ galleryPlanRoutes.post("/:id/chapters/:idx/audio", async (c) => {
  * Phase 4d: render 1 chapter thành MP4 qua Remotion. Sync, ~60-90s/chapter.
  * Body optional. Audio URL base lấy từ Host header (cùng host studio server).
  */
-galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
+galleryStoryboardRoutes.post("/:id/chapters/:idx/render", async (c) => {
   const id = c.req.param("id");
   const idx = Number(c.req.param("idx"));
   if (!Number.isInteger(idx) || idx < 0) {
@@ -302,8 +302,8 @@ galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
       audioUrlBase,
     });
     // Return full updated plan để UI refresh state
-    const plan = await import("../gallery-plan-store").then((m) =>
-      m.getPlan(id),
+    const plan = await import("../gallery-storyboard-store").then((m) =>
+      m.getStoryboard(id),
     );
     return c.json({
       plan,
@@ -332,13 +332,13 @@ galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
  * Body (optional): { watchDir?: string } override thư mục scan Draw Things
  * output. Default ~/Downloads (Mac convention).
  */
-galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
+galleryStoryboardRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
   const id = c.req.param("id");
   const idx = Number(c.req.param("idx"));
   if (!Number.isInteger(idx) || idx < 0) {
     return c.json({ error: "chapter idx không hợp lệ" }, 400);
   }
-  const plan = await getPlan(id);
+  const plan = await getStoryboard(id);
   if (!plan) return c.json({ error: "Plan not found" }, 404);
   const chapter = plan.chapters[idx];
   if (!chapter) {
@@ -419,7 +419,7 @@ galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
     }
 
     // Return full updated plan để UI refresh + result detail
-    const updatedPlan = await getPlan(id);
+    const updatedPlan = await getStoryboard(id);
     return c.json({
       ...result,
       attached,
@@ -437,12 +437,12 @@ galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
  * Phase 4e: concat tất cả chapter MP4 thành 1 final video với chapter markers
  * + sinh youtube-chapters.txt. Sync 10-30s (ffmpeg copy mode, không re-encode).
  */
-galleryPlanRoutes.post("/:id/export", async (c) => {
+galleryStoryboardRoutes.post("/:id/export", async (c) => {
   const id = c.req.param("id");
   try {
     const result = await exportPlan({ planId: id });
-    const plan = await import("../gallery-plan-store").then((m) =>
-      m.getPlan(id),
+    const plan = await import("../gallery-storyboard-store").then((m) =>
+      m.getStoryboard(id),
     );
     return c.json({
       plan,
@@ -462,9 +462,9 @@ galleryPlanRoutes.post("/:id/export", async (c) => {
  * Phase 4e.x: upload BGM file (mp3/m4a/wav) cho plan. Multipart, field "bgm".
  */
 const BGM_EXTS = ["mp3", "m4a", "wav", "aac"] as const;
-galleryPlanRoutes.post("/:id/bgm", async (c) => {
+galleryStoryboardRoutes.post("/:id/bgm", async (c) => {
   const id = c.req.param("id");
-  const plan = await getPlan(id);
+  const plan = await getStoryboard(id);
   if (!plan) return c.json({ error: "Plan not found" }, 404);
 
   const body = await c.req.parseBody();
@@ -491,20 +491,20 @@ galleryPlanRoutes.post("/:id/bgm", async (c) => {
     });
   }
 
-  const filename = galleryPlanBgmFilename(id, ext);
+  const filename = storyboardBgmFilename(id, ext);
   const filePath = path.join(PATHS.TMP_DIR, filename);
   await fs.mkdir(PATHS.TMP_DIR, { recursive: true });
   const buf = Buffer.from(await file.arrayBuffer());
   await fs.writeFile(filePath, buf);
 
-  const updated = await setPlanBgm(id, filename);
+  const updated = await setStoryboardBgm(id, filename);
   return c.json(updated, 201);
 });
 
 /** Phase 4e.x: xoá BGM của plan. */
-galleryPlanRoutes.delete("/:id/bgm", async (c) => {
+galleryStoryboardRoutes.delete("/:id/bgm", async (c) => {
   const id = c.req.param("id");
-  const plan = await getPlan(id);
+  const plan = await getStoryboard(id);
   if (!plan) return c.json({ error: "Plan not found" }, 404);
   if (plan.bgmFilename) {
     const oldPath = path.join(PATHS.TMP_DIR, plan.bgmFilename);
@@ -512,11 +512,11 @@ galleryPlanRoutes.delete("/:id/bgm", async (c) => {
       /* ignore */
     });
   }
-  const updated = await clearPlanBgm(id);
+  const updated = await clearStoryboardBgm(id);
   return c.json(updated);
 });
 
-galleryPlanRoutes.delete("/:id", async (c) => {
+galleryStoryboardRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const ok = await deletePlan(id);
   return c.json({ deleted: ok });

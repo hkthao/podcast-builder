@@ -28,8 +28,10 @@ import {
   resolveChapterAssets,
   type ResolveResult,
 } from "../../shared/studio-core/gallery-asset-resolver";
-import { getPlan } from "../../shared/studio-core/gallery-plan-store";
-import { inferSeriesSlug } from "../../shared/studio-core/gallery-plan-store";
+import {
+  getStoryboard,
+  inferSeriesSlug,
+} from "../../shared/studio-core/gallery-storyboard-store";
 
 type Flags = {
   planId: string | null;
@@ -97,7 +99,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const plan = await getPlan(planId);
+  const plan = await getStoryboard(planId);
   if (!plan) {
     console.error(`✗ Plan không tồn tại: ${planId}`);
     process.exit(2);

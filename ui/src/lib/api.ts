@@ -598,7 +598,7 @@ export type WordTimestamp = {
   endMs: number;
 };
 
-export type GalleryPlanChapter = GalleryChapter & {
+export type StoryboardChapter = GalleryChapter & {
   transcript: string;
   /** Phase 4a: visual beats sidecar — anchored bằng sentenceIdx. */
   shots: Shot[];
@@ -613,12 +613,12 @@ export type GalleryPlanChapter = GalleryChapter & {
   renderedAt: string | null;
 };
 
-export type GalleryChapterPlan = {
+export type Storyboard = {
   id: string;
   brainstormId: string;
   ideaIdx: number;
   ideaSnapshot: GalleryBrainstormIdea;
-  chapters: GalleryPlanChapter[];
+  chapters: StoryboardChapter[];
   provider: LLMProvider | null;
   model: string | null;
   createdAt: string;
@@ -1230,67 +1230,67 @@ export const api = {
     ),
 
   // ─── Phase 3d — Gallery chapter plans ────────────────────────────────
-  listGalleryPlans: (brainstormId?: string) => {
+  listStoryboards: (brainstormId?: string) => {
     const qs = brainstormId
       ? `?brainstormId=${encodeURIComponent(brainstormId)}`
       : "";
-    return jsonFetch<{ plans: GalleryChapterPlan[] }>(
-      `/api/gallery/plans${qs}`,
+    return jsonFetch<{ plans: Storyboard[] }>(
+      `/api/gallery/storyboards${qs}`,
     );
   },
 
-  getGalleryPlan: (id: string) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(id)}`,
+  getStoryboard: (id: string) =>
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(id)}`,
     ),
 
-  lookupGalleryPlan: (brainstormId: string, ideaIdx: number) =>
-    jsonFetch<{ plan: GalleryChapterPlan | null }>(
-      `/api/gallery/plans/_/lookup?brainstormId=${encodeURIComponent(
+  lookupStoryboard: (brainstormId: string, ideaIdx: number) =>
+    jsonFetch<{ plan: Storyboard | null }>(
+      `/api/gallery/storyboards/_/lookup?brainstormId=${encodeURIComponent(
         brainstormId,
       )}&ideaIdx=${ideaIdx}`,
     ),
 
-  createGalleryPlan: (brainstormId: string, ideaIdx: number) =>
-    jsonFetch<GalleryChapterPlan>("/api/gallery/plans", {
+  createStoryboard: (brainstormId: string, ideaIdx: number) =>
+    jsonFetch<Storyboard>("/api/gallery/storyboards", {
       method: "POST",
       body: JSON.stringify({ brainstormId, ideaIdx }),
     }),
 
-  updateGalleryPlanChapter: (
+  updateStoryboardChapter: (
     planId: string,
     chapterIdx: number,
     patch: {
       transcript?: string;
-      status?: GalleryPlanChapter["status"];
+      status?: StoryboardChapter["status"];
       shots?: Shot[];
     },
   ) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}`,
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}`,
       { method: "PUT", body: JSON.stringify(patch) },
     ),
 
-  saveGalleryPlanChapters: (
+  saveStoryboardChapters: (
     planId: string,
-    chapters: GalleryPlanChapter[],
+    chapters: StoryboardChapter[],
   ) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters`,
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters`,
       { method: "PUT", body: JSON.stringify({ chapters }) },
     ),
 
-  genGalleryPlanChapter: (
+  genStoryboardChapter: (
     planId: string,
     chapterIdx: number,
     input: { provider: LLMProvider; model: string },
   ) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/generate`,
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/generate`,
       { method: "POST", body: JSON.stringify(input) },
     ),
 
-  genGalleryPlanChapterAudio: (
+  genStoryboardChapterAudio: (
     planId: string,
     chapterIdx: number,
     input: {
@@ -1305,8 +1305,8 @@ export const api = {
       styleInstruction?: string;
     } = {},
   ) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
       { method: "POST", body: JSON.stringify(input) },
     ),
 
@@ -1314,46 +1314,46 @@ export const api = {
   uploadGalleryPlanBgm: async (
     planId: string,
     file: File,
-  ): Promise<GalleryChapterPlan> => {
+  ): Promise<Storyboard> => {
     const form = new FormData();
     form.append("bgm", file);
     const res = await fetch(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/bgm`,
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/bgm`,
       { method: "POST", body: form },
     );
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       throw new ApiError(res.status, body.error ?? res.statusText);
     }
-    return (await res.json()) as GalleryChapterPlan;
+    return (await res.json()) as Storyboard;
   },
 
-  deleteGalleryPlanBgm: (planId: string) =>
-    jsonFetch<GalleryChapterPlan>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/bgm`,
+  deleteStoryboardBgm: (planId: string) =>
+    jsonFetch<Storyboard>(
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/bgm`,
       { method: "DELETE" },
     ),
 
   /** Phase 4e: concat tất cả chapter MP4 + inject FFMETADATA chapter markers. */
-  exportGalleryPlan: (planId: string) =>
+  exportStoryboard: (planId: string) =>
     jsonFetch<{
-      plan: GalleryChapterPlan;
+      plan: Storyboard;
       outputPath: string;
       outputDurationMs: number;
       chaptersTxtPath: string;
     }>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/export`,
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/export`,
       { method: "POST" },
     ),
 
   /** Phase 4d: render chapter qua Remotion. Sync, ~60-90s. */
-  renderGalleryPlanChapter: (planId: string, chapterIdx: number) =>
+  renderStoryboardChapter: (planId: string, chapterIdx: number) =>
     jsonFetch<{
-      plan: GalleryChapterPlan;
+      plan: Storyboard;
       outputPath: string;
       durationMs: number;
     }>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/render`,
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/render`,
       { method: "POST" },
     ),
 
@@ -1363,7 +1363,7 @@ export const api = {
    * cho archive/stock/AI. Sync, có thể chậm 10-30s (Pexels rate limit).
    * Idempotent: re-call OK (cache hash-based).
    */
-  resolveGalleryChapter: (
+  resolveStoryboardChapter: (
     planId: string,
     chapterIdx: number,
     opts: { watchDir?: string } = {},
@@ -1373,15 +1373,15 @@ export const api = {
       pending: PendingBeatClient[];
       failed: FailedBeatClient[];
       attached: number;
-      plan: GalleryChapterPlan;
+      plan: Storyboard;
     }>(
-      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/resolve`,
+      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/resolve`,
       { method: "POST", body: JSON.stringify(opts) },
     ),
 
-  deleteGalleryPlan: (id: string) =>
+  deleteStoryboard: (id: string) =>
     jsonFetch<{ deleted: boolean }>(
-      `/api/gallery/plans/${encodeURIComponent(id)}`,
+      `/api/gallery/storyboards/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
 
@@ -1603,7 +1603,12 @@ export type PromptMeta = {
   updatedAt: string | null;
 };
 
-export type ApiKeyProvider = "openai" | "gemini" | "anthropic";
+export type ApiKeyProvider =
+  | "openai"
+  | "gemini"
+  | "anthropic"
+  | "google-vertex-ai"
+  | "pexels";
 
 export type ApiKeyStatus = {
   provider: ApiKeyProvider;

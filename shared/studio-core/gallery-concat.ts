@@ -26,7 +26,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { getPlan, updatePlanOutput } from "./gallery-plan-store";
+import { getStoryboard, updateStoryboardOutput } from "./gallery-storyboard-store";
 import { PATHS } from "./paths";
 
 const execFileAsync = promisify(execFile);
@@ -87,7 +87,7 @@ export async function exportPlan(input: {
   planId: string;
   onProgress?: ExportProgress;
 }): Promise<ExportResult> {
-  const plan = await getPlan(input.planId);
+  const plan = await getStoryboard(input.planId);
   if (!plan) {
     const err = new Error(`Plan không tồn tại: ${input.planId}`) as Error & {
       code: string;
@@ -228,7 +228,7 @@ export async function exportPlan(input: {
   // 8. Persist plan.outputFilename
   input.onProgress?.(95, "Updating plan…");
   const totalDurationMs = ffprobeDurationMs(finalPath);
-  await updatePlanOutput(plan.id, {
+  await updateStoryboardOutput(plan.id, {
     outputFilename: finalFilename,
     outputDurationMs: totalDurationMs,
   });

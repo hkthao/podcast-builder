@@ -21,10 +21,10 @@ import { promisify } from "node:util";
 import OpenAI from "openai";
 import {
   galleryChapterAudioFilename,
-  getPlan,
+  getStoryboard,
   updateChapterAudio,
-  type GalleryChapterPlan,
-} from "./gallery-plan-store";
+  type Storyboard,
+} from "./gallery-storyboard-store";
 import { transcribeAudio } from "../transcribe/transcribe";
 import { PATHS } from "./paths";
 import { getApiKey } from "./api-keys-store";
@@ -291,8 +291,8 @@ export type GenAudioInput = {
  */
 export async function generateChapterAudio(
   input: GenAudioInput,
-): Promise<GalleryChapterPlan> {
-  const plan = await getPlan(input.planId);
+): Promise<Storyboard> {
+  const plan = await getStoryboard(input.planId);
   if (!plan) {
     const err = new Error(`Plan không tồn tại: ${input.planId}`) as Error & {
       code: string;

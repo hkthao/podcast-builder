@@ -19,10 +19,10 @@ import fs from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import {
-  getPlan,
+  getStoryboard,
   updateChapterVideo,
-  type GalleryChapterPlan,
-} from "./gallery-plan-store";
+  type Storyboard,
+} from "./gallery-storyboard-store";
 import { prepareChapterRenderAudio } from "./gallery-bgm-mix";
 import { prefetchAssetsBatch } from "./gallery-asset-prefetch";
 import { bus } from "./events";
@@ -113,7 +113,7 @@ function computeBeatRanges(
  * Resolve 1 chapter thành props pass vào composition.
  */
 export async function buildChapterProps(
-  plan: GalleryChapterPlan,
+  plan: Storyboard,
   chapterIdx: number,
   audioUrlBase: string,
 ): Promise<GalleryChapterProps> {
@@ -214,7 +214,7 @@ export async function renderChapter(input: {
   audioUrlBase: string;
   onProgress?: RenderProgress;
 }): Promise<{ outputPath: string; durationMs: number }> {
-  const plan = await getPlan(input.planId);
+  const plan = await getStoryboard(input.planId);
   if (!plan) {
     const err = new Error(`Plan không tồn tại: ${input.planId}`) as Error & {
       code: string;

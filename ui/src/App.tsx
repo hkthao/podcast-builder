@@ -9,8 +9,8 @@ import { KnowledgePage } from "./pages/Knowledge";
 import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
 import { ResearchPage } from "./pages/Research";
-import { GalleryPlanPage } from "./pages/GalleryPlan";
-import { GalleryPlanList } from "./pages/GalleryPlanList";
+import { GalleryStoryboardPage } from "./pages/GalleryStoryboard";
+import { GalleryStoryboardList } from "./pages/GalleryStoryboardList";
 import { SettingsPage } from "./pages/Settings";
 import { PromptsPage } from "./pages/Prompts";
 import { useEpisodesChangedSync } from "./lib/sse";
@@ -32,7 +32,7 @@ export function App() {
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
           <Route path="/research" element={<ResearchPage />} />
-          <Route path="/gallery/plans/:id" element={<GalleryPlanPage />} />
+          <Route path="/gallery/storyboards/:id" element={<GalleryStoryboardPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/prompts" element={<PromptsPage />} />
         </Routes>
@@ -42,8 +42,8 @@ export function App() {
   );
 }
 
-/** "/" branches theo workspace: podcast → EpisodeList, gallery → GalleryPlanList. */
+/** "/" branches theo workspace: podcast → EpisodeList, gallery → GalleryStoryboardList. */
 function HomeRoute() {
   const { workspace } = useWorkspace();
-  return workspace === "gallery" ? <GalleryPlanList /> : <EpisodeList />;
+  return workspace === "gallery" ? <GalleryStoryboardList /> : <EpisodeList />;
 }

@@ -1,12 +1,12 @@
 /**
- * GalleryPlanList — landing page Gallery workspace.
+ * GalleryStoryboardList — landing page Gallery workspace.
  * Route: "/" khi workspace=gallery (branched qua HomeRoute trong App.tsx).
  *
  * 1 plan = 1 tập tài liệu nghệ thuật (idea picked + scaffold chapters +
  * audio + video render + export). List ở đây cho user thấy:
  *  - Title, hook, era/region từ ideaSnapshot
  *  - Status badge: N chapters · X rendered · exported
- *  - Click card → /gallery/plans/:id để continue work
+ *  - Click card → /gallery/storyboards/:id để continue work
  */
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +20,7 @@ import {
   Loader2,
   FileText,
 } from "lucide-react";
-import { api, type GalleryChapterPlan } from "@/lib/api";
+import { api, type Storyboard } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,11 +33,11 @@ const ARCHETYPE_LABEL: Record<string, string> = {
   theme: "Chủ đề xuyên thời",
 };
 
-export function GalleryPlanList() {
+export function GalleryStoryboardList() {
   const navigate = useNavigate();
   const q = useQuery({
     queryKey: ["gallery-plans"],
-    queryFn: () => api.listGalleryPlans(),
+    queryFn: () => api.listStoryboards(),
     refetchOnWindowFocus: true,
   });
 
@@ -57,7 +57,7 @@ export function GalleryPlanList() {
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
             Mỗi tập = 1 video tài liệu nghệ thuật. Bắt đầu từ Brainstorm → pick
-            ý → "Lập kế hoạch chương" → render từng chương → export final.
+            ý → "Tạo storyboard" → render từng chương → export final.
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate("/brainstorm")}>
@@ -83,7 +83,7 @@ export function GalleryPlanList() {
           <Frame className="mx-auto mb-3 size-10 text-muted-foreground" />
           <p className="font-medium">Chưa có tập nào</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Vào Brainstorm → pick 1 ý tưởng → click "Lập kế hoạch chương" để
+            Vào Brainstorm → pick 1 ý tưởng → click "Tạo storyboard" để
             tạo tập đầu tiên.
           </p>
           <Button
@@ -106,7 +106,7 @@ export function GalleryPlanList() {
   );
 }
 
-function PlanCard({ plan }: { plan: GalleryChapterPlan }) {
+function PlanCard({ plan }: { plan: Storyboard }) {
   const idea = plan.ideaSnapshot;
   const totalCh = plan.chapters.length;
   const narrationCh = plan.chapters.filter((c) => c.kind === "narration").length;
@@ -126,7 +126,7 @@ function PlanCard({ plan }: { plan: GalleryChapterPlan }) {
 
   return (
     <Link
-      to={`/gallery/plans/${encodeURIComponent(plan.id)}`}
+      to={`/gallery/storyboards/${encodeURIComponent(plan.id)}`}
       className="block"
     >
       <Card className="p-5 h-full transition-colors hover:border-accent hover:bg-secondary/30">
