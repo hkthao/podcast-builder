@@ -19,11 +19,13 @@ export const KNOWN_PROVIDERS = [
   "openai",
   "gemini",
   "anthropic",
+  "google-vertex-ai",
 ] as const;
 export type ApiKeyProvider = (typeof KNOWN_PROVIDERS)[number];
 
-/** Env var name theo convention `<PROVIDER>_API_KEY`. */
-const envVarName = (p: ApiKeyProvider): string => `${p.toUpperCase()}_API_KEY`;
+/** Env var name theo convention `<PROVIDER>_API_KEY`. Hyphen → underscore. */
+const envVarName = (p: ApiKeyProvider): string =>
+  `${p.toUpperCase().replace(/-/g, "_")}_API_KEY`;
 
 /** Special fallback: Gemini có thể đặt `GOOGLE_API_KEY` cũ. */
 const fallbackEnvNames = (p: ApiKeyProvider): string[] => {

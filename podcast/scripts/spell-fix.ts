@@ -90,17 +90,21 @@ const groupIntoSentences = (segments: TranscriptSegment[]): Sentence[] => {
 async function fixBatch(
   openai: OpenAI,
   batch: FixItem[],
+  signal?: AbortSignal,
 ): Promise<FixItem[] | null> {
   try {
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      temperature: 0,
-      messages: [
-        { role: "system", content: SPELL_FIX_PROMPT },
-        { role: "user", content: JSON.stringify({ items: batch }) },
-      ],
-      response_format: { type: "json_object" },
-    });
+    const response = await openai.chat.completions.create(
+      {
+        model: MODEL,
+        temperature: 0,
+        messages: [
+          { role: "system", content: SPELL_FIX_PROMPT },
+          { role: "user", content: JSON.stringify({ items: batch }) },
+        ],
+        response_format: { type: "json_object" },
+      },
+      { signal },
+    );
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("empty response");
     const parsed = JSON.parse(content) as { items?: unknown };
@@ -114,6 +118,11 @@ async function fixBatch(
     }
     return valid;
   } catch (e) {
+    // Re-throw AbortError so spellFix loop bails out instead of silently
+    // logging every cancelled batch as a "fail".
+    if ((e as Error).name === "AbortError" || signal?.aborted) {
+      throw e;
+    }
     console.warn(
       `  ✗ batch ${batch[0]?.id}-${batch[batch.length - 1]?.id} fail:`,
       e,
@@ -134,7 +143,7 @@ const acceptCorrection = (orig: string, corr: string): string => {
 export async function spellFix(
   transcriptPath: string,
   outPath: string,
-  { force = false }: { force?: boolean } = {},
+  { force = false, signal }: { force?: boolean; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (!fs.existsSync(transcriptPath)) {
     throw new Error(`Transcript không tồn tại: ${transcriptPath}`);
@@ -191,8 +200,15 @@ export async function spellFix(
 
   const t0 = Date.now();
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    if (signal?.aborted) {
+      const err = new Error("Cancelled by user");
+      err.name = "AbortError";
+      throw err;
+    }
     const wave = batches.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(wave.map((b) => fixBatch(openai, b)));
+    const results = await Promise.all(
+      wave.map((b) => fixBatch(openai, b, signal)),
+    );
     for (let w = 0; w < wave.length; w++) {
       const items = results[w];
       const sentIds = new Set(wave[w]!.map((b) => b.id));

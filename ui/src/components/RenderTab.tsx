@@ -67,6 +67,10 @@ export function RenderTab({
   const qc = useQueryClient();
   const [job, setJob] = useState<RenderJob | null>(null);
   const [deletingUrl, setDeletingUrl] = useState<string | null>(null);
+  // Hold cancel-pending state across the SSE round-trip: cancelMutation.isPending
+  // chỉ true trong lúc POST, sau đó button quay lại "Hủy" dù job vẫn đang tear
+  // down. Track id riêng → khoá button cho tới khi job thật sự transition.
+  const [cancelRequestedId, setCancelRequestedId] = useState<string | null>(null);
   // Default checkboxes off if artifacts exist (don't regen by default).
   // If artifacts missing, render must run those phases anyway — checkbox forced on.
   const [regenTranscribe, setRegenTranscribe] = useState(!hasTranscript);
@@ -80,7 +84,25 @@ export function RenderTab({
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.cancelJob(id),
+    onMutate: (id) => setCancelRequestedId(id),
   });
+
+  // Clear cancel-pending khi job đã transition sang terminal (cancelled/error/done)
+  // hoặc khi id job đổi (user start render mới).
+  useEffect(() => {
+    if (!cancelRequestedId) return;
+    if (!job || job.id !== cancelRequestedId) {
+      setCancelRequestedId(null);
+      return;
+    }
+    if (
+      job.status === "cancelled" ||
+      job.status === "error" ||
+      job.status === "done"
+    ) {
+      setCancelRequestedId(null);
+    }
+  }, [job, cancelRequestedId]);
 
   // Surface server queue state — giúp debug khi job kẹt
   const jobsQ = useQuery({
@@ -302,7 +324,9 @@ export function RenderTab({
         <ProgressCard
           job={job!}
           onCancel={() => cancelMutation.mutate(job!.id)}
-          cancelling={cancelMutation.isPending}
+          cancelling={
+            cancelMutation.isPending || cancelRequestedId === job!.id
+          }
         />
       ) : (
         <TriggerCard
@@ -618,7 +642,7 @@ function ProgressCard({
           ) : (
             <XIcon className="size-3.5" />
           )}
-          Hủy
+          {cancelling ? "Đang huỷ…" : "Hủy"}
         </Button>
       </div>
 

@@ -15,10 +15,12 @@ export type VoiceGender = "male" | "female" | "neutral";
 /** Vai trò phù hợp — UI gợi ý mặc định cho dropdown host_nam vs host_nu. */
 export type SuggestedRole = "host_nam" | "host_nu" | "narrator" | "any";
 
+export type VoiceProvider = "gemini" | "openai";
+
 export type VoiceInfo = {
   id: string;
   /** Provider TTS sở hữu voice này. */
-  provider: "gemini" | "openai";
+  provider: VoiceProvider;
   /** Hiển thị UI — bằng `id` cho dễ tra cứu Google docs. */
   displayName: string;
   gender: VoiceGender;
@@ -340,7 +342,7 @@ export const ALL_VOICES: VoiceInfo[] = [
 
 /** Lookup voice info — null nếu id không tồn tại trong catalog. */
 export function findVoice(
-  provider: "gemini" | "openai",
+  provider: VoiceProvider,
   id: string,
 ): VoiceInfo | null {
   return (

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { bundle, type BundleOptions } from "@remotion/bundler";
 import {
+  makeCancelSignal,
   renderMedia,
   renderStill,
   selectComposition,
@@ -164,6 +165,12 @@ export function cancelJob(jobId: string): boolean {
     job.status = "cancelled";
     job.finishedAt = Date.now();
     emitProgress(job);
+  } else {
+    // Đang chạy — phát tín hiệu "đang huỷ" để UI feedback ngay, không đợi
+    // subprocess (whisper/ffmpeg/remotion) thực sự kết thúc. Status thật sẽ
+    // chuyển sang "cancelled" trong runJob catch block khi subprocess die.
+    job.message = "Đang huỷ…";
+    emitProgress(job);
   }
   return true;
 }
@@ -298,7 +305,7 @@ async function runJob(job: JobInternal): Promise<void> {
     // 1. Process audio
     if (needAudioPipeline) {
       setPhase(job, "process-audio", 5, "Normalizing loudness…");
-      const audioOut = await processAudio(ep.audioPath);
+      const audioOut = await processAudio(ep.audioPath, { signal });
       whisperWav = audioOut.whisperWav;
       renderWav = audioOut.renderWav;
       checkAbort();
@@ -307,12 +314,12 @@ async function runJob(job: JobInternal): Promise<void> {
     // 2. Transcribe
     if (runTranscribe && whisperWav) {
       setPhase(job, "transcribe", 15, "Whisper transcribing…");
-      await transcribeAudio(whisperWav, transcriptJson);
+      await transcribeAudio(whisperWav, transcriptJson, { signal });
       checkAbort();
 
       // 3. Spell fix
       setPhase(job, "spell-fix", 30, "Sửa chính tả qua OpenAI…");
-      await spellFix(transcriptJson, correctedJson);
+      await spellFix(transcriptJson, correctedJson, { signal });
       checkAbort();
     } else if (job.jobType === "render") {
       // Skip transcribe phases — UI sẽ thấy phases này done (currentOrder vượt qua)
@@ -399,6 +406,13 @@ async function runJob(job: JobInternal): Promise<void> {
       episode: episodeConfig,
     };
 
+    // Bridge AbortSignal → Remotion's CancelSignal so renderMedia/renderStill
+    // actually tear down Chrome workers when user clicks Hủy.
+    const remotionCancel = makeCancelSignal();
+    const onAbortForRemotion = () => remotionCancel.cancel();
+    if (signal.aborted) remotionCancel.cancel();
+    else signal.addEventListener("abort", onAbortForRemotion, { once: true });
+
     try {
       // 6. Bundle
       setPhase(job, "bundle", 45, "Bundling Remotion…");
@@ -429,6 +443,7 @@ async function runJob(job: JobInternal): Promise<void> {
         outputLocation: outputPath,
         inputProps,
         audioCodec: "aac" as const,
+        cancelSignal: remotionCancel.cancelSignal,
       };
 
       if (job.preview) {
@@ -491,6 +506,7 @@ async function runJob(job: JobInternal): Promise<void> {
           frame: thumbFrame,
           imageFormat: "jpeg",
           jpegQuality: 85,
+          cancelSignal: remotionCancel.cancelSignal,
         });
 
         // 9. Lock file
@@ -512,6 +528,7 @@ async function runJob(job: JobInternal): Promise<void> {
       job.finishedAt = Date.now();
       setPhase(job, "done", 100, "Hoàn tất");
     } finally {
+      signal.removeEventListener("abort", onAbortForRemotion);
       // Cleanup public assets
       for (const n of cleanupList) {
         const p = path.join(PUBLIC_DIR, n);
@@ -525,7 +542,11 @@ async function runJob(job: JobInternal): Promise<void> {
       }
     }
   } catch (e) {
-    if (signal.aborted || (e as Error).name === "AbortError") {
+    if (
+      signal.aborted ||
+      (e as Error).name === "AbortError" ||
+      ((e as Error).message ?? "").includes("Render was cancelled")
+    ) {
       job.status = "cancelled";
       job.finishedAt = Date.now();
       emitProgress(job);

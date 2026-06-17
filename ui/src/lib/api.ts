@@ -67,9 +67,23 @@ export type EpisodeSummary = {
 };
 
 class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /**
+   * Server-supplied error code (e.g. "TTS_BLOCKED", "MISSING_CACHE",
+   * "VALIDATION"). Empty if server didn't return one. UI dùng để phân biệt
+   * loại lỗi → skip + continue vs abort.
+   */
+  code: string;
+  /** Server-supplied details (vd `blockReason`, `missing[]`). Untyped. */
+  details: Record<string, unknown>;
+  constructor(
+    public status: number,
+    message: string,
+    extra?: { code?: string; details?: Record<string, unknown> },
+  ) {
     super(message);
     this.name = "ApiError";
+    this.code = extra?.code ?? "";
+    this.details = extra?.details ?? {};
   }
 }
 
@@ -86,13 +100,17 @@ async function jsonFetch<T>(
   });
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
+    let code: string | undefined;
+    let details: Record<string, unknown> = {};
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) msg = body.error;
+      const body = (await res.json()) as Record<string, unknown>;
+      if (typeof body.error === "string") msg = body.error;
+      if (typeof body.code === "string") code = body.code;
+      details = body;
     } catch {
       /* not json */
     }
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, { code, details });
   }
   return (await res.json()) as T;
 }
@@ -1349,10 +1367,124 @@ export const api = {
     ),
 
   deletePodcastScript: (name: string) =>
-    jsonFetch<{ deleted: boolean }>(
+    jsonFetch<{ deleted: boolean; audioCleared: number }>(
       `/api/episodes/${encodeURIComponent(name)}/script`,
       { method: "DELETE" },
     ),
+
+  getPodcastScriptAudioStatus: (name: string) =>
+    jsonFetch<{
+      turns: Array<{
+        idx: number;
+        cached: boolean;
+        aacFilename: string | null;
+        mtimeMs: number | null;
+      }>;
+    }>(`/api/episodes/${encodeURIComponent(name)}/script/audio-status`),
+
+  genPodcastScriptTurnAudio: (
+    name: string,
+    input: {
+      turnIdx: number;
+      voice: string;
+      styleInstruction: string;
+      ttsModel?: string;
+      /** TTS channel — "gemini" (AI Studio, AIza key) hoặc "vertex-gemini" (Vertex AI Express, AQ key). */
+      provider?: "gemini" | "vertex-gemini";
+      force?: boolean;
+    },
+  ) =>
+    jsonFetch<{
+      aacFilename: string;
+      pcmFilename: string;
+      durationMs: number;
+      cached: boolean;
+    }>(`/api/episodes/${encodeURIComponent(name)}/script/audio/turn`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  deletePodcastScriptTurnAudio: (name: string, turnIdx: number) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/episodes/${encodeURIComponent(name)}/script/audio/turn/${turnIdx}`,
+      { method: "DELETE" },
+    ),
+
+  /** Concat-only: ráp các PCM cache hiện có → final AAC. Throw 400 nếu turn
+   * nào chưa có PCM (UI thấy `err.details.missing[]`). */
+  concatPodcastScript: (name: string, input: { mixBgm?: boolean } = {}) =>
+    jsonFetch<{
+      outputPath: string;
+      durationMs: number;
+      turnCount: number;
+      missing: number[];
+    }>(`/api/episodes/${encodeURIComponent(name)}/script/audio/concat`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  batchGenPodcastScriptTurnAudio: (
+    name: string,
+    input: {
+      fromIdx: number;
+      count: number;
+      ttsModel?: string;
+      hostNam: { voice: string; styleInstruction: string };
+      hostNu: { voice: string; styleInstruction: string };
+      force?: boolean;
+      pacingMs?: number;
+    },
+  ) =>
+    jsonFetch<{
+      range: { from: number; to: number };
+      generated: number[];
+      cached: number[];
+      skipped: number[];
+      blocked: Array<{ idx: number; reason: string }>;
+    }>(`/api/episodes/${encodeURIComponent(name)}/script/audio/batch`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  previewPodcastScriptTurns: (name: string, turnIndices: number[]) =>
+    jsonFetch<{
+      aacFilename: string;
+      durationMs: number;
+      included: number[];
+      missing: number[];
+      mtimeMs: number;
+    }>(
+      `/api/episodes/${encodeURIComponent(name)}/script/audio/preview`,
+      { method: "POST", body: JSON.stringify({ turnIndices }) },
+    ),
+
+  uploadPodcastScriptTurnAudio: async (
+    name: string,
+    turnIdx: number,
+    file: File,
+  ): Promise<{
+    aacFilename: string;
+    pcmFilename: string;
+    durationMs: number;
+    cached: boolean;
+  }> => {
+    const form = new FormData();
+    form.append("audio", file);
+    const res = await fetch(
+      `/api/episodes/${encodeURIComponent(name)}/script/audio/turn/${turnIdx}/upload`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as {
+      aacFilename: string;
+      pcmFilename: string;
+      durationMs: number;
+      cached: boolean;
+    };
+  },
 
   genPodcastScriptAudio: (
     name: string,

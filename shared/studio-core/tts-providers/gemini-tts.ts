@@ -91,11 +91,32 @@ export const DEFAULT_PITCH = 0;
 export const DEFAULT_STYLE_INSTRUCTION =
   "Hồ sơ âm thanh — narrator phim tài liệu nghệ thuật: giọng nam miền Bắc, trầm ấm, chiêm nghiệm, học thuật. Tốc độ vừa phải, ngắt câu rõ, pacing chậm rãi như Khan Academy Smarthistory";
 
+/**
+ * Backend channel cho Gemini TTS — quyết định endpoint URL + billing project.
+ *  - "ai-studio": generativelanguage.googleapis.com, AI Studio key (AIza...).
+ *    Free tier hạn chế, dễ tốn tiền nếu hit quota cao.
+ *  - "vertex-express": aiplatform.googleapis.com Express Mode, Vertex/Agent
+ *    Platform key (AQ.Ab8...). Free tier hào phóng — ~15 RPM, 1500 RPD,
+ *    1M TPM. Cùng model + request body — chỉ khác URL.
+ */
+export type GeminiChannel = "ai-studio" | "vertex-express";
+
+const CHANNEL_BASE_URL: Record<GeminiChannel, string> = {
+  "ai-studio": "https://generativelanguage.googleapis.com/v1beta",
+  "vertex-express":
+    "https://aiplatform.googleapis.com/v1beta1/publishers/google",
+};
+
 export type GeminiTtsRequest = {
   text: string;
   voice: GeminiVoice;
   model?: GeminiTtsModel;
   apiKey: string;
+  /**
+   * Backend channel — default "ai-studio" để backward-compat. Khi user dùng
+   * AQ key từ Agent Platform Studio → "vertex-express".
+   */
+  channel?: GeminiChannel;
   /**
    * Style steering — AI Studio nhận qua `systemInstruction` field (separate
    * từ user content) → giảm noise so với prepend vào text.
@@ -116,9 +137,21 @@ type AiStudioResponse = {
         inlineData?: { mimeType?: string; data?: string };
       }>;
     };
+    finishReason?: string;
+    safetyRatings?: Array<{ category?: string; probability?: string }>;
   }>;
+  promptFeedback?: {
+    blockReason?: string;
+    safetyRatings?: Array<{ category?: string; probability?: string }>;
+  };
   error?: { message?: string; code?: number };
 };
+
+/**
+ * Error code dùng để caller phân biệt content bị Gemini safety filter chặn
+ * (sửa text được) vs lỗi quota / network khác (retry / chờ).
+ */
+export const GEMINI_TTS_BLOCKED_CODE = "TTS_BLOCKED";
 
 /**
  * Gọi AI Studio Gemini TTS → trả PCM Buffer (16-bit LE mono 24kHz).
@@ -178,7 +211,9 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
   encoding: "PCM_S16LE_24K";
 }> {
   const model = toAiStudioModel(input.model);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${input.apiKey}`;
+  const channel = input.channel ?? "ai-studio";
+  const baseUrl = CHANNEL_BASE_URL[channel];
+  const url = `${baseUrl}/models/${model}:generateContent?key=${input.apiKey}`;
 
   // AI Studio TTS không support systemInstruction → prepend style + delimiter
   // vào content. Style cần ngắn + có separator rõ để TTS không đọc.
@@ -193,9 +228,12 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
     ? `[${styleText}]\n\n${input.text}`
     : input.text;
 
+  // Vertex AI YÊU CẦU `role: "user"` trong contents — AI Studio thì optional
+  // nhưng chấp nhận. Set unconditionally để 1 body work cho cả 2 channel.
   const body = {
     contents: [
       {
+        role: "user",
         parts: [{ text: promptedText }],
       },
     ],
@@ -253,6 +291,19 @@ export async function generateGeminiTts(input: GeminiTtsRequest): Promise<{
     const audioBase64 =
       data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!audioBase64) {
+      // Bị Gemini safety filter chặn → surface error code riêng để batch
+      // gen có thể skip turn này + tiếp tục, thay vì abort cả pipeline.
+      const blockReason = data.promptFeedback?.blockReason;
+      const finishReason = data.candidates?.[0]?.finishReason;
+      if (blockReason || finishReason === "SAFETY") {
+        const reason = blockReason ?? finishReason ?? "SAFETY";
+        const err = new Error(
+          `Gemini chặn nội dung (${reason}) — sửa text turn này hoặc bỏ qua. Có thể do âm điệu/từ ngữ nhạy cảm bị filter hiểu lầm.`,
+        ) as Error & { code: string; blockReason: string };
+        err.code = GEMINI_TTS_BLOCKED_CODE;
+        err.blockReason = reason;
+        throw err;
+      }
       throw new Error(
         `Gemini TTS response thiếu audio — ${JSON.stringify(data).slice(0, 300)}`,
       );

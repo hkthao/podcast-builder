@@ -11,7 +11,7 @@ const ensureDir = (p: string) => {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 };
 
-const toWav16kMono = (input: string): string => {
+const toWav16kMono = (input: string, signal?: AbortSignal): string => {
   const outDir = path.resolve("tmp");
   ensureDir(outDir);
   const base = path.basename(input).replace(/\.[^.]+$/, "");
@@ -21,6 +21,11 @@ const toWav16kMono = (input: string): string => {
     fs.statSync(outPath).mtimeMs >= fs.statSync(input).mtimeMs
   ) {
     return outPath;
+  }
+  if (signal?.aborted) {
+    const err = new Error("Cancelled by user");
+    err.name = "AbortError";
+    throw err;
   }
   execFileSync(
     "ffmpeg",
@@ -38,6 +43,7 @@ const isCacheValid = (jsonPath: string, audioPath: string): boolean => {
 export async function transcribeAudio(
   audioPath: string,
   jsonPath: string,
+  { signal }: { signal?: AbortSignal } = {},
 ): Promise<Transcript> {
   if (!fs.existsSync(audioPath)) {
     throw new Error(`File audio không tồn tại: ${audioPath}`);
@@ -53,7 +59,7 @@ export async function transcribeAudio(
     );
   }
 
-  const wavPath = toWav16kMono(audioPath);
+  const wavPath = toWav16kMono(audioPath, signal);
   const model = getModel();
   console.log(`[transcribe] ${audioPath} → ${jsonPath} (model: ${model})`);
 
@@ -65,6 +71,7 @@ export async function transcribeAudio(
     tokenLevelTimestamps: true,
     language: "vi",
     printOutput: false,
+    signal,
   });
 
   ensureDir(path.dirname(jsonPath));

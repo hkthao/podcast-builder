@@ -56,6 +56,14 @@ const PROVIDER_META: Record<
     description:
       'Dùng cho AI đọc voiceover tiếng Việt (giọng Kore/Aoede/... rất tự nhiên). Lấy API key MIỄN PHÍ tại Google AI Studio: bấm "Lấy API key" → Create API key. Không cần billing.',
   },
+  "google-vertex-ai": {
+    label: "Vertex AI (Gemini Express)",
+    docsUrl:
+      "https://console.cloud.google.com/agent-platform/studio/settings/api-keys",
+    placeholder: "AQ.Ab8...",
+    description:
+      "Gemini TTS qua Vertex AI Express Mode — cùng voices Kore/Aoede/Charon như AI Studio nhưng billing tại Cloud project. Free tier hào phóng (~15 RPM, 1500 RPD, 1M TPM). Lấy key tại Cloud Console → Agent Platform Studio → API keys. Hỗ trợ đầy đủ style instruction + TTS model.",
+  },
   anthropic: {
     label: "Anthropic Claude",
     docsUrl: "https://console.anthropic.com/settings/keys",

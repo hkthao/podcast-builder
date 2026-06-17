@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const TARGET_LUFS = -16;
@@ -21,12 +21,53 @@ const isCacheValid = (out: string, input: string): boolean => {
   return fs.statSync(out).mtimeMs >= fs.statSync(input).mtimeMs;
 };
 
-const ffmpegSync = (args: string[]): string => {
-  const result = execFileSync("ffmpeg", args, {
-    stdio: ["ignore", "pipe", "pipe"],
+type FfmpegResult = { stdout: string; stderr: string };
+
+const ffmpegRun = (
+  args: string[],
+  signal?: AbortSignal,
+): Promise<FfmpegResult> =>
+  new Promise<FfmpegResult>((resolve, reject) => {
+    if (signal?.aborted) {
+      const err = new Error("Cancelled by user");
+      err.name = "AbortError";
+      reject(err);
+      return;
+    }
+    const child = spawn("ffmpeg", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      signal,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d: Buffer) => {
+      stdout += d.toString("utf-8");
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      stderr += d.toString("utf-8");
+    });
+    child.on("error", (e) => {
+      // AbortError from spawn signal — surface so caller can detect cancellation.
+      reject(e);
+    });
+    child.on("close", (code, exitSignal) => {
+      if (signal?.aborted) {
+        const err = new Error("Cancelled by user");
+        err.name = "AbortError";
+        reject(err);
+        return;
+      }
+      if (code !== 0) {
+        reject(
+          new Error(
+            `ffmpeg exit ${code}${exitSignal ? ` (signal ${exitSignal})` : ""}:\n${stderr}`,
+          ),
+        );
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
   });
-  return result.toString();
-};
 
 type LoudnormStats = {
   measured_I: string;
@@ -36,9 +77,11 @@ type LoudnormStats = {
   offset: string;
 };
 
-const measureLoudnorm = (input: string): LoudnormStats => {
-  const result = spawnSync(
-    "ffmpeg",
+const measureLoudnorm = async (
+  input: string,
+  signal?: AbortSignal,
+): Promise<LoudnormStats> => {
+  const { stderr } = await ffmpegRun(
     [
       "-hide_banner",
       "-nostats",
@@ -50,12 +93,9 @@ const measureLoudnorm = (input: string): LoudnormStats => {
       "null",
       "-",
     ],
-    { encoding: "utf-8" },
+    signal,
   );
-  if (result.status !== 0) {
-    throw new Error(`ffmpeg loudnorm pass 1 fail (exit ${result.status}):\n${result.stderr}`);
-  }
-  const match = result.stderr.match(/\{[\s\S]*?\}/);
+  const match = stderr.match(/\{[\s\S]*?\}/);
   if (!match) {
     throw new Error("[process-audio] Không parse được output loudnorm pass 1");
   }
@@ -75,7 +115,10 @@ const measureLoudnorm = (input: string): LoudnormStats => {
   };
 };
 
-export async function processAudio(audioPath: string): Promise<ProcessedAudio> {
+export async function processAudio(
+  audioPath: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<ProcessedAudio> {
   if (!fs.existsSync(audioPath)) {
     throw new Error(`File audio không tồn tại: ${audioPath}`);
   }
@@ -91,7 +134,7 @@ export async function processAudio(audioPath: string): Promise<ProcessedAudio> {
   }
 
   console.log(`[process-audio] pass 1 (đo loudness): ${audioPath}`);
-  const stats = measureLoudnorm(audioPath);
+  const stats = await measureLoudnorm(audioPath, signal);
 
   console.log(
     `  measured: I=${stats.measured_I} LUFS, TP=${stats.measured_TP} dBTP, LRA=${stats.measured_LRA}`,
@@ -111,34 +154,40 @@ export async function processAudio(audioPath: string): Promise<ProcessedAudio> {
   ].join(":");
 
   console.log(`[process-audio] pass 2 (apply) → 48kHz stereo + 16kHz mono`);
-  ffmpegSync([
-    "-y",
-    "-hide_banner",
-    "-loglevel",
-    "warning",
-    "-i",
-    audioPath,
-    "-af",
-    loudnormFilter,
-    "-ac",
-    "2",
-    "-ar",
-    "48000",
-    renderWav,
-  ]);
-  ffmpegSync([
-    "-y",
-    "-hide_banner",
-    "-loglevel",
-    "warning",
-    "-i",
-    renderWav,
-    "-ac",
-    "1",
-    "-ar",
-    "16000",
-    whisperWav,
-  ]);
+  await ffmpegRun(
+    [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "warning",
+      "-i",
+      audioPath,
+      "-af",
+      loudnormFilter,
+      "-ac",
+      "2",
+      "-ar",
+      "48000",
+      renderWav,
+    ],
+    signal,
+  );
+  await ffmpegRun(
+    [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "warning",
+      "-i",
+      renderWav,
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      whisperWav,
+    ],
+    signal,
+  );
 
   console.log(`  ✓ ${renderWav}`);
   console.log(`  ✓ ${whisperWav}`);
