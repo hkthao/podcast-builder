@@ -28,7 +28,6 @@ import {
   Copy,
   Check,
   Image as ImageIcon,
-  Plus,
   X,
   ExternalLink,
   ChevronDown,
@@ -50,7 +49,6 @@ import {
   type AssetResult,
   type Storyboard,
   type StoryboardChapter,
-  type KenBurnsMode,
   type LLMProvider,
   type SavedAsset,
   type Shot,
@@ -334,8 +332,6 @@ function ChapterCard({
   const [transcript, setTranscript] = useState(chapter.transcript);
   const [dirty, setDirty] = useState(false);
   const saveTimer = useRef<number | null>(null);
-  // Storyboard timeline editor modal — drag-drop visual editor cho shots.
-  const [storyboardOpen, setStoryboardOpen] = useState(false);
 
   // Sync khi parent refresh chapter (sau gen) — nhưng giữ pending edit
   useEffect(() => {
@@ -563,35 +559,31 @@ function ChapterCard({
             onMutate={onMutate}
           />
 
-          {/* Shots editor list view + Storyboard timeline editor modal */}
-          <ShotsEditor
-            beats={chapter.shots}
-            transcript={transcript}
+          {/* Storyboard editor — drag-drop timeline inline (thay ShotsEditor list view cũ) */}
+          <StoryboardEditor
+            shots={chapter.shots}
+            transcript={chapter.transcript}
             sentenceCount={countSentences(transcript)}
+            audioDurationMs={chapter.audioDurationMs ?? 0}
             keywordSuggestions={buildBeatKeywordSuggestions(
               chapter,
               ideaSnapshot,
             )}
-            onSave={(beats) => saveMut.mutate({ shots: beats })}
             saving={saveMut.isPending}
-            onOpenTimeline={() => setStoryboardOpen(true)}
+            onChange={(shots) => saveMut.mutate({ shots })}
+            renderAssetSlot={(shot, onPatch) => (
+              <BeatAssetSlot
+                beat={shot}
+                keywordSuggestions={buildBeatKeywordSuggestions(
+                  chapter,
+                  ideaSnapshot,
+                )}
+                onAttach={(assetId) => onPatch({ assetIdRef: assetId })}
+                onDetach={() => onPatch({ assetIdRef: null })}
+                disabled={saveMut.isPending}
+              />
+            )}
           />
-
-          {storyboardOpen && (
-            <StoryboardEditor
-              chapterTitle={chapter.title}
-              chapterIdx={chapterIdx}
-              initialShots={chapter.shots}
-              transcript={chapter.transcript}
-              audioDurationMs={chapter.audioDurationMs ?? 0}
-              onSave={(shots) => {
-                saveMut.mutate({ shots });
-                setStoryboardOpen(false);
-              }}
-              onClose={() => setStoryboardOpen(false)}
-              saving={saveMut.isPending}
-            />
-          )}
 
           {/* Documentary Phase 4: multi-backend asset resolver */}
           <ResolvePanel
@@ -662,31 +654,6 @@ function countSentences(text: string): number {
     .map((s) => s.trim())
     .filter((s) => s.length > 0).length;
 }
-
-function splitIntoSentences(text: string): string[] {
-  if (!text.trim()) return [];
-  return text
-    .split(/([.!?]+)/)
-    .reduce<string[]>((acc, part, i, arr) => {
-      // Re-attach punctuation to sentence
-      if (i % 2 === 0) {
-        const punct = arr[i + 1] ?? "";
-        const sentence = (part + punct).trim();
-        if (sentence) acc.push(sentence);
-      }
-      return acc;
-    }, []);
-}
-
-const KEN_BURNS_OPTIONS: KenBurnsMode[] = [
-  "zoom-in",
-  "zoom-out",
-  "pan-left",
-  "pan-right",
-  "pan-up",
-  "pan-down",
-  "static",
-];
 
 function AudioPanel({
   chapter,
@@ -1200,349 +1167,6 @@ function buildBeatKeywordSuggestions(
   return out;
 }
 
-function ShotsEditor({
-  beats,
-  transcript,
-  sentenceCount,
-  keywordSuggestions,
-  onSave,
-  saving,
-  onOpenTimeline,
-}: {
-  beats: Shot[];
-  transcript: string;
-  sentenceCount: number;
-  keywordSuggestions: string[];
-  onSave: (beats: Shot[]) => void;
-  saving: boolean;
-  onOpenTimeline?: () => void;
-}) {
-  const [expanded, setExpanded] = useState(beats.length > 0);
-  const sentences = splitIntoSentences(transcript);
-
-  // Detect mismatch: beat trỏ ra ngoài range câu (sau khi user edit transcript)
-  const staleBeats = beats.filter(
-    (b) => b.sentenceIdx < 0 || b.sentenceIdx >= sentenceCount,
-  );
-
-  const updateBeat = (i: number, patch: Partial<Shot>) => {
-    const next = beats.map((b, j) => (j === i ? { ...b, ...patch } : b));
-    onSave(next);
-  };
-  const deleteBeat = (i: number) => {
-    onSave(beats.filter((_, j) => j !== i));
-  };
-  const addBeat = () => {
-    // Thêm beat mới sau beat cuối, +2 câu hoặc cuối transcript
-    const lastIdx = beats.length > 0 ? beats[beats.length - 1].sentenceIdx : -1;
-    const newIdx = Math.min(lastIdx + 2, Math.max(0, sentenceCount - 1));
-    onSave([
-      ...beats,
-      {
-        sentenceIdx: newIdx,
-        keyword: "",
-        assetIdRef: null,
-        kenBurns: "zoom-in",
-        durationMs: null,
-        note: "",
-      },
-    ]);
-  };
-
-  // Auto-fill: target ~1 beat mỗi 2.5 câu (= 6-12 giây mỗi ảnh ở tốc độ đọc
-  // 160 từ/phút). Min 3 beat cho chapter ngắn.
-  const targetBeatCount = Math.max(3, Math.round(sentenceCount / 2.5));
-  const KEN_BURNS_ROTATION: KenBurnsMode[] = [
-    "zoom-in",
-    "pan-right",
-    "zoom-out",
-    "pan-left",
-    "zoom-in",
-    "pan-up",
-  ];
-  const autoFillBeats = () => {
-    const needed = targetBeatCount - beats.length;
-    if (needed <= 0) return;
-    const existingIdxs = new Set(beats.map((b) => b.sentenceIdx));
-    const keywordPool =
-      keywordSuggestions.length > 0 ? keywordSuggestions : [""];
-    const stride = Math.max(1, sentenceCount / targetBeatCount);
-    const added: Shot[] = [];
-    for (let i = 0; i < targetBeatCount && added.length < needed; i++) {
-      const idx = Math.min(
-        sentenceCount - 1,
-        Math.max(0, Math.round(i * stride)),
-      );
-      if (existingIdxs.has(idx)) continue;
-      existingIdxs.add(idx);
-      added.push({
-        sentenceIdx: idx,
-        keyword: keywordPool[added.length % keywordPool.length] ?? "",
-        assetIdRef: null,
-        kenBurns:
-          KEN_BURNS_ROTATION[added.length % KEN_BURNS_ROTATION.length],
-        durationMs: null,
-        note: "",
-      });
-    }
-    if (added.length === 0) return;
-    const next = [...beats, ...added].sort(
-      (a, b) => a.sentenceIdx - b.sentenceIdx,
-    );
-    onSave(next);
-  };
-
-  return (
-    <div className="mt-5 border-t pt-4">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 text-sm font-medium hover:text-accent transition-colors"
-      >
-        <ImageIcon className="size-4" />
-        Visual beats ({beats.length})
-        {staleBeats.length > 0 && (
-          <Badge
-            variant="outline"
-            className="ml-1 text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-          >
-            {staleBeats.length} stale
-          </Badge>
-        )}
-        <span className="ml-auto text-xs text-muted-foreground font-normal">
-          ~1 ảnh/{Math.max(1, Math.round(sentenceCount / Math.max(1, beats.length)))} câu
-        </span>
-        <ChevronDown
-          className={cn(
-            "size-4 text-muted-foreground transition-transform shrink-0",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-
-      <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-        Danh sách các "khoảnh khắc hình ảnh" trong video — mỗi beat là 1 ảnh
-        đi kèm voiceover. Khi đọc đến câu nào, ảnh tương ứng sẽ hiện ra với
-        hiệu ứng phóng to / lia chậm.
-        {sentenceCount > 0 && (
-          <>
-            {" "}Chương này dài <strong>{sentenceCount} câu</strong> → gợi ý
-            khoảng <strong>{targetBeatCount} ảnh</strong> ({beats.length}{" "}
-            beat hiện có). Bấm "Tự fill" để hệ thống sinh đủ scaffold, rồi
-            "Attach asset" cho từng beat — hoặc xoá beat không cần.
-          </>
-        )}
-      </p>
-
-      {expanded && (
-        <div className="mt-3 space-y-2">
-          {beats.length === 0 ? (
-            <div className="rounded-md bg-secondary/20 p-4 text-center space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Chưa có beat nào. Bấm <strong>"Tự fill"</strong> để hệ thống
-                tạo sẵn {targetBeatCount} beat scaffold theo độ dài chương,
-                hoặc <strong>"Thêm beat"</strong> để thêm từng cái.
-              </p>
-            </div>
-          ) : (
-            beats.map((beat, i) => (
-              <BeatRow
-                key={i}
-                beat={beat}
-                idx={i}
-                totalBeats={beats.length}
-                sentences={sentences}
-                sentenceCount={sentenceCount}
-                keywordSuggestions={keywordSuggestions}
-                onUpdate={(patch) => updateBeat(i, patch)}
-                onDelete={() => deleteBeat(i)}
-                disabled={saving}
-              />
-            ))
-          )}
-
-          {/* Footer actions — Tự fill + Thêm beat căn phải */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t mt-2">
-            {saving && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-auto">
-                <Loader2 className="size-3 animate-spin" />
-                Đang lưu…
-              </span>
-            )}
-            {onOpenTimeline && beats.length > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onOpenTimeline}
-                disabled={saving}
-                title="Mở storyboard editor — drag-drop kéo thả timeline"
-              >
-                <ImageIcon className="size-3.5" />
-                Storyboard editor
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={autoFillBeats}
-              disabled={
-                saving ||
-                sentenceCount === 0 ||
-                beats.length >= targetBeatCount
-              }
-              title={
-                beats.length >= targetBeatCount
-                  ? `Đã đủ ${beats.length}/${targetBeatCount} beat — nếu cần thêm bấm "Thêm beat"`
-                  : `Sinh thêm ${targetBeatCount - beats.length} beat để đủ scaffold`
-              }
-            >
-              <Sparkles className="size-3.5" />
-              Tự fill ~{targetBeatCount} beat
-              {beats.length > 0 && beats.length < targetBeatCount && (
-                <span className="text-muted-foreground font-normal">
-                  {" "}(+{targetBeatCount - beats.length})
-                </span>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={addBeat}
-              disabled={saving || sentenceCount === 0}
-            >
-              <Plus className="size-3.5" />
-              Thêm beat
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BeatRow({
-  beat,
-  idx,
-  totalBeats,
-  sentences,
-  sentenceCount,
-  keywordSuggestions,
-  onUpdate,
-  onDelete,
-  disabled,
-}: {
-  beat: Shot;
-  idx: number;
-  totalBeats: number;
-  sentences: string[];
-  sentenceCount: number;
-  keywordSuggestions: string[];
-  onUpdate: (patch: Partial<Shot>) => void;
-  onDelete: () => void;
-  disabled: boolean;
-}) {
-  const isStale =
-    beat.sentenceIdx < 0 || beat.sentenceIdx >= sentenceCount;
-  const sentencePreview = sentences[beat.sentenceIdx]?.slice(0, 80) ?? "(out of range)";
-
-  return (
-    <div
-      className={cn(
-        "rounded-md bg-secondary/30 p-3 space-y-2",
-        isStale && "bg-amber-500/10 ring-1 ring-amber-500/30",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-muted-foreground w-6 shrink-0">
-          #{idx + 1}/{totalBeats}
-        </span>
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground">@câu</span>
-          <input
-            type="number"
-            min={0}
-            max={Math.max(0, sentenceCount - 1)}
-            value={beat.sentenceIdx}
-            onChange={(e) =>
-              onUpdate({ sentenceIdx: Math.max(0, Number(e.target.value)) })
-            }
-            disabled={disabled}
-            className="h-7 w-14 rounded border bg-background px-2 text-xs font-mono"
-          />
-        </div>
-        <select
-          value={beat.kenBurns}
-          onChange={(e) =>
-            onUpdate({ kenBurns: e.target.value as KenBurnsMode })
-          }
-          disabled={disabled}
-          className="h-7 rounded border bg-background px-2 text-xs"
-          title="Ken Burns motion"
-        >
-          {KEN_BURNS_OPTIONS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        <a
-          href={`https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(beat.keyword)}&title=Special:MediaSearch&go=Go&type=image`}
-          target="_blank"
-          rel="noreferrer"
-          className={cn(
-            "text-xs text-accent hover:underline inline-flex items-center gap-0.5 ml-auto",
-            !beat.keyword && "pointer-events-none opacity-40",
-          )}
-          title="Search Wikimedia Commons"
-        >
-          <ExternalLink className="size-3" />
-          Search
-        </a>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-          onClick={onDelete}
-          disabled={disabled}
-          title="Xoá beat"
-        >
-          <X className="size-3.5" />
-        </Button>
-      </div>
-      <input
-        type="text"
-        value={beat.keyword}
-        onChange={(e) => onUpdate({ keyword: e.target.value })}
-        disabled={disabled}
-        placeholder='Keyword (tiếng Anh): vd "Giotto Lamentation full fresco Arena Chapel"'
-        className="w-full h-8 rounded border bg-background px-2 text-sm"
-      />
-      <p
-        className={cn(
-          "text-xs italic",
-          isStale ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-        )}
-      >
-        {isStale
-          ? `⚠ Stale — câu #${beat.sentenceIdx} không còn trong transcript (chỉ có ${sentenceCount} câu)`
-          : `Câu khớp: "${sentencePreview}${sentencePreview.length === 80 ? "…" : ""}"`}
-      </p>
-      {beat.note && (
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium">Note:</span> {beat.note}
-        </p>
-      )}
-
-      {/* Phase 4c: asset attach */}
-      <BeatAssetSlot
-        beat={beat}
-        keywordSuggestions={keywordSuggestions}
-        onAttach={(assetId) => onUpdate({ assetIdRef: assetId })}
-        onDetach={() => onUpdate({ assetIdRef: null })}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
 
 function BeatAssetSlot({
   beat,
