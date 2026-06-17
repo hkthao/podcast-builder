@@ -21,12 +21,29 @@ export type ScenePlan = {
   scenes: Scene[];
 };
 
-/** Quy tắc cắt cho podcast 15–20 phút: cảnh không vụn cũng không quá dài. */
-const MIN_SCENE_DURATION_MS = 8_000;
+/** Quy tắc cắt cho podcast 15–20 phút: cảnh không vụn cũng không quá dài.
+ *
+ * Retention pass 1: thay vì 1 set thresholds cố định, nới `min` xuống cho
+ * đoạn high-energy (nói nhanh, WPM ≥ HIGH) → nhịp gãy thường xuyên hơn.
+ * Đoạn low-energy (chậm, suy ngẫm) tăng `maxSentences` cho phép cảnh dài.
+ * WPM thay cho audio energy vì transcript đã có sẵn, không cần ffmpeg pass.
+ */
+const MIN_SCENE_DURATION_MS_FAST = 4_000;
+const MIN_SCENE_DURATION_MS_DEFAULT = 8_000;
 const MAX_SCENE_DURATION_MS = 120_000;
 const GAP_THRESHOLD_MS = 2_000;
 const MAX_SENTENCES_PER_SCENE = 6;
+const MAX_SENTENCES_PER_SCENE_SLOW = 8;
 const SENTENCE_END = /[.!?…]/g;
+
+const HIGH_WPM_THRESHOLD = 200;
+const LOW_WPM_THRESHOLD = 100;
+
+const wpmOf = (text: string, durationMs: number): number => {
+  if (durationMs <= 0) return 0;
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  return (wordCount / (durationMs / 1000)) * 60;
+};
 
 const MOOD_KEYWORDS: Record<MoodKey, RegExp> = {
   social:
@@ -146,11 +163,25 @@ export const splitScenes = (transcript: Transcript): Scene[] => {
     const duration = bufEnd - bufStart;
     const sentenceCount = (bufText.match(SENTENCE_END) ?? []).length;
 
+    // WPM tính trên buffer hiện tại — nói nhanh = cut sớm, nói chậm = giữ dài.
+    // Bias chỉ trigger khi buffer đã đủ chữ (≥10 từ) để WPM ổn định, không
+    // bị nhiễu bởi câu ngắn đầu cảnh.
+    const wordCount = bufText.trim().split(/\s+/).filter(Boolean).length;
+    const reliableWpm = wordCount >= 10 ? wpmOf(bufText, duration) : 150;
+    const minDuration =
+      reliableWpm >= HIGH_WPM_THRESHOLD
+        ? MIN_SCENE_DURATION_MS_FAST
+        : MIN_SCENE_DURATION_MS_DEFAULT;
+    const maxSentences =
+      reliableWpm <= LOW_WPM_THRESHOLD
+        ? MAX_SENTENCES_PER_SCENE_SLOW
+        : MAX_SENTENCES_PER_SCENE;
+
     const shouldCut =
       !isFirst &&
-      duration >= MIN_SCENE_DURATION_MS &&
+      duration >= minDuration &&
       (gap >= GAP_THRESHOLD_MS ||
-        sentenceCount >= MAX_SENTENCES_PER_SCENE ||
+        sentenceCount >= maxSentences ||
         duration >= MAX_SCENE_DURATION_MS);
 
     if (shouldCut) {

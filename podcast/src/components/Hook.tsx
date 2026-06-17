@@ -6,13 +6,21 @@ import { Sparkle, StarSmall } from "./doodles";
 /**
  * Hook 3.5s — punchline có điểm nhấn giống cover.
  * Split text theo dấu phẩy hoặc đếm từ, emphasize LINE CUỐI (punchline).
- * Visible từ frame 0 — không pop-in để Reels viewer đọc được ngay.
+ *
+ * Retention pass 1: line non-emphasis visible từ frame 0 (giữ readability),
+ * punchline word-pop stagger để tạo motion + climax. Underline + emphasis
+ * pulse shift trễ sau khi word-pop xong → 3 beats: read setup → climax →
+ * underline seal.
  */
 export const HOOK_DURATION_FRAMES = Math.round(FPS * 3.5);
 
 const T = {
-  underlineIn: 8,
-  underlineSettle: 26,
+  punchlineStart: 10, // sau khi setup lines đã được đọc 1 nhịp
+  wordPopFrames: 6, // mỗi từ pop 6 frame (scale 0.4→1.12→1)
+  wordPopStagger: 4, // 4 frame gap giữa các từ
+  underlineIn: 50,
+  underlineSettle: 68,
+  emphasisPulseStart: 55,
   outStart: HOOK_DURATION_FRAMES - 16,
 } as const;
 
@@ -44,6 +52,10 @@ export const Hook: React.FC<Props> = ({ hook }) => {
   const lines = splitIntoLines(hook);
   // Hook nhấn LINE CUỐI (punchline) — khác cover nhấn middle.
   const emphasisIdx = lines.length - 1;
+  const punchlineWords = lines[emphasisIdx]?.split(/\s+/).filter(Boolean) ?? [];
+  // Word-pop chỉ khi có context (≥ 2 lines) hoặc punchline đủ dài.
+  // 1 line ngắn → giữ hiển thị ngay cả punchline để readable.
+  const enableWordPop = lines.length > 1 || punchlineWords.length >= 4;
 
   const underlineScale = interpolate(
     frame,
@@ -51,10 +63,11 @@ export const Hook: React.FC<Props> = ({ hook }) => {
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
+  // Emphasis pulse shift sang sau khi word-pop xong → climax thực sự
   const emphasisPulse = interpolate(
     frame,
-    [4, 12, 22],
-    [1, 1.06, 1],
+    [T.emphasisPulseStart, T.emphasisPulseStart + 8, T.emphasisPulseStart + 18],
+    [1, 1.12, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const opacity = interpolate(
@@ -63,6 +76,29 @@ export const Hook: React.FC<Props> = ({ hook }) => {
     [1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
+
+  /**
+   * Word-pop progress cho từng từ trong punchline. Stagger 4 frame, mỗi từ
+   * scale 0.4 → 1.12 → 1 trong 6 frame. Trả [scale, opacity].
+   */
+  const wordPop = (wordIdx: number): { scale: number; opacity: number } => {
+    if (!enableWordPop) return { scale: 1, opacity: 1 };
+    const start = T.punchlineStart + wordIdx * T.wordPopStagger;
+    const peak = start + Math.round(T.wordPopFrames * 0.4);
+    const settle = start + T.wordPopFrames;
+    if (frame < start) return { scale: 0.4, opacity: 0 };
+    const scale = interpolate(
+      frame,
+      [start, peak, settle],
+      [0.4, 1.12, 1],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+    );
+    const op = interpolate(frame, [start, peak], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    });
+    return { scale, opacity: op };
+  };
 
   const fontSizeFor = (text: string, isEmphasis: boolean): number => {
     const len = text.length;
@@ -97,11 +133,76 @@ export const Hook: React.FC<Props> = ({ hook }) => {
 
       {lines.map((line, i) => {
         const isEmphasis = i === emphasisIdx && lines.length > 1;
-        const scale = isEmphasis ? emphasisPulse : 1;
+        const baseScale = isEmphasis ? emphasisPulse : 1;
+        const fontSize = fontSizeFor(line, isEmphasis);
+        if (isEmphasis && enableWordPop) {
+          // Punchline: word-by-word pop để climax có motion (line setup
+          // visible ngay từ frame 0 nên reader đã đọc trước).
+          return (
+            <div
+              key={i}
+              style={{
+                transform: `scale(${baseScale})`,
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: "0 28px",
+              }}
+            >
+              {punchlineWords.map((word, wi) => {
+                const { scale: wScale, opacity: wOp } = wordPop(wi);
+                return (
+                  <div
+                    key={wi}
+                    style={{
+                      transform: `scale(${wScale})`,
+                      opacity: wOp,
+                    }}
+                  >
+                    <StickerText
+                      fontSize={fontSize}
+                      color={COLORS.accentRed}
+                      outlineWidth={14}
+                      shadowOffset={14}
+                    >
+                      {word}
+                    </StickerText>
+                  </div>
+                );
+              })}
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: 12,
+                }}
+              >
+                <svg
+                  width={520}
+                  height={28}
+                  style={{
+                    transform: `scaleX(${underlineScale})`,
+                    transformOrigin: "center",
+                    display: "block",
+                  }}
+                >
+                  <path
+                    d="M 18 16 Q 130 4 260 14 Q 390 24 502 8"
+                    stroke={COLORS.accentRed}
+                    strokeWidth={10}
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            </div>
+          );
+        }
         return (
-          <div key={i} style={{ transform: `scale(${scale})` }}>
+          <div key={i} style={{ transform: `scale(${baseScale})` }}>
             <StickerText
-              fontSize={fontSizeFor(line, isEmphasis)}
+              fontSize={fontSize}
               color={isEmphasis ? COLORS.accentRed : COLORS.ink}
               outlineWidth={isEmphasis ? 14 : 11}
               shadowOffset={isEmphasis ? 14 : 10}
