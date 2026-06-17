@@ -12,7 +12,7 @@
  * Render runner phải pass đúng durationInFrames qua selectComposition.calculateMetadata.
  */
 import React from "react";
-import { AbsoluteFill, Audio, Sequence } from "remotion";
+import { AbsoluteFill, Audio, OffthreadVideo, Sequence } from "remotion";
 import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "./theme.gallery";
 import { KenBurnsImage, type KenBurnsMode } from "./KenBurnsImage";
 
@@ -22,8 +22,10 @@ export type ResolvedBeat = {
   durationFrames: number;
   keyword: string;
   kenBurns: KenBurnsMode;
-  /** Full image URL — null nếu beat chưa attach asset → placeholder. */
+  /** Full asset URL — null nếu beat chưa attach asset → placeholder. */
   assetUrl: string | null;
+  /** True → render <OffthreadVideo>, false/undefined → <KenBurnsImage>. */
+  assetIsVideo?: boolean;
   assetTitle: string;
   assetAuthor: string;
   assetYear: string;
@@ -71,11 +73,25 @@ export const GalleryChapter: React.FC<GalleryChapterProps> = ({
             durationInFrames={beat.durationFrames}
           >
             {beat.assetUrl ? (
-              <KenBurnsImage
-                src={beat.assetUrl}
-                mode={beat.kenBurns}
-                durationFrames={beat.durationFrames}
-              />
+              beat.assetIsVideo ? (
+                <AbsoluteFill style={{ backgroundColor: "#000" }}>
+                  <OffthreadVideo
+                    src={beat.assetUrl}
+                    muted
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                </AbsoluteFill>
+              ) : (
+                <KenBurnsImage
+                  src={beat.assetUrl}
+                  mode={beat.kenBurns}
+                  durationFrames={beat.durationFrames}
+                />
+              )
             ) : (
               <BeatPlaceholder keyword={beat.keyword} />
             )}

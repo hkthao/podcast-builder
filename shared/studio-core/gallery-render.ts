@@ -181,6 +181,7 @@ export async function buildChapterProps(
         keyword: b.keyword,
         kenBurns: b.kenBurns,
         assetUrl,
+        assetIsVideo: asset?.kind === "video",
         assetTitle: asset?.title ?? "",
         assetAuthor: asset?.author ?? "",
         assetYear: asset?.year ?? "",
