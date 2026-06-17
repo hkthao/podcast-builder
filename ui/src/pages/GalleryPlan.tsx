@@ -32,6 +32,7 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  ChevronRight,
   Volume2,
   Headphones,
   Video as VideoIcon,
@@ -39,6 +40,10 @@ import {
   Download,
   FileText,
   Upload,
+  Wand2,
+  Archive,
+  Camera,
+  Palette,
 } from "lucide-react";
 import {
   api,
@@ -566,6 +571,14 @@ function ChapterCard({
             )}
             onSave={(beats) => saveMut.mutate({ visualBeats: beats })}
             saving={saveMut.isPending}
+          />
+
+          {/* Documentary Phase 4: multi-backend asset resolver */}
+          <ResolvePanel
+            planId={planId}
+            chapterIdx={chapterIdx}
+            beats={chapter.visualBeats}
+            onMutate={onMutate}
           />
 
         </div>
@@ -2345,5 +2358,332 @@ function BgmPanel({
       </div>
     </Card>
   );
+}
+
+// ─── Documentary Phase 4: Resolve Panel ─────────────────────────────────
+
+/**
+ * Asset Resolver UI cho narration chapter — gọi POST /chapters/:idx/resolve
+ * để run multi-backend resolver (Wikimedia / Pexels / Draw Things manual /
+ * motion). Server tự wire kết quả vào DB (saveAsset + beat.assetIdRef).
+ *
+ * Collapsed by default. Mở ra → hiện last result + button "Resolve all".
+ * Pending AI beats hiển thị prompt + filename hint cho Draw Things workflow.
+ */
+function ResolvePanel({
+  planId,
+  chapterIdx,
+  beats,
+  onMutate,
+}: {
+  planId: string;
+  chapterIdx: number;
+  beats: import("@/lib/api").VisualBeat[];
+  onMutate: (plan: GalleryChapterPlan) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    resolved: import("@/lib/api").ResolvedAssetClient[];
+    pending: import("@/lib/api").PendingBeatClient[];
+    failed: import("@/lib/api").FailedBeatClient[];
+    attached: number;
+    ranAt: number;
+  } | null>(null);
+
+  const resolveMut = useMutation({
+    mutationFn: () => api.resolveGalleryChapter(planId, chapterIdx),
+    onSuccess: (data) => {
+      setLastResult({
+        resolved: data.resolved,
+        pending: data.pending,
+        failed: data.failed,
+        attached: data.attached,
+        ranAt: Date.now(),
+      });
+      onMutate(data.plan);
+    },
+  });
+
+  const totalBeats = beats.length;
+  const summary = lastResult
+    ? {
+        resolved: lastResult.resolved.length,
+        pending: lastResult.pending.length,
+        failed: lastResult.failed.length,
+        attached: lastResult.attached,
+      }
+    : null;
+
+  return (
+    <div className="mt-4 border-t pt-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 text-sm font-medium text-foreground hover:text-accent transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="size-4" />
+        ) : (
+          <ChevronRight className="size-4" />
+        )}
+        <Wand2 className="size-4" />
+        <span>Asset Resolver</span>
+        {summary && (
+          <span className="text-xs text-muted-foreground font-normal">
+            · ✓ {summary.resolved} resolved
+            {summary.pending > 0 ? ` · ⏳ ${summary.pending} pending` : ""}
+            {summary.failed > 0 ? ` · ✗ ${summary.failed} failed` : ""}
+          </span>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground font-normal">
+          {totalBeats} beats
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => resolveMut.mutate()}
+              disabled={resolveMut.isPending}
+            >
+              {resolveMut.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="size-3.5" />
+              )}
+              {summary ? "Re-resolve" : "Resolve all"}
+            </Button>
+            {summary && (
+              <span className="text-xs text-muted-foreground">
+                Attached {summary.attached}/{summary.resolved} vào DB ·{" "}
+                {formatAgo(lastResult!.ranAt)}
+              </span>
+            )}
+          </div>
+
+          {resolveMut.isError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+              {String(resolveMut.error)}
+            </div>
+          )}
+
+          {!lastResult && !resolveMut.isPending && (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Bấm "Resolve all" để chạy resolver: tải ảnh Wikimedia +
+              Pexels stock cho beats archive/stock, ghi prompt
+              <code className="font-mono text-[10px] mx-1">.prompt.txt</code>
+              cho beats AI (Draw Things manual workflow). Resolved assets tự
+              attach vào beats — render chapter sẽ pick lên.
+            </p>
+          )}
+
+          {lastResult && lastResult.resolved.length > 0 && (
+            <ResolvedSection assets={lastResult.resolved} />
+          )}
+
+          {lastResult && lastResult.pending.length > 0 && (
+            <PendingSection
+              pending={lastResult.pending}
+              onRecheck={() => resolveMut.mutate()}
+              recheckPending={resolveMut.isPending}
+            />
+          )}
+
+          {lastResult && lastResult.failed.length > 0 && (
+            <FailedSection failed={lastResult.failed} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ASSET_SOURCE_META: Record<
+  import("@/lib/api").ResolvedAssetSource,
+  { label: string; icon: typeof Archive; tint: string }
+> = {
+  wikimedia: { label: "Wikimedia", icon: Archive, tint: "text-amber-700" },
+  pexels: { label: "Pexels", icon: Camera, tint: "text-emerald-700" },
+  drawthings: { label: "Draw Things", icon: Sparkles, tint: "text-violet-700" },
+  motion: { label: "Motion", icon: Palette, tint: "text-sky-700" },
+};
+
+function ResolvedSection({
+  assets,
+}: {
+  assets: import("@/lib/api").ResolvedAssetClient[];
+}) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground mb-1.5">
+        ✓ Resolved ({assets.length})
+      </div>
+      <div className="space-y-1">
+        {assets.map((a) => {
+          const meta = ASSET_SOURCE_META[a.source];
+          const Icon = meta.icon;
+          return (
+            <div
+              key={a.beatIdx}
+              className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/30"
+            >
+              <span className="font-mono text-muted-foreground w-10 shrink-0">
+                #{String(a.beatIdx).padStart(2, "0")}
+              </span>
+              <Icon className={cn("size-3.5 shrink-0", meta.tint)} />
+              <span className={cn("font-medium w-20 shrink-0", meta.tint)}>
+                {meta.label}
+              </span>
+              <span className="truncate flex-1" title={a.title}>
+                {a.title || (a.source === "motion" ? a.localPath : "")}
+              </span>
+              {a.isVideo && (
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  video
+                </Badge>
+              )}
+              {a.author && (
+                <span className="text-muted-foreground text-[10px] truncate max-w-[20%]">
+                  by {a.author}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PendingSection({
+  pending,
+  onRecheck,
+  recheckPending,
+}: {
+  pending: import("@/lib/api").PendingBeatClient[];
+  onRecheck: () => void;
+  recheckPending: boolean;
+}) {
+  return (
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles className="size-4 text-amber-700" />
+        <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+          ⏳ Pending AI ({pending.length}) — Draw Things manual workflow
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto h-6"
+          onClick={onRecheck}
+          disabled={recheckPending}
+        >
+          {recheckPending ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3" />
+          )}
+          Re-check
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-2 leading-relaxed">
+        Copy prompt → mở Draw Things → gen ảnh → save với tên gợi ý vào{" "}
+        <code className="font-mono">~/Downloads</code> → bấm Re-check.
+        Resolver sẽ tự attach file.
+      </p>
+      <div className="space-y-2">
+        {pending.map((p) => (
+          <PendingBeatRow key={p.beatIdx} beat={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PendingBeatRow({
+  beat,
+}: {
+  beat: import("@/lib/api").PendingBeatClient;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copyPrompt = () => {
+    navigator.clipboard.writeText(beat.prompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="rounded border bg-background p-2 text-xs">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-mono text-muted-foreground">
+          beat #{String(beat.beatIdx).padStart(2, "0")}
+        </span>
+        <code className="text-[10px] text-muted-foreground">
+          {beat.hash}
+        </code>
+        <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+          Save as:{" "}
+          <code className="bg-muted px-1 rounded">{beat.expectedFilename}</code>
+        </span>
+      </div>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-[11px] leading-relaxed text-foreground/80 line-clamp-3">
+          {beat.prompt}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0"
+          onClick={copyPrompt}
+        >
+          {copied ? (
+            <Check className="size-3 text-emerald-600" />
+          ) : (
+            <Copy className="size-3" />
+          )}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FailedSection({
+  failed,
+}: {
+  failed: import("@/lib/api").FailedBeatClient[];
+}) {
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <AlertCircle className="size-4 text-destructive" />
+        <span className="text-xs font-medium text-destructive">
+          ✗ Failed ({failed.length})
+        </span>
+      </div>
+      <div className="space-y-1">
+        {failed.map((f) => (
+          <div key={f.beatIdx} className="text-[11px]">
+            <span className="font-mono text-muted-foreground mr-2">
+              #{String(f.beatIdx).padStart(2, "0")}
+            </span>
+            <span className="text-destructive">{f.reason}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatAgo(timestamp: number): string {
+  const secs = Math.floor((Date.now() - timestamp) / 1000);
+  if (secs < 5) return "vừa xong";
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ago`;
 }
 

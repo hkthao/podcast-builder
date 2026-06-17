@@ -11,6 +11,7 @@ import {
   galleryPlanBgmFilename,
   generateChapterTranscript,
   getPlan,
+  inferSeriesSlug,
   listPlans,
   setPlanBgm,
   updateChapter,
@@ -20,6 +21,11 @@ import {
 import { generateChapterAudio } from "../gallery-chapter-audio";
 import { renderChapter } from "../gallery-render";
 import { exportPlan } from "../gallery-concat";
+import {
+  defaultResolverOptions,
+  resolveChapterAssets,
+} from "../gallery-asset-resolver";
+import { saveAsset } from "../gallery-asset-store";
 import { PATHS } from "../paths";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -300,6 +306,121 @@ galleryPlanRoutes.post("/:id/chapters/:idx/render", async (c) => {
       plan,
       outputPath: result.outputPath,
       durationMs: result.durationMs,
+    });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "NOT_FOUND" ? 404 : err.code === "VALIDATION" ? 400 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Documentary direction Phase 4: resolve assets cho 1 chapter narration.
+ * Chạy resolver multi-backend (Wikimedia/Pexels/Draw Things manual/motion)
+ * và wire kết quả vào DB:
+ *  - Successful archive/stock/AI → saveAsset() vào gallery_assets +
+ *    updateChapter để set beat.assetIdRef → render path tự pick lên.
+ *  - Pending AI → trả prompt + filename hint cho UI hiển thị Draw Things loop.
+ *  - Motion → placeholder, KHÔNG save DB (render dispatch theo recipe).
+ *
+ * Idempotent: saveAsset upsert theo id; re-resolve cùng beat sẽ cache + skip.
+ *
+ * Body (optional): { watchDir?: string } override thư mục scan Draw Things
+ * output. Default ~/Downloads (Mac convention).
+ */
+galleryPlanRoutes.post("/:id/chapters/:idx/resolve", async (c) => {
+  const id = c.req.param("id");
+  const idx = Number(c.req.param("idx"));
+  if (!Number.isInteger(idx) || idx < 0) {
+    return c.json({ error: "chapter idx không hợp lệ" }, 400);
+  }
+  const plan = await getPlan(id);
+  if (!plan) return c.json({ error: "Plan not found" }, 404);
+  const chapter = plan.chapters[idx];
+  if (!chapter) {
+    return c.json({ error: `Chapter ${idx} out of range` }, 400);
+  }
+  if (chapter.kind === "music") {
+    return c.json(
+      { error: "Music interlude không cần resolve visual assets" },
+      400,
+    );
+  }
+  if (chapter.visualBeats.length === 0) {
+    return c.json(
+      { error: "Chapter chưa có visualBeats — gen transcript trước" },
+      400,
+    );
+  }
+
+  // Parse optional body
+  let watchDir: string | undefined;
+  try {
+    const body = (await c.req.json()) as { watchDir?: string };
+    if (typeof body.watchDir === "string") watchDir = body.watchDir;
+  } catch {
+    /* body optional */
+  }
+
+  const series = inferSeriesSlug(plan.ideaSnapshot.title);
+  const opts = defaultResolverOptions({ planId: plan.id });
+  if (watchDir) opts.drawThingsWatchDir = watchDir;
+
+  try {
+    const result = await resolveChapterAssets({
+      planId: plan.id,
+      chapterIdx: idx,
+      chapter,
+      series,
+      options: opts,
+    });
+
+    // Wiring: convert resolved → AssetResult, save vào gallery_assets,
+    // set beat.assetIdRef. Skip motion (render dispatch theo recipe placeholder).
+    let attached = 0;
+    const beatPatches: Array<{ beatIdx: number; assetId: string }> = [];
+    for (const a of result.resolved) {
+      if (a.source === "motion") continue;
+      const filename = path.basename(a.localPath);
+      const hash = filename.split(".")[0];
+      const assetId = `${a.source}:${hash}`;
+      // For Wikimedia/Pexels: fullUrl = remote URL (prefetch tải về local).
+      // For Draw Things AI: fullUrl = local-served URL (studio serves /tmp/).
+      const fullUrl =
+        a.source === "drawthings"
+          ? `/tmp/gallery-assets/${plan.id}/${filename}`
+          : (a.remoteUrl ?? a.localPath);
+      saveAsset({
+        id: assetId,
+        provider: a.source,
+        kind: a.isVideo ? "video" : "image",
+        title: a.title ?? `${a.source} ${hash.slice(0, 8)}`,
+        author: a.author,
+        year: a.year,
+        thumbUrl: fullUrl,
+        fullUrl,
+        sourcePage: a.sourceUrl ?? "",
+        license: a.license,
+        licenseStatus: "safe",
+      });
+      beatPatches.push({ beatIdx: a.beatIdx, assetId });
+      attached++;
+    }
+    if (beatPatches.length > 0) {
+      const newBeats = chapter.visualBeats.map((b, i) => {
+        const patch = beatPatches.find((p) => p.beatIdx === i);
+        return patch ? { ...b, assetIdRef: patch.assetId } : b;
+      });
+      await updateChapter(id, idx, { visualBeats: newBeats });
+    }
+
+    // Return full updated plan để UI refresh + result detail
+    const updatedPlan = await getPlan(id);
+    return c.json({
+      ...result,
+      attached,
+      plan: updatedPlan,
     });
   } catch (e) {
     const err = e as Error & { code?: string };

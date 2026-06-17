@@ -59,6 +59,12 @@ export type ResolvedAsset = {
   beatIdx: number;
   /** Local file path hoặc "motion:<recipe>" placeholder. */
   localPath: string;
+  /**
+   * Remote URL của asset binary — Wikimedia thumb URL, Pexels download link.
+   * Undefined cho AI (Draw Things local) + motion (no fetch). Phase 4 dùng
+   * khi save vào gallery_assets table (cần fullUrl per AssetResult schema).
+   */
+  remoteUrl?: string;
   /** Resolved file là video (mp4) hay ảnh tĩnh (jpg/png). */
   isVideo: boolean;
   source: AssetSource;
@@ -67,7 +73,7 @@ export type ResolvedAsset = {
   author?: string;
   year?: string;
   license: string;
-  /** URL gốc của asset (cho credits link back). */
+  /** URL gốc của source PAGE (Wikimedia file page, Pexels web page). */
   sourceUrl?: string;
 };
 
@@ -470,6 +476,7 @@ async function resolveOneBeat(input: {
         asset: {
           beatIdx,
           localPath: outPath,
+          remoteUrl: r.url,
           isVideo: false,
           source: "wikimedia",
           title: r.title,
@@ -547,6 +554,7 @@ async function resolveOneBeat(input: {
         asset: {
           beatIdx,
           localPath: outPath,
+          remoteUrl: r.url,
           isVideo: r.isVideo,
           source: "pexels",
           title: r.title,

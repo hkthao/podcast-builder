@@ -631,6 +631,40 @@ export type GalleryChapterPlan = {
   bgmFilename: string | null;
 };
 
+// ─── Documentary direction resolver types (Phase 4) ─────────────────────
+
+export type ResolvedAssetSource =
+  | "wikimedia"
+  | "pexels"
+  | "drawthings"
+  | "motion";
+
+export type ResolvedAssetClient = {
+  beatIdx: number;
+  localPath: string;
+  remoteUrl?: string;
+  isVideo: boolean;
+  source: ResolvedAssetSource;
+  title?: string;
+  author?: string;
+  year?: string;
+  license: string;
+  sourceUrl?: string;
+};
+
+export type PendingBeatClient = {
+  beatIdx: number;
+  hash: string;
+  promptPath: string;
+  prompt: string;
+  expectedFilename: string;
+};
+
+export type FailedBeatClient = {
+  beatIdx: number;
+  reason: string;
+};
+
 export type ResearchSearchResponse = {
   results: AssetResult[];
   total: number;
@@ -1321,6 +1355,28 @@ export const api = {
     }>(
       `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/render`,
       { method: "POST" },
+    ),
+
+  /**
+   * Documentary Phase 4: resolve assets multi-backend cho 1 chapter.
+   * Server tự wire kết quả vào gallery_assets DB + set beat.assetIdRef
+   * cho archive/stock/AI. Sync, có thể chậm 10-30s (Pexels rate limit).
+   * Idempotent: re-call OK (cache hash-based).
+   */
+  resolveGalleryChapter: (
+    planId: string,
+    chapterIdx: number,
+    opts: { watchDir?: string } = {},
+  ) =>
+    jsonFetch<{
+      resolved: ResolvedAssetClient[];
+      pending: PendingBeatClient[];
+      failed: FailedBeatClient[];
+      attached: number;
+      plan: GalleryChapterPlan;
+    }>(
+      `/api/gallery/plans/${encodeURIComponent(planId)}/chapters/${chapterIdx}/resolve`,
+      { method: "POST", body: JSON.stringify(opts) },
     ),
 
   deleteGalleryPlan: (id: string) =>
