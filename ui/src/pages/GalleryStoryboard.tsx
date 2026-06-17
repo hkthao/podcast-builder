@@ -2230,6 +2230,15 @@ function ResolvedSection({
               <span className="truncate flex-1" title={a.title}>
                 {a.title || (a.source === "motion" ? a.localPath : "")}
               </span>
+              {a.fallbackFrom && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                  title={`Fallback từ ${a.fallbackFrom} — ${a.fallbackReason ?? ""}`}
+                >
+                  fallback ← {a.fallbackFrom}
+                </Badge>
+              )}
               {a.isVideo && (
                 <Badge variant="outline" className="text-[10px] shrink-0">
                   video

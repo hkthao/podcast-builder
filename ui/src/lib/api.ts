@@ -656,6 +656,9 @@ export type ResolvedAssetClient = {
   year?: string;
   license: string;
   sourceUrl?: string;
+  /** Đánh dấu khi resolver fallback từ source ưu tiên — UI badge "fallback". */
+  fallbackFrom?: "archive" | "stock";
+  fallbackReason?: string;
 };
 
 export type PendingBeatClient = {

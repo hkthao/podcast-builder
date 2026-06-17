@@ -75,6 +75,13 @@ export type ResolvedAsset = {
   license: string;
   /** URL gốc của source PAGE (Wikimedia file page, Pexels web page). */
   sourceUrl?: string;
+  /**
+   * Khi resolver buộc phải fallback từ source ưu tiên (vd archive 429) sang
+   * source khác — đánh dấu để UI hiện badge "fallback" + audit log.
+   */
+  fallbackFrom?: "archive" | "stock";
+  /** Lý do tại sao phải fallback — kèm khi fallbackFrom set. */
+  fallbackReason?: string;
 };
 
 export type PendingBeat = {
@@ -385,6 +392,162 @@ async function writePromptFile(input: {
   return promptPath;
 }
 
+// ── Per-source attempt — pure helper, no fallback logic ──────────────────
+//
+// Extracted từ resolveOneBeat() để dispatcher có thể gọi cùng helper cho
+// primary lẫn fallback source. Trả về `kind: "failed"` thay vì throw để
+// caller dễ chain fallback mà không cần try/catch.
+
+type SourceAttempt =
+  | { kind: "resolved"; asset: ResolvedAsset }
+  | { kind: "failed"; failed: FailedBeat };
+
+async function attemptSource(
+  source: "archive" | "stock",
+  input: {
+    planId: string;
+    chapterIdx: number;
+    beat: Shot;
+    beatIdx: number;
+    beatOrdinal: number;
+    sentence: string;
+    graph: import("../../gallery/src/shot-heuristic").KnowledgeGraph;
+    options: ResolverOptions;
+  },
+  c: import("../../gallery/src/shot-heuristic").ClassifyResult,
+): Promise<SourceAttempt> {
+  const { beat, beatIdx, options } = input;
+
+  if (source === "archive") {
+    const query = beat.keyword.trim() || c.archiveQuery || "";
+    if (!query) {
+      return { kind: "failed", failed: { beatIdx, reason: "archive: thiếu query" } };
+    }
+    const hash = hashBeat({
+      planId: input.planId,
+      chapterIdx: input.chapterIdx,
+      beat,
+      beatOrdinal: input.beatOrdinal,
+      source: query,
+    });
+    const outPath = path.join(options.cacheDir, `${hash}.jpg`);
+    if (await exists(outPath)) {
+      return {
+        kind: "resolved",
+        asset: {
+          beatIdx,
+          localPath: outPath,
+          isVideo: false,
+          source: "wikimedia",
+          license: "Wikimedia Commons (cached)",
+          title: c.lowerThird?.primary,
+        },
+      };
+    }
+    try {
+      const r = await searchWikimedia(query, options.width);
+      if (!r) {
+        return {
+          kind: "failed",
+          failed: { beatIdx, reason: `Wikimedia không có ảnh cho "${query}"` },
+        };
+      }
+      await downloadToFile(r.url, outPath);
+      return {
+        kind: "resolved",
+        asset: {
+          beatIdx,
+          localPath: outPath,
+          remoteUrl: r.url,
+          isVideo: false,
+          source: "wikimedia",
+          title: r.title,
+          author: r.author,
+          license: r.license ?? "Wikimedia Commons",
+          sourceUrl: r.sourceUrl,
+        },
+      };
+    } catch (e) {
+      return {
+        kind: "failed",
+        failed: { beatIdx, reason: `Wikimedia: ${(e as Error).message}` },
+      };
+    }
+  }
+
+  // source === "stock"
+  if (!options.pexelsKey) {
+    return {
+      kind: "failed",
+      failed: { beatIdx, reason: "stock: thiếu PEXELS_API_KEY" },
+    };
+  }
+  const query = beat.keyword.trim() || c.stockQuery || "";
+  if (!query) {
+    return { kind: "failed", failed: { beatIdx, reason: "stock: thiếu query" } };
+  }
+  const preferVideo =
+    beat.role === "establishing" || beat.role === "transition";
+  const hash = hashBeat({
+    planId: input.planId,
+    chapterIdx: input.chapterIdx,
+    beat,
+    beatOrdinal: input.beatOrdinal,
+    source: `${query}|${preferVideo ? "v" : "p"}`,
+  });
+  // Cache check — both .mp4 và .jpg possible
+  for (const ext of [".mp4", ".jpg"]) {
+    const p = path.join(options.cacheDir, `${hash}${ext}`);
+    if (await exists(p)) {
+      return {
+        kind: "resolved",
+        asset: {
+          beatIdx,
+          localPath: p,
+          isVideo: ext === ".mp4",
+          source: "pexels",
+          license: "Pexels (cached)",
+        },
+      };
+    }
+  }
+  try {
+    const r = await searchPexels(query, {
+      apiKey: options.pexelsKey,
+      preferVideo,
+      height: options.height,
+    });
+    if (!r) {
+      return {
+        kind: "failed",
+        failed: { beatIdx, reason: `Pexels không có kết quả "${query}"` },
+      };
+    }
+    const ext = r.isVideo ? ".mp4" : ".jpg";
+    const outPath = path.join(options.cacheDir, `${hash}${ext}`);
+    await downloadToFile(r.url, outPath);
+    return {
+      kind: "resolved",
+      asset: {
+        beatIdx,
+        localPath: outPath,
+        remoteUrl: r.url,
+        isVideo: r.isVideo,
+        source: "pexels",
+        title: r.title,
+        author: r.author,
+        license: "Pexels (free use, attribution recommended)",
+        sourceUrl: r.sourceUrl,
+      },
+    };
+  } catch (e) {
+    return {
+      kind: "failed",
+      failed: { beatIdx, reason: `Pexels: ${(e as Error).message}` },
+    };
+  }
+}
+
 // ── Dispatcher ───────────────────────────────────────────────────────────
 
 async function resolveOneBeat(input: {
@@ -429,146 +592,41 @@ async function resolveOneBeat(input: {
     graph: input.graph,
   });
 
-  // ── Archive (Wikimedia) ──
-  if (assetType === "archive") {
-    const query = beat.keyword.trim() || c.archiveQuery || "";
-    if (!query) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: "archive: thiếu query" },
-      };
-    }
-    const hash = hashBeat({
-      planId: input.planId,
-      chapterIdx: input.chapterIdx,
-      beat,
-      beatOrdinal: input.beatOrdinal,
-      source: query,
-    });
-    const outPath = path.join(options.cacheDir, `${hash}.jpg`);
-    if (await exists(outPath)) {
-      return {
-        kind: "resolved",
-        asset: {
-          beatIdx,
-          localPath: outPath,
-          isVideo: false,
-          source: "wikimedia",
-          license: "Wikimedia Commons (cached)",
-          title: c.lowerThird?.primary,
-        },
-      };
-    }
-    try {
-      const r = await searchWikimedia(query, options.width);
-      if (!r) {
-        return {
-          kind: "failed",
-          failed: {
-            beatIdx,
-            reason: `Wikimedia không có ảnh cho "${query}"`,
-          },
-        };
-      }
-      await downloadToFile(r.url, outPath);
-      return {
-        kind: "resolved",
-        asset: {
-          beatIdx,
-          localPath: outPath,
-          remoteUrl: r.url,
-          isVideo: false,
-          source: "wikimedia",
-          title: r.title,
-          author: r.author,
-          license: r.license ?? "Wikimedia Commons",
-          sourceUrl: r.sourceUrl,
-        },
-      };
-    } catch (e) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: `Wikimedia: ${(e as Error).message}` },
-      };
-    }
-  }
+  // ── Archive / Stock — với cross-source fallback ───────────────────────
+  //
+  // Khi Wikimedia 429 trên download binary HOẶC không có ảnh khớp, tự động
+  // thử Pexels (và ngược lại). Asset trả về set fallbackFrom + fallbackReason
+  // để UI badge "fallback" + audit log. KHÔNG fallback cho motion/ai vì
+  // semantic khác (motion = vẽ động, ai = user gen tay).
+  if (assetType === "archive" || assetType === "stock") {
+    const primary = assetType;
+    const fallback: "archive" | "stock" =
+      primary === "archive" ? "stock" : "archive";
 
-  // ── Stock (Pexels) ──
-  if (assetType === "stock") {
-    if (!options.pexelsKey) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: "stock: thiếu PEXELS_API_KEY" },
-      };
-    }
-    const query = beat.keyword.trim() || c.stockQuery || "";
-    if (!query) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: "stock: thiếu query" },
-      };
-    }
-    // Prefer video for establishing + transition roles
-    const preferVideo =
-      beat.role === "establishing" || beat.role === "transition";
-    const hash = hashBeat({
-      planId: input.planId,
-      chapterIdx: input.chapterIdx,
-      beat,
-      beatOrdinal: input.beatOrdinal,
-      source: `${query}|${preferVideo ? "v" : "p"}`,
-    });
-    // Cache check — both .mp4 và .jpg possible
-    for (const ext of [".mp4", ".jpg"]) {
-      const p = path.join(options.cacheDir, `${hash}${ext}`);
-      if (await exists(p)) {
-        return {
-          kind: "resolved",
-          asset: {
-            beatIdx,
-            localPath: p,
-            isVideo: ext === ".mp4",
-            source: "pexels",
-            license: "Pexels (cached)",
-          },
-        };
-      }
-    }
-    try {
-      const r = await searchPexels(query, {
-        apiKey: options.pexelsKey,
-        preferVideo,
-        height: options.height,
-      });
-      if (!r) {
-        return {
-          kind: "failed",
-          failed: { beatIdx, reason: `Pexels không có kết quả "${query}"` },
-        };
-      }
-      const ext = r.isVideo ? ".mp4" : ".jpg";
-      const outPath = path.join(options.cacheDir, `${hash}${ext}`);
-      await downloadToFile(r.url, outPath);
+    const primaryResult = await attemptSource(primary, input, c);
+    if (primaryResult.kind === "resolved") return primaryResult;
+
+    // Primary failed — try fallback nếu khả thi (đủ query/key)
+    const fallbackResult = await attemptSource(fallback, input, c);
+    if (fallbackResult.kind === "resolved") {
       return {
         kind: "resolved",
         asset: {
-          beatIdx,
-          localPath: outPath,
-          remoteUrl: r.url,
-          isVideo: r.isVideo,
-          source: "pexels",
-          title: r.title,
-          author: r.author,
-          license: "Pexels (free use, attribution recommended)",
-          sourceUrl: r.sourceUrl,
+          ...fallbackResult.asset,
+          fallbackFrom: primary,
+          fallbackReason: primaryResult.failed.reason,
         },
       };
-    } catch (e) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: `Pexels: ${(e as Error).message}` },
-      };
     }
+
+    // Cả 2 fail — gộp reason cho audit
+    return {
+      kind: "failed",
+      failed: {
+        beatIdx,
+        reason: `${primary}: ${primaryResult.failed.reason} | fallback ${fallback}: ${fallbackResult.failed.reason}`,
+      },
+    };
   }
 
   // ── AI (Draw Things manual) ──
