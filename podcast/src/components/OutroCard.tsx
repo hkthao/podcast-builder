@@ -4,18 +4,21 @@ import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
 export const OUTRO_DURATION_FRAMES = Math.round(FPS * 4);
-const FADE_FRAMES = 18;
+const FADE_IN_FRAMES = 18;
+// Fade-out 0.4s cuối → CTA mờ dần về cream bg → match frame 0 (IntroCard bg)
+// → khi Reels auto-loop, transition không có "cut" hard.
+const FADE_OUT_FRAMES = Math.round(FPS * 0.4);
 
 export const OutroCard: React.FC = () => {
   const frame = useCurrentFrame();
-  const inOpacity = interpolate(frame, [0, FADE_FRAMES], [0, 1], {
+  const inOpacity = interpolate(frame, [0, FADE_IN_FRAMES], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const holdOpacity = interpolate(
     frame,
-    [OUTRO_DURATION_FRAMES - 4, OUTRO_DURATION_FRAMES],
-    [1, 0.95],
+    [OUTRO_DURATION_FRAMES - FADE_OUT_FRAMES, OUTRO_DURATION_FRAMES],
+    [1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const opacity = Math.min(inOpacity, holdOpacity);

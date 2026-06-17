@@ -12,6 +12,38 @@ export type DoodleProps = {
   intensity?: number;
 };
 
+/**
+ * Hash dễ tính từ (x, y, delay) → seed ổn định per sticker. Dùng để vary
+ * amplitude + period mỗi sticker → tránh "đồng hồ feel" khi nhiều sticker
+ * cùng waveform sine với cùng amplitude.
+ */
+const seedOf = (x: number, y: number, delay: number): number =>
+  Math.abs(Math.round(x * 31 + y * 17 + delay * 13));
+
+/** Vary amplitude trong [baseAmp - 2, baseAmp + 4] per sticker. */
+const ampVariance = (baseAmp: number, seed: number): number =>
+  baseAmp - 2 + (seed % 7);
+
+/** Vary period trong [basePeriod, basePeriod + 30] per sticker. */
+const periodVariance = (basePeriod: number, seed: number): number =>
+  basePeriod + ((seed * 7) % 31);
+
+/**
+ * Surprise pulse — cứ ~10s 1 sticker random scale up trong 8 frame.
+ * Mỗi sticker có cycle riêng nhờ seed → events stagger toàn cảnh.
+ * Return scale multiplier (1.0 mặc định, peak ~1.35).
+ */
+const surprisePulse = (frame: number, seed: number, fps = 30): number => {
+  const cycleFrames = fps * 10 + (seed % (fps * 4)); // ~10-14s cycle
+  const phase = (frame + (seed % cycleFrames)) % cycleFrames;
+  const pulseWindow = 8;
+  if (phase >= pulseWindow) return 1;
+  // bell curve: 0 → 1.35 → 0 → 1 over 8 frames
+  const t = phase / pulseWindow;
+  const bell = Math.sin(t * Math.PI);
+  return 1 + bell * 0.35;
+};
+
 const wrap = (
   x: number,
   y: number,
@@ -22,6 +54,7 @@ const wrap = (
   opacity: number,
   children: React.ReactNode,
   viewBox = "0 0 100 100",
+  scaleMul = 1,
 ) => (
   <div
     style={{
@@ -30,7 +63,7 @@ const wrap = (
       top: y + bob,
       width: size,
       height: size,
-      transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+      transform: `translate(-50%, -50%) rotate(${rotate}deg) scale(${scaleMul})`,
       transformOrigin: "center",
       opacity,
       pointerEvents: "none",
@@ -53,8 +86,14 @@ export const Squiggle: React.FC<DoodleProps> = ({
   intensity = 1,
 }) => {
   const frame = useCurrentFrame();
-  const drift = Math.sin((frame + delay) / 60) * 6 * intensity;
-  const bob = Math.cos((frame + delay) / 70) * 3 * intensity;
+  const seed = seedOf(x, y, delay);
+  const driftAmp = ampVariance(6, seed);
+  const driftPeriod = periodVariance(60, seed);
+  const bobAmp = ampVariance(3, seed + 1);
+  const bobPeriod = periodVariance(70, seed + 1);
+  const drift = Math.sin((frame + delay) / driftPeriod) * driftAmp * intensity;
+  const bob = Math.cos((frame + delay) / bobPeriod) * bobAmp * intensity;
+  const pulse = surprisePulse(frame, seed);
   return wrap(
     x,
     y,
@@ -70,6 +109,8 @@ export const Squiggle: React.FC<DoodleProps> = ({
       strokeLinecap="round"
       fill="none"
     />,
+    "0 0 100 100",
+    pulse,
   );
 };
 
@@ -83,7 +124,11 @@ export const Sparkle: React.FC<DoodleProps> = ({
   intensity = 1,
 }) => {
   const frame = useCurrentFrame();
-  const twinkle = 0.6 + (Math.sin((frame + delay) / 12) + 1) * 0.2 * intensity;
+  const seed = seedOf(x, y, delay);
+  const twinklePeriod = 12 + (seed % 8); // 12-20
+  const twinkle =
+    0.6 + (Math.sin((frame + delay) / twinklePeriod) + 1) * 0.2 * intensity;
+  const pulse = surprisePulse(frame, seed);
   return wrap(
     x,
     y,
@@ -101,6 +146,8 @@ export const Sparkle: React.FC<DoodleProps> = ({
         strokeLinejoin="round"
       />
     </>,
+    "0 0 100 100",
+    pulse,
   );
 };
 
@@ -113,7 +160,11 @@ export const StarSmall: React.FC<DoodleProps> = ({
   delay = 0,
 }) => {
   const frame = useCurrentFrame();
-  const bob = Math.sin((frame + delay) / 28) * 4;
+  const seed = seedOf(x, y, delay);
+  const bobAmp = ampVariance(4, seed);
+  const bobPeriod = periodVariance(28, seed);
+  const bob = Math.sin((frame + delay) / bobPeriod) * bobAmp;
+  const pulse = surprisePulse(frame, seed);
   return wrap(
     x,
     y,
@@ -129,6 +180,8 @@ export const StarSmall: React.FC<DoodleProps> = ({
       strokeWidth={5}
       strokeLinejoin="round"
     />,
+    "0 0 100 100",
+    pulse,
   );
 };
 
@@ -141,7 +194,10 @@ export const Arrow: React.FC<DoodleProps> = ({
   delay = 0,
 }) => {
   const frame = useCurrentFrame();
-  const drift = Math.sin((frame + delay) / 50) * 4;
+  const seed = seedOf(x, y, delay);
+  const driftAmp = ampVariance(4, seed);
+  const driftPeriod = periodVariance(50, seed);
+  const drift = Math.sin((frame + delay) / driftPeriod) * driftAmp;
   return wrap(
     x,
     y,
@@ -234,7 +290,10 @@ export const Cloud: React.FC<DoodleProps> = ({
   delay = 0,
 }) => {
   const frame = useCurrentFrame();
-  const drift = Math.sin((frame + delay) / 80) * 8;
+  const seed = seedOf(x, y, delay);
+  const driftAmp = ampVariance(8, seed);
+  const driftPeriod = periodVariance(80, seed);
+  const drift = Math.sin((frame + delay) / driftPeriod) * driftAmp;
   return wrap(
     x,
     y,
@@ -261,8 +320,11 @@ export const Confetti: React.FC<DoodleProps> = ({
   delay = 0,
 }) => {
   const frame = useCurrentFrame();
-  const t = (frame + delay) / 40;
-  const drift = Math.sin(t) * 6;
+  const seed = seedOf(x, y, delay);
+  const driftPeriod = periodVariance(40, seed);
+  const driftAmp = ampVariance(6, seed);
+  const t = (frame + delay) / driftPeriod;
+  const drift = Math.sin(t) * driftAmp;
   return wrap(
     x,
     y,
