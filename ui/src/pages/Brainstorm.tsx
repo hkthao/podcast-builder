@@ -873,7 +873,7 @@ function IdeaCard({
           {avgScore(idea.scores).toFixed(1)}
         </Badge>
         {picked && (
-          <Badge variant="secondary" className="shrink-0">
+          <Badge variant="secondary" className="shrink-0 gap-1">
             <CheckCircle2 className="size-3" />
             Đã pick
           </Badge>
