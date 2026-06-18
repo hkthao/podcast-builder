@@ -169,10 +169,24 @@ QUY TẮC ĐÀM THOẠI BẮT BUỘC:
    - Host này nói 2-4 câu → host kia phản ứng/đào sâu/đặt câu hỏi tiếp.
    - Có lúc cắt ngang lịch sự: "À nhưng mà chờ đã,..." / "Em xin lỗi cắt ngang nhé,..."
 
-5. Cấu trúc:
-   - Mở: Host Nam mở hook lôi cuốn, đặt câu hỏi cốt lõi (1-2 turn).
-   - Thân: Host Nữ tung hứng nối tiếp, giải thích bản chất, đưa ẩn dụ. 2 host bàn luận sâu, có ít nhất 1 lần Host Nam phản biện/nghi vấn Host Nữ.
-   - Kết: Host Nữ chốt insight + Host Nam đặt câu hỏi mở để khán giả ngẫm.
+5. CẤU TRÚC 3 HỒI (BẮT BUỘC theo thứ tự — đây là arc giữ chân khán giả Reels):
+
+   HỒI 1 — STORY THỰC (1-3 turn đầu, ~15-20% script):
+   - Host Nam MỞ bằng câu hỏi CÓ KHOẢNG TRỐNG NHẬN THỨC (curiosity gap) hoặc tình huống cụ thể chi tiết về 1 người/khoảnh khắc đời thật.
+   - KHÔNG bắt đầu bằng định nghĩa khái niệm, KHÔNG "Chào mừng quay lại...", KHÔNG "Hôm nay chúng ta sẽ bàn về...".
+   - Câu hook phải tạo tò mò ngay: "Người bạn cuối cùng của bạn là ai?" / "Có bao giờ bạn ngồi giữa quán đông người mà thấy mình thật xa lạ chưa?" / "30 ngày nữa nếu bạn biến mất, ai sẽ tìm bạn?".
+   - Host Nữ phản ứng ngay vào tình huống đó, không nhảy sang giải thích sách.
+
+   HỒI 2 — TÂM LÝ HỌC (giữa script, ~50-60%):
+   - 2 host dùng tâm lý học đời thường để cắt nghĩa story ở Hồi 1: cơ chế não, framework hành vi, hiệu ứng đã biết (dopamine loop, social comparison, attachment theory, …).
+   - Host Nam đào câu hỏi "Vì sao lại thế?" / "Có phải ai cũng vậy không?" — Host Nữ giải thích bản chất + đưa ẩn dụ dễ hiểu.
+   - Có ít nhất 1 lần Host Nam phản biện/nghi vấn để tránh chiều một bên.
+
+   HỒI 3 — TRIẾT HỌC ỨNG DỤNG (cuối script, ~20-25%):
+   - Host Nữ kết nối insight tâm lý → triết gia/trường phái có liên quan (Stoicism, Heidegger, Aristotle, Lão Tử, …) + 1 nguyên tắc/hành động khán giả áp dụng được.
+   - Host Nam chốt bằng câu hỏi mở để khán giả ngẫm (KHÔNG "hẹn gặp lại tập sau").
+
+   Lý do arc này: Reels khán giả dừng vì câu chuyện thực — ở lại vì hiểu được tâm lý mình — share/follow vì triết giúp họ làm gì đó. Đảo thứ tự (mở bằng triết) = mất viewer 3s đầu.
 
 6. KHÔNG dùng cụm sáo rỗng: "không thể phủ nhận", "trong cuộc sống hối hả", "guồng quay cuộc sống", "thời đại 4.0", "thân chào quý vị", "hẹn gặp lại ở tập tiếp theo".
 
