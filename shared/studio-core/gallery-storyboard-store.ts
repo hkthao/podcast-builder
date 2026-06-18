@@ -467,9 +467,15 @@ Mỗi shot = 1 hình ảnh sẽ hiện song song voiceover. Tốc độ thay đ�
 
 Mỗi shot phải có:
 - "sentenceIdx": index 0-based của câu trong transcript khi shot bắt đầu. Câu 1 = sentenceIdx 0. Shot phải MONOTONIC TĂNG (sentenceIdx[i+1] > sentenceIdx[i]).
-- "keyword": mô tả ảnh NGẮN bằng TIẾNG ANH (để search Wikimedia/Met ra đúng). Phải có tên tác phẩm gốc + chi tiết focus.
-  TỐT: "Giotto Lamentation full fresco Arena Chapel", "Mary cradling Christ head close-up detail", "Arena Chapel interior wide angle".
-  TỆ: "buc tranh dep", "Giotto art", "fresco" (quá generic).
+- "keyword": mô tả ảnh NGẮN bằng TIẾNG ANH — keyword CHỌN THEO assetType:
+  • Khi assetType="stock" (video Pexels): keyword là CONCEPT VISUAL THƯỜNG GẶP TRONG STOCK FOOTAGE — KHÔNG dùng tên riêng lịch sử (Pexels không có "Giotto" hay "Lamentation"). 2-4 từ tả CẢNH MODERN có thật trong kho stock.
+    TỐT: "italian cathedral interior dim light", "old leather book turning pages", "stone wall texture close up", "tuscan landscape sunset aerial", "candle flame slow burn", "renaissance church marble columns", "monk hand holding manuscript", "italian village morning aerial".
+    TỆ: "Giotto fresco", "14th century Padua", "Lamentation scene" (Pexels không có; sẽ trả 0 kết quả hoặc clip không liên quan).
+  • Khi assetType="archive" (Wikimedia): keyword PHẢI có tên tác phẩm gốc + chi tiết focus để search ra đúng.
+    TỐT: "Giotto Lamentation full fresco Arena Chapel", "Mary cradling Christ head close-up detail".
+    TỆ: "buc tranh dep", "Giotto art", "fresco" (quá generic).
+  • Khi assetType="ai": keyword = câu mô tả cảnh muốn dựng (sẽ ghép vào aiPrompt cho Draw Things).
+  • Khi assetType="motion": keyword = tên recipe (Quote, Timeline, …) — không phải search query.
 - "kenBurns": camera motion phù hợp với loại ảnh:
   * "zoom-in": cho ảnh chân dung họa sĩ hoặc detail-shot (default)
   * "zoom-out": reveal toàn cảnh từ chi tiết

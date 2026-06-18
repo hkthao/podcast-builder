@@ -12,7 +12,7 @@
  * Render runner phải pass đúng durationInFrames qua selectComposition.calculateMetadata.
  */
 import React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence } from "remotion";
+import { AbsoluteFill, Audio, Sequence, Video } from "remotion";
 import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "./theme.gallery";
 import { KenBurnsImage, type KenBurnsMode } from "./KenBurnsImage";
 
@@ -75,9 +75,14 @@ export const GalleryChapter: React.FC<GalleryChapterProps> = ({
             {beat.assetUrl ? (
               beat.assetIsVideo ? (
                 <AbsoluteFill style={{ backgroundColor: "#000" }}>
-                  <OffthreadVideo
+                  {/* <Video> + loop để clip ngắn (Pexels thường 5-10s)
+                      tự repeat khi shot dài hơn video duration. Dùng <Video>
+                      thay vì <OffthreadVideo> vì OffthreadVideo chưa support
+                      loop. Muted bắt buộc cho autoplay. */}
+                  <Video
                     src={beat.assetUrl}
                     muted
+                    loop
                     style={{
                       width: "100%",
                       height: "100%",

@@ -298,14 +298,20 @@ async function pexelsImageSearch(
 /**
  * Pexels video search với multi-candidate scoring.
  *
- * Tăng `per_page` từ 3 → 15 để có nhiều ứng viên hơn, rồi score:
- *  - Resolution gần height target (vd 1080) — match render res, giảm file size
- *  - Duration 5-15s lý tưởng cho 1 shot tài liệu (quá ngắn cắt cứng, quá dài
- *    Ken Burns không cần)
- *  - Landscape orientation (đã filter API-side qua param)
+ * Strategy:
+ *  - per_page 30 (cao hơn để hard-filter còn lại đủ candidates)
+ *  - HARD filter: drop video < MIN_DUR_S (quá ngắn, freeze cuối khi loop)
+ *  - Score:
+ *      duration: ideal 10-20s (1 shot tài liệu thường 8-16s)
+ *      resolution: video gốc width ≥ 1280 (tránh upscale, ≥720p)
+ *  - Pick best score → file ≤ target height
  *
- * Pick video có score CAO nhất, rồi trong videos đó pick file ≤ height target.
+ * User feedback: video Pexels hay ngắn 3-5s không đủ cho 1 shot dài
+ * (~10-15s). Min 6s + ideal 12s + loop trong render handle phần thiếu.
  */
+const MIN_VIDEO_DURATION_S = 6;
+const IDEAL_VIDEO_DURATION_S = 12;
+
 async function pexelsVideoSearch(
   query: string,
   opt: { apiKey: string; height: number },
@@ -314,7 +320,7 @@ async function pexelsVideoSearch(
     "https://api.pexels.com/videos/search?" +
     new URLSearchParams({
       query,
-      per_page: "15",
+      per_page: "30",
       orientation: "landscape",
       size: "medium",
     });
@@ -334,23 +340,36 @@ async function pexelsVideoSearch(
   const videos = data.videos ?? [];
   if (videos.length === 0) return null;
 
-  // Score video: gần duration 8s nhất + height ≥ 720p + có file ≤ target.
-  const scored = videos
-    .filter((v) => v.video_files && v.video_files.length > 0)
+  // HARD filter: drop video < MIN_DUR_S (quá ngắn cho shot tài liệu)
+  const candidates = videos.filter(
+    (v) =>
+      v.video_files &&
+      v.video_files.length > 0 &&
+      (v.duration ?? 0) >= MIN_VIDEO_DURATION_S,
+  );
+
+  // Nếu sau filter không còn ai → relax: chấp nhận video ngắn (sẽ loop).
+  const pool = candidates.length > 0 ? candidates : videos.filter(
+    (v) => v.video_files && v.video_files.length > 0,
+  );
+  if (pool.length === 0) return null;
+
+  const scored = pool
     .map((v) => {
       const dur = v.duration ?? 0;
-      // Duration ideal 8s. Phạt cách điểm linear.
-      const durScore = 1 - Math.min(1, Math.abs(dur - 8) / 12);
-      // Resolution OK = video gốc width ≥ 1280 (tránh upscale)
+      // Duration ideal 12s. Range chấp nhận 6-25s phạt nhẹ. Khoảng cách
+      // tới ideal giảm điểm linear, scale 18 (max diff trong 0..30s).
+      const durScore = 1 - Math.min(1, Math.abs(dur - IDEAL_VIDEO_DURATION_S) / 18);
+      // Resolution: ≥1280 = HD, < 1280 phạt
       const resScore = (v.width ?? 0) >= 1280 ? 1 : 0.5;
-      return { video: v, score: durScore * 0.6 + resScore * 0.4 };
+      return { video: v, score: durScore * 0.65 + resScore * 0.35 };
     })
     .sort((a, b) => b.score - a.score);
 
   const best = scored[0]?.video;
   if (!best?.video_files?.length) return null;
 
-  // Pick file ≤ target height, hoặc gần target nhất.
+  // Pick file ≤ target height (gần target nhất, tránh upscale)
   const file = [...best.video_files].sort(
     (a, b) =>
       Math.abs((a.height ?? 0) - opt.height) -
@@ -359,7 +378,7 @@ async function pexelsVideoSearch(
   return {
     url: file.link,
     isVideo: true,
-    title: `Pexels video ${best.id}`,
+    title: `Pexels video ${best.id} (${best.duration ?? "?"}s)`,
     author: best.user?.name,
     sourceUrl: best.url,
   };
