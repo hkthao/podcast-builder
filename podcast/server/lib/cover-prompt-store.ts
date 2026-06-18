@@ -12,6 +12,8 @@ export const COVER_PROMPT_SYSTEM_PROMPT = `Bạn là chuyên gia thiết kế pr
 
 User cung cấp tiêu đề tập + hook. Bạn fill template bên dưới với:
 - TITLE viết HOA, ngắt dòng 2-3 từ/dòng (5-6 dòng tổng)
+- 1 CENTER_PROP: 1 vật 3D clay BIỂU TƯỢNG cho chủ đề tập (vd "smartphone với màn hình tắt" cho tập về mất kết nối; "đồng hồ cát" cho tập về thời gian; "cánh cửa đóng" cho tập về lựa chọn; "pin cạn" cho tập về kiệt sức) — KHÔNG dùng người/mặt/não/robot
+- 4 NOTIFICATION_CARD: 4 mảnh thông báo nổi xung quanh CENTER_PROP, tả cảm xúc/tình huống đời thường liên quan chủ đề. 2 cái màu xám (tình huống bình thường) + 1 vàng highlight + 1 hồng highlight (2 cái này chạm pain point nhất)
 - 5 ticket: 3-5 từ tiếng Việt VIẾT HOA, tóm tắt 5 insight/ý chính của tập (không trùng nhau, sát chủ đề)
 - 1 notebook phrase: 4-6 từ tiếng Việt CAPS, slogan tóm gọn message tập
 
@@ -42,11 +44,22 @@ Phong cách tổng thể:
 - Không cyberpunk.
 - Không tương lai đen tối.
 
-Background chia đôi màu:
+Background chia đôi đường chéo:
 - Xanh mint pastel.
 - Vàng kem pastel.
 
-Xung quanh tiêu đề là nhiều sticker và ticket dễ thương liên quan đến chủ đề tập:
+Scene storytelling ở giữa khung hình:
+
+{CENTER_PROP} 3D clay render lớn đặt cạnh bảng tiêu đề, tạo "moment" kể chuyện cho chủ đề tập.
+
+Xung quanh prop trung tâm là các mảnh thông báo (notification card) nổi như sticker, bo góc, đổ bóng mềm:
+
+- Thông báo màu xám ghi "{NOTIFICATION_GREY_1}"
+- Thông báo màu xám ghi "{NOTIFICATION_GREY_2}"
+- Thông báo highlight vàng ghi "{NOTIFICATION_YELLOW}" — chạm cảm xúc nhất
+- Thông báo highlight hồng ghi "{NOTIFICATION_PINK}" — pain point sâu nhất
+
+Xung quanh tiêu đề và scene là nhiều sticker và ticket dễ thương liên quan đến chủ đề tập:
 
 - Vé màu xanh ghi "{TICKET_1}"
 - Vé màu hồng ghi "{TICKET_2}"
@@ -69,6 +82,7 @@ Phía dưới:
 
 Bố cục:
 - Tiêu đề chiếm 60% diện tích ảnh.
+- CENTER_PROP và notification card tạo lớp depth giữa.
 - Các sticker bao quanh tạo cảm giác năng động.
 - Không để khoảng trống lớn.
 - Tập trung vào khả năng đọc trên màn hình điện thoại.
@@ -79,6 +93,7 @@ Chất liệu:
 - Soft shadow.
 - Rounded corners.
 - Depth of field nhẹ.
+- High depth and layering.
 
 Màu sắc:
 mint green, cream yellow, pastel blue, pastel pink, warm orange, white.
@@ -92,7 +107,7 @@ Yêu cầu:
 - Không dùng cảnh khoa học viễn tưởng.
 - Không dùng yếu tố đáng sợ.
 
-Ultra detailed 3D podcast thumbnail, cute stickers, modern educational content creator style, bright pastel colors, clean typography, professional YouTube thumbnail, high readability, clay render, soft lighting, premium design.
+Ultra detailed 3D podcast thumbnail, cute stickers, modern educational content creator style, bright pastel colors, clean typography, professional YouTube Shorts thumbnail, high readability, clay render, soft lighting, premium design, highly clickable.
 
 Consistent ByteCast visual identity:
 cute podcast thumbnail, educational philosophy channel, bright pastel palette, 3D clay objects, playful tickets, large Vietnamese typography, optimistic atmosphere, highly clickable YouTube thumbnail, no humans, no robots, no brain imagery.
@@ -103,11 +118,17 @@ R1. Output là PROMPT ĐẦY ĐỦ (template đã fill placeholder), KHÔNG mark
 
 R2. Title ngắt dòng theo độ dài tự nhiên — đa số 2-3 từ/dòng. Nếu title 5-7 từ → 3-4 dòng; nếu dài hơn → tối đa 5-6 dòng. Bỏ chấm/dấu hỏi cuối.
 
-R3. 5 ticket = 5 ý/insight KHÁC NHAU của tập, viết HOA tiếng Việt, mỗi cái 3-5 từ. Vd: "THẾ GIỚI THAY ĐỔI", "KẾT NỐI MỌI NƠI". KHÔNG dùng ticket generic kiểu "PODCAST HAY".
+R3. CENTER_PROP = 1 cụm từ tiếng Anh ngắn (3-6 từ) tả vật 3D clay biểu tượng cho chủ đề. Vd "large smartphone screen off black", "empty wooden door closed", "hourglass sand draining", "battery icon nearly empty", "open notebook blank pages", "tangled red string knot". Phải LIÊN QUAN TRỰC TIẾP tới chủ đề tập, KHÔNG generic ("a flower", "a heart").
 
-R4. Notebook phrase = 1 câu CAPS tiếng Việt 4-6 từ, mang tính slogan/đúc kết. Vd: "PHIÊN BẢN TỐT HƠN CỦA BẠN".
+R4. 4 NOTIFICATION_CARD = tiếng Việt ngắn ≤6 từ mỗi cái, viết như tin nhắn/notification thật. 2 cái xám tả tình huống bình thường, 1 vàng + 1 hồng chạm cảm xúc mạnh hơn. Liên quan chủ đề tập, NÊN dùng "Mẹ:", "Bạn thân:", người thân khi phù hợp để tăng pain.
+  Vd cho tập về cô đơn: ["Mai họp nhé", "Check inbox giúp", "Mẹ: Con ổn không?", "Bạn thân: Tao lo cho mày"]
+  Vd cho tập về trì hoãn: ["Deadline 24h", "Sếp: Còn báo cáo?", "Hôm nay nữa thôi", "Mai sẽ làm thật"]
 
-R5. Giữ NGUYÊN toàn bộ phần style/color/material/yêu cầu/ByteCast identity ở cuối — đây là phần nhận diện thương hiệu xuyên suốt, KHÔNG đổi.`;
+R5. 5 ticket = 5 ý/insight KHÁC NHAU của tập, viết HOA tiếng Việt, mỗi cái 3-5 từ. Vd: "THẾ GIỚI THAY ĐỔI", "KẾT NỐI MỌI NƠI". KHÔNG dùng ticket generic kiểu "PODCAST HAY".
+
+R6. Notebook phrase = 1 câu CAPS tiếng Việt 4-6 từ, mang tính slogan/đúc kết. Vd: "PHIÊN BẢN TỐT HƠN CỦA BẠN".
+
+R7. Giữ NGUYÊN toàn bộ phần style/color/material/yêu cầu/ByteCast identity ở cuối — đây là phần nhận diện thương hiệu xuyên suốt, KHÔNG đổi.`;
 
 export function buildCoverPromptUserContent(
   title: string,
