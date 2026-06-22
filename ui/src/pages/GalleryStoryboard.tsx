@@ -59,6 +59,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { subscribeSSE } from "@/lib/sse";
 import { usePersistedState } from "@/lib/persist";
 import { StoryboardEditor } from "@/components/StoryboardEditor";
 
@@ -92,16 +93,39 @@ const OPENAI_TTS_VOICES = [
   "shimmer",
 ];
 
+// Full 30 voice Gemini TTS. Nhóm nam trầm (hợp narrator tài liệu) xếp trước.
 const GEMINI_TTS_VOICES = [
-  "Kore", // deep contemplative — default cho gallery
-  "Aoede", // warm breezy
-  "Puck", // bright energetic
-  "Charon", // baritone serious
-  "Zephyr", // light airy
-  "Fenrir", // gravelly deep
-  "Leda", // soft warm
+  // ── Nam trầm — narrator tài liệu ──
+  "Charon", // baritone trầm, nghiêm túc học thuật
+  "Fenrir", // trầm gravelly, uy lực
+  "Iapetus", // trầm điềm, chững chạc
+  "Algenib", // trầm chắc
+  "Algieba", // trầm mượt
+  "Achernar", // trầm sang trọng, refined
+  "Alnilam", // trầm chắc, dứt khoát
+  "Sadachbia", // trầm
+  "Sadaltager", // trầm, học giả
+  "Rasalgethi", // trầm vừa, informative
   "Orus", // narrator standard
   "Schedar", // measured scholarly
+  "Achird", // trầm ấm
+  "Zubenelgenubi", // trầm
+  "Umbriel", // trầm easy-going
+  "Enceladus", // trung trầm, breathy
+  "Puck", // nam sáng, energetic
+  "Zephyr", // light airy
+  // ── Nữ / khác ──
+  "Kore", // nữ trầm chiêm nghiệm
+  "Aoede", // nữ ấm breezy
+  "Leda", // nữ soft warm
+  "Autonoe", // nữ
+  "Callirrhoe", // nữ
+  "Despina", // nữ
+  "Erinome", // nữ
+  "Laomedeia", // nữ
+  "Gacrux", // nữ
+  "Pulcherrima", // nữ
+  "Vindemiatrix", // nữ
   "Sulafat", // smooth mid
 ];
 
@@ -674,7 +698,7 @@ function AudioPanel({
   );
   const [ttsVoice, setTtsVoice] = usePersistedState<string>(
     `${stateKey}.tts-voice`,
-    "Kore",
+    "Algenib",
   );
   const [ttsModel, setTtsModel] = usePersistedState<string>(
     `${stateKey}.tts-model`,
@@ -953,36 +977,30 @@ function VideoPanel({
     message: string;
   } | null>(null);
 
+  // Subscribe progress qua SSE SINGLETON (1 connection chung cho cả trang) —
+  // tránh mỗi card chương mở 1 EventSource (11 chương → 11 connection → bus
+  // MaxListenersExceeded). Hiện progress bất kể render trigger từ đâu.
   useEffect(() => {
-    if (!renderPending) {
-      setProgress(null);
-      return;
-    }
-    const es = new EventSource("/api/events");
-    const handler = (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data) as {
-          planId: string;
-          chapterIdx: number;
-          percent: number;
-          message: string;
-        };
-        if (data.planId === planId && data.chapterIdx === chapterIdx) {
-          setProgress({
-            percent: Math.round(data.percent),
-            message: data.message,
-          });
-        }
-      } catch {
-        /* ignore parse error */
+    if (!planId) return;
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+    const off = subscribeSSE<{
+      planId: string;
+      chapterIdx: number;
+      percent: number;
+      message: string;
+    }>("gallery-render:progress", (data) => {
+      if (data.planId !== planId || data.chapterIdx !== chapterIdx) return;
+      setProgress({ percent: Math.round(data.percent), message: data.message });
+      if (data.percent >= 100) {
+        if (clearTimer) clearTimeout(clearTimer);
+        clearTimer = setTimeout(() => setProgress(null), 1200);
       }
-    };
-    es.addEventListener("gallery-render:progress", handler);
+    });
     return () => {
-      es.removeEventListener("gallery-render:progress", handler);
-      es.close();
+      if (clearTimer) clearTimeout(clearTimer);
+      off();
     };
-  }, [renderPending, planId, chapterIdx]);
+  }, [planId, chapterIdx]);
 
   const isMusic = chapter.kind === "music";
   const hasVideo = chapter.videoFilename !== null;

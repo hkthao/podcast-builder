@@ -34,14 +34,22 @@ import {
 } from "../../gallery/src/shot-heuristic";
 import type { Shot } from "../../gallery/src/shot";
 import { getApiKey } from "./api-keys-store";
+import type { AssetProvider, AssetResult } from "./asset-sources/types";
+import { pixabayProvider } from "./asset-sources/pixabay";
+import { coverrProvider } from "./asset-sources/coverr";
 
 // ── Public types ─────────────────────────────────────────────────────────
 
 export type ResolverOptions = {
   /** Root cache dir — default `tmp/gallery-assets/<planId>/`. */
   cacheDir: string;
-  /** Pexels API key — required cho assetType="stock". */
+  /**
+   * Stock backend keys cho assetType="stock". Resolver thử theo thứ tự
+   * Pexels → Pixabay → Coverr, chỉ nguồn nào có key. Cần ≥1 key.
+   */
   pexelsKey?: string;
+  pixabayKey?: string;
+  coverrKey?: string;
   /**
    * Folder để watch file ảnh user gen từ Draw Things. Default ~/Downloads.
    * Resolver scan folder này tìm `<hash>.{png,jpg,webp}` → copy về cacheDir
@@ -53,7 +61,13 @@ export type ResolverOptions = {
   height: number;
 };
 
-export type AssetSource = "wikimedia" | "pexels" | "drawthings" | "motion";
+export type AssetSource =
+  | "wikimedia"
+  | "pexels"
+  | "pixabay"
+  | "coverr"
+  | "drawthings"
+  | "motion";
 
 export type ResolvedAsset = {
   beatIdx: number;
@@ -157,6 +171,20 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
   await fs.writeFile(dest, bin);
 }
 
+// ── Ratio fitness — ưu tiên asset gần 16:9 (giảm blur-letterbox) ──────────
+//
+// Video gallery là 16:9. Ảnh/clip dọc (chân dung tượng 2:3, ảnh vuông) khi
+// fit "contain" sẽ để lộ viền blur 2 bên. Chấm điểm độ khớp tỉ lệ để selection
+// ưu tiên landscape ~16:9; ảnh dọc bị phạt nặng nhưng vẫn dùng được nếu không
+// còn lựa chọn (render blur-letterbox handle).
+const TARGET_AR = 16 / 9;
+
+function ratioFitness(w?: number, h?: number): number {
+  if (!w || !h) return 0.5; // unknown dims → neutral
+  const ar = w / h;
+  return Math.max(0, 1 - Math.abs(ar - TARGET_AR) / TARGET_AR);
+}
+
 // ── Wikimedia Commons backend ────────────────────────────────────────────
 
 type WikimediaResult = {
@@ -195,27 +223,30 @@ async function searchWikimedia(
     query?: { pages?: Record<string, WikimediaPage> };
   };
   const pages = Object.values(data?.query?.pages ?? {});
-  // Pick first image-like result (Wikimedia search may return PDFs/SVGs which
-  // are often diagrams — skip SVG cho documentary visual quality).
-  for (const page of pages) {
+  // Lọc ảnh hợp lệ (skip PDF/SVG diagram), rồi chọn ảnh có tỉ lệ gần 16:9 nhất
+  // trong top kết quả — ưu tiên landscape thay vì lấy đại ảnh đầu (tượng dọc).
+  const candidates = pages.filter((page) => {
     const info = page.imageinfo?.[0];
-    if (!info) continue;
-    const isImage = /\.(jpg|jpeg|png|webp)$/i.test(info.thumburl ?? info.url ?? "");
-    if (!isImage) continue;
-    const url = info.thumburl ?? info.url;
-    if (!url) continue;
-    const meta = info.extmetadata ?? {};
-    return {
-      url,
-      title: page.title.replace(/^File:/, ""),
-      author: meta.Artist?.value
-        ? stripHtml(meta.Artist.value)
-        : undefined,
-      license: meta.LicenseShortName?.value ?? "Wikimedia Commons",
-      sourceUrl: info.descriptionurl,
-    };
-  }
-  return null;
+    if (!info) return false;
+    return /\.(jpg|jpeg|png|webp)$/i.test(info.thumburl ?? info.url ?? "");
+  });
+  if (candidates.length === 0) return null;
+  const best = [...candidates].sort((a, b) => {
+    const ia = a.imageinfo![0];
+    const ib = b.imageinfo![0];
+    return ratioFitness(ib.width, ib.height) - ratioFitness(ia.width, ia.height);
+  })[0]!;
+  const info = best.imageinfo![0];
+  const url = info.thumburl ?? info.url;
+  if (!url) return null;
+  const meta = info.extmetadata ?? {};
+  return {
+    url,
+    title: best.title.replace(/^File:/, ""),
+    author: meta.Artist?.value ? stripHtml(meta.Artist.value) : undefined,
+    license: meta.LicenseShortName?.value ?? "Wikimedia Commons",
+    sourceUrl: info.descriptionurl,
+  };
 }
 
 function stripHtml(s: string): string {
@@ -234,6 +265,8 @@ type WikimediaPage = {
     url?: string;
     thumburl?: string;
     descriptionurl?: string;
+    width?: number;
+    height?: number;
     extmetadata?: Record<string, { value: string }>;
   }>;
 };
@@ -268,7 +301,7 @@ async function pexelsImageSearch(
     "https://api.pexels.com/v1/search?" +
     new URLSearchParams({
       query,
-      per_page: "3",
+      per_page: "10",
       orientation: "landscape",
       size: "large",
     });
@@ -278,12 +311,19 @@ async function pexelsImageSearch(
     photos?: Array<{
       id: number;
       url: string;
+      width?: number;
+      height?: number;
       src: { original?: string; large2x?: string; large?: string };
       photographer?: string;
     }>;
   };
-  const photo = data.photos?.[0];
-  if (!photo) return null;
+  const photos = data.photos ?? [];
+  if (photos.length === 0) return null;
+  // Ưu tiên ratio gần 16:9 nhất trong các kết quả landscape.
+  const photo = [...photos].sort(
+    (a, b) =>
+      ratioFitness(b.width, b.height) - ratioFitness(a.width, a.height),
+  )[0]!;
   const downloadUrl = photo.src.large2x ?? photo.src.original ?? photo.src.large;
   if (!downloadUrl) return null;
   return {
@@ -362,7 +402,9 @@ async function pexelsVideoSearch(
       const durScore = 1 - Math.min(1, Math.abs(dur - IDEAL_VIDEO_DURATION_S) / 18);
       // Resolution: ≥1280 = HD, < 1280 phạt
       const resScore = (v.width ?? 0) >= 1280 ? 1 : 0.5;
-      return { video: v, score: durScore * 0.65 + resScore * 0.35 };
+      // Ratio gần 16:9 → ưu tiên (giảm blur-letterbox khi render).
+      const arScore = ratioFitness(v.width, v.height);
+      return { video: v, score: durScore * 0.5 + resScore * 0.2 + arScore * 0.3 };
     })
     .sort((a, b) => b.score - a.score);
 
@@ -382,6 +424,79 @@ async function pexelsVideoSearch(
     author: best.user?.name,
     sourceUrl: best.url,
   };
+}
+
+// ── Pixabay / Coverr backends (tái dùng asset-source providers) ───────────
+//
+// Pexels giữ search inline (multi-file height selection riêng). Pixabay/Coverr
+// gọi qua AssetProvider.search() rồi áp cùng heuristic scoring video (duration
+// gần IDEAL, ≥720p) để chất lượng đồng nhất với Pexels path.
+
+/** Chọn video AssetResult tốt nhất — giống scoring trong pexelsVideoSearch. */
+function pickBestProviderVideo(results: AssetResult[]): AssetResult | null {
+  const vids = results.filter((r) => r.kind === "video" && r.fullUrl);
+  if (vids.length === 0) return null;
+  const longEnough = vids.filter(
+    (r) => (r.durationMs ?? 0) >= MIN_VIDEO_DURATION_S * 1000,
+  );
+  const pool = longEnough.length > 0 ? longEnough : vids;
+  return [...pool]
+    .map((r) => {
+      const dur = (r.durationMs ?? 0) / 1000;
+      const durScore =
+        1 - Math.min(1, Math.abs(dur - IDEAL_VIDEO_DURATION_S) / 18);
+      const resScore = (r.width ?? 0) >= 1280 ? 1 : 0.5;
+      const arScore = ratioFitness(r.width, r.height);
+      return { r, score: durScore * 0.5 + resScore * 0.2 + arScore * 0.3 };
+    })
+    .sort((a, b) => b.score - a.score)[0]!.r;
+}
+
+/** Search 1 provider (video-first → image fallback), trả PexelsResult shape. */
+async function providerStockSearch(
+  provider: AssetProvider,
+  query: string,
+  opt: { preferVideo: boolean },
+): Promise<PexelsResult | null> {
+  if (opt.preferVideo && provider.info.kinds.includes("video")) {
+    try {
+      const resp = await provider.search({ query, kind: "video", pageSize: 30 });
+      const best = pickBestProviderVideo(resp.results);
+      if (best) {
+        return {
+          url: best.fullUrl,
+          isVideo: true,
+          title: best.title,
+          author: best.author,
+          sourceUrl: best.sourcePage,
+        };
+      }
+    } catch {
+      /* fall through to image */
+    }
+  }
+  if (provider.info.kinds.includes("image")) {
+    try {
+      const resp = await provider.search({ query, kind: "image", pageSize: 10 });
+      const imgs = resp.results.filter((r) => r.kind === "image" && r.fullUrl);
+      // Ưu tiên ratio gần 16:9 nhất.
+      const img = [...imgs].sort(
+        (a, b) => ratioFitness(b.width, b.height) - ratioFitness(a.width, a.height),
+      )[0];
+      if (img) {
+        return {
+          url: img.fullUrl,
+          isVideo: false,
+          title: img.title,
+          author: img.author,
+          sourceUrl: img.sourcePage,
+        };
+      }
+    } catch {
+      /* none */
+    }
+  }
+  return null;
 }
 
 // ── Draw Things manual backend ───────────────────────────────────────────
@@ -526,20 +641,53 @@ async function attemptSource(
   }
 
   // source === "stock"
-  if (!options.pexelsKey) {
-    return {
-      kind: "failed",
-      failed: { beatIdx, reason: "stock: thiếu PEXELS_API_KEY" },
-    };
-  }
+  // Stock backend chain: Pexels → Pixabay → Coverr (chỉ nguồn có key). Thử
+  // lần lượt tới khi 1 nguồn trả kết quả; cần ≥1 key.
+  type StockBackend = {
+    source: AssetSource;
+    license: string;
+    run: () => Promise<PexelsResult | null>;
+  };
+  const preferVideo = true; // documentary: video-first mọi stock shot
   const query = beat.keyword.trim() || c.stockQuery || "";
   if (!query) {
     return { kind: "failed", failed: { beatIdx, reason: "stock: thiếu query" } };
   }
-  // Documentary direction: video-first cho mọi stock shot. Pexels search
-  // tự fallback sang image nếu không tìm thấy video phù hợp. User có thể
-  // pin ảnh tĩnh per-shot qua attach asset library / set assetType="archive".
-  const preferVideo = true;
+  // Thứ tự ưu tiên: Pixabay → Coverr → Pexels (chỉ nguồn có key).
+  const backends: StockBackend[] = [];
+  if (options.pixabayKey) {
+    backends.push({
+      source: "pixabay",
+      license: "Pixabay License (free use, no credit required)",
+      run: () => providerStockSearch(pixabayProvider, query, { preferVideo }),
+    });
+  }
+  if (options.coverrKey) {
+    backends.push({
+      source: "coverr",
+      license: "Coverr License (free use, no credit required)",
+      run: () => providerStockSearch(coverrProvider, query, { preferVideo }),
+    });
+  }
+  if (options.pexelsKey) {
+    const pexelsKey = options.pexelsKey;
+    backends.push({
+      source: "pexels",
+      license: "Pexels (free use, attribution recommended)",
+      run: () =>
+        searchPexels(query, { apiKey: pexelsKey, preferVideo, height: options.height }),
+    });
+  }
+  if (backends.length === 0) {
+    return {
+      kind: "failed",
+      failed: {
+        beatIdx,
+        reason: "stock: chưa cấu hình key nào (Pexels/Pixabay/Coverr)",
+      },
+    };
+  }
+
   const hash = hashBeat({
     planId: input.planId,
     chapterIdx: input.chapterIdx,
@@ -547,7 +695,9 @@ async function attemptSource(
     beatOrdinal: input.beatOrdinal,
     source: `${query}|${preferVideo ? "v" : "p"}`,
   });
-  // Cache check — both .mp4 và .jpg possible
+  // Cache check — file stock provider-agnostic (cache theo query, dùng lại
+  // bất kể nguồn nào đã tải). Source "pexels" ở đây chỉ là sentinel cho cache
+  // hit (mọi nguồn stock đều CC0-like, không cần ghi công).
   for (const ext of [".mp4", ".jpg"]) {
     const p = path.join(options.cacheDir, `${hash}${ext}`);
     if (await exists(p)) {
@@ -558,26 +708,33 @@ async function attemptSource(
           localPath: p,
           isVideo: ext === ".mp4",
           source: "pexels",
-          license: "Pexels (cached)",
+          license: "Stock (cached)",
         },
       };
     }
   }
-  try {
-    const r = await searchPexels(query, {
-      apiKey: options.pexelsKey,
-      preferVideo,
-      height: options.height,
-    });
+
+  const reasons: string[] = [];
+  for (const backend of backends) {
+    let r: PexelsResult | null = null;
+    try {
+      r = await backend.run();
+    } catch (e) {
+      reasons.push(`${backend.source}: ${(e as Error).message}`);
+      continue;
+    }
     if (!r) {
-      return {
-        kind: "failed",
-        failed: { beatIdx, reason: `Pexels không có kết quả "${query}"` },
-      };
+      reasons.push(`${backend.source}: no result`);
+      continue;
     }
     const ext = r.isVideo ? ".mp4" : ".jpg";
     const outPath = path.join(options.cacheDir, `${hash}${ext}`);
-    await downloadToFile(r.url, outPath);
+    try {
+      await downloadToFile(r.url, outPath);
+    } catch (e) {
+      reasons.push(`${backend.source}: download ${(e as Error).message}`);
+      continue;
+    }
     return {
       kind: "resolved",
       asset: {
@@ -585,19 +742,21 @@ async function attemptSource(
         localPath: outPath,
         remoteUrl: r.url,
         isVideo: r.isVideo,
-        source: "pexels",
+        source: backend.source,
         title: r.title,
         author: r.author,
-        license: "Pexels (free use, attribution recommended)",
+        license: backend.license,
         sourceUrl: r.sourceUrl,
       },
     };
-  } catch (e) {
-    return {
-      kind: "failed",
-      failed: { beatIdx, reason: `Pexels: ${(e as Error).message}` },
-    };
   }
+  return {
+    kind: "failed",
+    failed: {
+      beatIdx,
+      reason: `stock không có kết quả "${query}" (${reasons.join("; ")})`,
+    },
+  };
 }
 
 // ── Dispatcher ───────────────────────────────────────────────────────────
@@ -673,12 +832,40 @@ async function resolveOneBeat(input: {
       };
     }
 
-    // Cả 2 fail — gộp reason cho audit
+    // Cả 2 fail — FALLBACK CUỐI: stock generic theo chủ đề cổ đại (xoay vòng
+    // theo beatIdx cho đa dạng) để shot KHÔNG bao giờ trống/[Missing asset].
+    // Thà 1 clip tàn tích/đá hợp tông cổ còn hơn màn đen.
+    const GENERIC_ANCIENT = [
+      "ancient greek ruins sunset",
+      "marble columns temple ancient",
+      "ancient stone statue weathered",
+      "aegean sea cliffs greece",
+      "ancient ruins fog atmospheric",
+      "weathered marble texture stone",
+    ];
+    const generic = GENERIC_ANCIENT[beatIdx % GENERIC_ANCIENT.length]!;
+    const genericResult = await attemptSource(
+      "stock",
+      { ...input, beat: { ...beat, keyword: generic, assetType: "stock" } },
+      c,
+    );
+    if (genericResult.kind === "resolved") {
+      return {
+        kind: "resolved",
+        asset: {
+          ...genericResult.asset,
+          fallbackFrom: primary,
+          fallbackReason: `generic-ancient (${primary}+${fallback} fail cho "${beat.keyword}")`,
+        },
+      };
+    }
+
+    // Cực hiếm: cả generic cũng fail (Pexels/Pixabay down) — báo audit
     return {
       kind: "failed",
       failed: {
         beatIdx,
-        reason: `${primary}: ${primaryResult.failed.reason} | fallback ${fallback}: ${fallbackResult.failed.reason}`,
+        reason: `${primary}: ${primaryResult.failed.reason} | ${fallback}: ${fallbackResult.failed.reason} | generic: ${genericResult.failed.reason}`,
       },
     };
   }
@@ -820,10 +1007,14 @@ function splitSentences(transcript: string): string[] {
 export function defaultResolverOptions(input: {
   planId: string;
   pexelsKey?: string;
+  pixabayKey?: string;
+  coverrKey?: string;
 }): ResolverOptions {
   return {
     cacheDir: path.resolve(`tmp/gallery-assets/${input.planId}`),
     pexelsKey: input.pexelsKey ?? getApiKey("pexels") ?? undefined,
+    pixabayKey: input.pixabayKey ?? getApiKey("pixabay") ?? undefined,
+    coverrKey: input.coverrKey ?? getApiKey("coverr") ?? undefined,
     drawThingsWatchDir: path.join(os.homedir(), "Downloads"),
     width: 1920,
     height: 1080,

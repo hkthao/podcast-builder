@@ -71,6 +71,20 @@ const PROVIDER_META: Record<
     description:
       "Stock photo + video API — dùng cho gallery documentary asset resolver (assetType='stock' cho establishing/transition shots). Free tier 200 req/h, 20k/tháng. Đăng ký tại pexels.com → API → Get Started.",
   },
+  pixabay: {
+    label: "Pixabay",
+    docsUrl: "https://pixabay.com/api/docs/",
+    placeholder: "12345678-abcdef…",
+    description:
+      "Stock photo + illustration + video (Pixabay License, free, không cần ghi công). Có cả animation/motion graphics phông xanh. Dùng trong panel Research. Free key tại pixabay.com/api/docs (cần đăng nhập).",
+  },
+  coverr: {
+    label: "Coverr",
+    docsUrl: "https://api.coverr.co/docs/",
+    placeholder: "coverr api key…",
+    description:
+      "Stock video b-roll / background tone hiện đại, điện ảnh (free thương mại, không cần ghi công). Video-only. Đăng ký free tại coverr.co → Account → API.",
+  },
   anthropic: {
     label: "Anthropic Claude",
     docsUrl: "https://console.anthropic.com/settings/keys",

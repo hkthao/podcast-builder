@@ -993,13 +993,39 @@ async function generateGalleryAndSave(
   }
 
   const ideas: GalleryBrainstormIdea[] = [];
+  const issueSummaries: string[] = [];
   for (const raw of parsed.ideas as unknown[]) {
     const r = GalleryBrainstormIdeaSchema.safeParse(raw);
-    if (r.success) ideas.push(r.data);
+    if (r.success) {
+      ideas.push(r.data);
+    } else {
+      // Gom field + lý do để debug — trước đây nuốt im lặng nên không biết sai gì.
+      const title =
+        (raw as { title?: unknown })?.title &&
+        typeof (raw as { title?: unknown }).title === "string"
+          ? ((raw as { title: string }).title.slice(0, 40))
+          : "(no title)";
+      const issues = r.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join(" | ");
+      issueSummaries.push(`"${title}" → ${issues}`);
+    }
   }
   if (ideas.length === 0) {
+    console.error(
+      `[gallery-brainstorm] Tất cả ${
+        (parsed.ideas as unknown[]).length
+      } idea fail zod:\n  ${issueSummaries.join("\n  ")}\n--- Raw (1200 chars) ---\n${content.slice(0, 1200)}`,
+    );
     throw new Error(
-      "LLM response gallery không có idea nào parse được qua zod schema",
+      `LLM response gallery không có idea nào parse được qua zod schema. Lỗi: ${
+        issueSummaries[0] ?? "unknown"
+      }`,
+    );
+  }
+  if (issueSummaries.length > 0) {
+    console.warn(
+      `[gallery-brainstorm] ${issueSummaries.length} idea bị loại: ${issueSummaries.join("; ")}`,
     );
   }
 

@@ -12,8 +12,15 @@
  * Render runner phải pass đúng durationInFrames qua selectComposition.calculateMetadata.
  */
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, Video } from "remotion";
-import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "./theme.gallery";
+import {
+  AbsoluteFill,
+  Audio,
+  interpolate,
+  Sequence,
+  useCurrentFrame,
+  Video,
+} from "remotion";
+import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE, withAlpha } from "./theme.gallery";
 import { KenBurnsImage, type KenBurnsMode } from "./KenBurnsImage";
 
 /** Beat đã pre-resolved: timing tính từ wordTimestamps, asset URL từ DB. */
@@ -31,6 +38,14 @@ export type ResolvedBeat = {
   assetYear: string;
   assetProvider: string;
   assetLicense: string;
+  /**
+   * Motion recipe name khi assetType="motion" (vd "Quote"). Undefined cho
+   * beat asset thường (stock/archive/ai). Render dispatch theo recipe thay
+   * vì <KenBurnsImage>/<Video>.
+   */
+  motionRecipe?: string;
+  /** Text hiển thị cho recipe "Quote" — câu narration tại sentenceIdx. */
+  quoteText?: string;
 };
 
 export type GalleryChapterProps = {
@@ -72,7 +87,12 @@ export const GalleryChapter: React.FC<GalleryChapterProps> = ({
             from={beat.startFrame}
             durationInFrames={beat.durationFrames}
           >
-            {beat.assetUrl ? (
+            {beat.motionRecipe === "Quote" ? (
+              <QuoteCard
+                text={beat.quoteText ?? ""}
+                durationFrames={beat.durationFrames}
+              />
+            ) : beat.assetUrl ? (
               beat.assetIsVideo ? (
                 <AbsoluteFill style={{ backgroundColor: "#000" }}>
                   {/* <Video> + loop để clip ngắn (Pexels thường 5-10s)
@@ -112,6 +132,128 @@ export const GalleryChapter: React.FC<GalleryChapterProps> = ({
     </AbsoluteFill>
   );
 };
+
+/**
+ * QuoteCard — recipe motion "Quote". Câu nói kinh điển hiện từ từ trên nền
+ * than ấm tối, font serif display (Playfair/Cormorant), kèm dấu ngoặc kép
+ * gold-leaf to + đường kẻ nhấn. Tempo điềm tĩnh đúng chất tài liệu: text
+ * fade + trượt nhẹ lên trong ~0.8s đầu, giữ, fade nhẹ 0.5s cuối.
+ *
+ * Quote tách phần "— Attribution" ở cuối (sau em-dash / "—") thành dòng
+ * tên tác giả nhỏ hơn nếu có.
+ */
+const QuoteCard: React.FC<{ text: string; durationFrames: number }> = ({
+  text,
+  durationFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const FADE_IN = 20; // ~0.8s @ 24fps
+  const FADE_OUT = 12; // ~0.5s
+  const fadeOutStart = Math.max(FADE_IN, durationFrames - FADE_OUT);
+
+  const opacity = interpolate(
+    frame,
+    [0, FADE_IN, fadeOutStart, durationFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+  // Trượt nhẹ lên 24px trong fade-in — chuyển động tinh tế, không giật.
+  const translateY = interpolate(frame, [0, FADE_IN], [24, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // Tách "câu nói — Tác giả" → { quote, attribution }
+  const { quote, attribution } = splitQuote(text);
+  // Câu càng dài → font càng nhỏ để vừa khung (62 / 52 / 44).
+  const quoteLen = quote.length;
+  const fontSize = quoteLen > 160 ? 44 : quoteLen > 90 ? 52 : 62;
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: COLORS.bg,
+        // Vignette nhẹ làm tối 4 góc → tụ mắt vào chữ.
+        backgroundImage: `radial-gradient(ellipse at center, ${withAlpha(
+          COLORS.bg,
+          0,
+        )} 0%, ${COLORS.bgAlt} 100%)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        padding: "0 220px",
+      }}
+    >
+      <div style={{ opacity, transform: `translateY(${translateY}px)`, textAlign: "center" }}>
+        {/* Dấu ngoặc kép mở — gold leaf, to */}
+        <div
+          style={{
+            fontFamily: FONTS.display,
+            color: COLORS.goldLeaf,
+            fontSize: 140,
+            lineHeight: 0.6,
+            height: 80,
+          }}
+        >
+          “
+        </div>
+        <div
+          style={{
+            fontFamily: FONTS.display,
+            color: COLORS.ink,
+            fontSize,
+            lineHeight: 1.35,
+            fontStyle: "italic",
+            maxWidth: 1300,
+          }}
+        >
+          {quote}
+        </div>
+        {attribution && (
+          <div
+            style={{
+              fontFamily: FONTS.body,
+              color: COLORS.goldLeaf,
+              fontSize: 30,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              marginTop: 36,
+            }}
+          >
+            — {attribution}
+          </div>
+        )}
+        {/* Đường kẻ nhấn dưới */}
+        <div
+          style={{
+            width: 120,
+            height: 2,
+            backgroundColor: COLORS.goldLeafSoft,
+            margin: "28px auto 0",
+          }}
+        />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * Tách chuỗi quote thành thân + attribution. Nhận diện attribution khi có
+ * em-dash/en-dash/"--" ở GẦN cuối (≤ 40 ký tự cuối) — tránh cắt nhầm dash
+ * giữa câu.
+ */
+function splitQuote(text: string): { quote: string; attribution: string } {
+  const trimmed = (text ?? "").trim().replace(/^["“”']|["“”']$/g, "").trim();
+  const dashIdx = Math.max(trimmed.lastIndexOf("—"), trimmed.lastIndexOf("–"));
+  if (dashIdx > 0 && trimmed.length - dashIdx <= 40) {
+    return {
+      quote: trimmed.slice(0, dashIdx).trim(),
+      attribution: trimmed.slice(dashIdx + 1).trim(),
+    };
+  }
+  return { quote: trimmed, attribution: "" };
+}
 
 const BeatPlaceholder: React.FC<{ keyword: string }> = ({ keyword }) => (
   <AbsoluteFill

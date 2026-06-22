@@ -435,19 +435,19 @@ export async function updateStoryboardChapters(
 
 // ────── LLM gen transcript per chapter ──────
 
-export const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu nghệ thuật tiếng Việt + visual director. Bạn vừa viết voiceover, vừa chỉ định hình ảnh nào hiện song song với từng phần của voiceover — như Khan Academy Smarthistory hoặc Waldemar Januszczak.
+export const TRANSCRIPT_SYSTEM_PROMPT = `Bạn là biên kịch voiceover tài liệu TRIẾT HỌC tiếng Việt + visual director. Bạn vừa viết voiceover, vừa chỉ định hình ảnh ẩn dụ/tư liệu hiện song song — phong cách documentary chiêm nghiệm (kiểu Crash Course Philosophy hoặc tài liệu lịch sử tư tưởng).
 
-Nhiệm vụ: viết VOICEOVER + VISUAL BEATS cho 1 chương của video tài liệu nghệ thuật.
+Nhiệm vụ: viết VOICEOVER + VISUAL BEATS cho 1 chương của video tài liệu triết học.
 
 PHẦN 1 — VOICEOVER (field "transcript", prose tiếng Việt):
 
 Cấu trúc bắt buộc:
 1. Hook mở chương (1-2 câu) — câu hỏi hoặc statement chương sắp giải đáp.
-2. Phần thân — bám sát summary + key works của chương:
-   - Nhắc TÊN cụ thể: họa sĩ, tác phẩm, bảo tàng, năm sáng tác.
-   - Giải thích kỹ thuật/innovation cụ thể (vd "Giotto dùng axial perspective trong Isaac Blessing Jacob — đường thẳng song song lùi vào không gian").
-   - Đưa ngữ cảnh lịch sử + ý nghĩa văn hoá khi cần.
-   - Trích quote ngắn từ nhà phê bình/sử gia nếu phù hợp.
+2. Phần thân — bám sát summary chương:
+   - Nhắc TÊN cụ thể: triết gia, trường phái, tác phẩm, khái niệm, năm/thời kỳ.
+   - Giải thích luận điểm/phương pháp cụ thể, dễ hiểu (vd "phương pháp truy vấn của Socrates: hỏi liên tiếp để người đối thoại tự nhận ra mâu thuẫn trong chính niềm tin của mình").
+   - Đưa ngữ cảnh lịch sử + ý nghĩa khi cần.
+   - Trích quote triết học kinh điển nếu phù hợp ("Tôi biết rằng tôi không biết gì").
 3. Bridge sang chương sau (1 câu).
 
 Kỹ thuật:
@@ -455,64 +455,69 @@ Kỹ thuật:
 - Câu ngắn-vừa (10-25 từ/câu).
 - Dùng "chúng ta" thay vì "bạn".
 - KHÔNG markdown, KHÔNG bullet, KHÔNG heading. Pure prose để TTS đọc liền.
-- Giữ NGUYÊN GỐC tên Anh/Ý/Pháp (Lamentation, Arena Chapel, không dịch).
-- KHÔNG cụm sáo rỗng: "không thể phủ nhận", "trong cuộc sống hối hả".
+- Giữ NGUYÊN GỐC tên triết gia/tác phẩm (Socrates, Plato, "The Republic", không dịch sang tiếng Việt).
+- KHÔNG cụm sáo rỗng.
 - Mỗi câu kết thúc bằng dấu chấm/chấm hỏi/chấm than ĐÚNG — để parser split câu chính xác.
 
 PHẦN 2 — SHOTS (field "shots", array):
 
-Mỗi shot = 1 hình ảnh sẽ hiện song song voiceover. Tốc độ thay đổi hình:
-- Trung bình 1 hình mỗi 6-12 giây (~1 beat mỗi 2-4 câu của voiceover).
-- 10 phút voiceover (~80 câu) → ~25-40 shots.
+Mỗi shot = 1 hình ảnh hiện song song voiceover.
+
+⏱️ MẬT ĐỘ SHOT (QUAN TRỌNG — tránh 1 hình đứng quá lâu gây chán):
+- Đổi hình mỗi ~4-5 giây. KHÔNG để 1 shot (nhất là ẢNH TĨNH archive) hiển thị quá 6-7 giây.
+- Đặt shot DÀY: trung bình 1 shot mỗi 1-2 câu voiceover. KHÔNG để gap > 2 câu giữa 2 shots.
+- Ước lượng số shot ≈ số_phút × 11 (vd chương 3 phút → ~30-36 shots). Thà NHIỀU shot hình khác nhau còn hơn ít shot dài.
+- Khi 1 ý kéo dài nhiều câu → CHIA thành nhiều shot với hình KHÁC nhau (vd cùng nói về Athens: shot 1 tàn tích Acropolis, shot 2 agora, shot 3 biển Aegean) thay vì giữ 1 ảnh.
+
+⚠️ NGUYÊN TẮC TỐI QUAN TRỌNG — TRÁNH HÌNH HIỆN ĐẠI / LẠC CHỦ ĐỀ:
+Video về triết học CỔ ĐẠI. Stock footage (Pexels/Pixabay) là cảnh quay HIỆN ĐẠI — người mặc đồ thời nay, thành phố, công nghệ → LẠC LÕNG, hỏng không khí cổ. Vì vậy:
+1. Với chủ đề cổ đại/cổ điển → ƯU TIÊN ARCHIVE (tranh/tượng/gốm/fresco cổ điển public domain trên Wikimedia/Met). Đây mới là hình period-accurate, đúng thời đại, đẹp và đúng chủ đề.
+2. Stock CHỈ dùng cho hình ẢNH VÔ THỜI GIAN — thiên nhiên + chất liệu cổ, KHÔNG có dấu vết hiện đại: tàn tích đá, cột cẩm thạch, biển động, sóng, bầu trời sao, bình minh trên núi, ngọn lửa/nến, khói, hạt bụi trong tia sáng, rừng ô liu, sa mạc, cuộn giấy da, mực. TUYỆT ĐỐI KHÔNG: người hiện đại, quần áo thời nay, ô tô, đường phố, văn phòng, điện thoại, máy tính.
+3. NGOẠI LỆ: chương "Bài học cho thời đại AI" — ĐƯỢC dùng stock hiện đại (server, smartphone, AI, đám đông phố) để tạo tương phản cổ–kim.
+
+⭐ KEYWORD PHẢI BÁM NỘI DUNG CÂU: với mỗi shot, ĐỌC chính câu/đoạn voiceover mà shot đó đi kèm (theo sentenceIdx) rồi chọn hình minh hoạ ĐÚNG điều ĐANG ĐƯỢC NÓI ở đó — không chọn hình chung chung. Vd câu nói về phiên toà xử Socrates → "The Death of Socrates David painting"; câu về dạy học ở quảng trường → "ancient Agora Athens stoa"; câu về nghi ngờ/tự vấn → "fog forest dawn". Các ví dụ keyword trong prompt CHỈ để tham khảo PHONG CÁCH viết keyword (tiếng Anh, cụ thể, có thật trong kho), KHÔNG phải danh sách bắt buộc chép — mỗi video/chương tự suy ra keyword từ nội dung riêng.
 
 Mỗi shot phải có:
-- "sentenceIdx": index 0-based của câu trong transcript khi shot bắt đầu. Câu 1 = sentenceIdx 0. Shot phải MONOTONIC TĂNG (sentenceIdx[i+1] > sentenceIdx[i]).
-- "keyword": mô tả ảnh NGẮN bằng TIẾNG ANH — keyword CHỌN THEO assetType:
-  • Khi assetType="stock" (video Pexels): keyword là CONCEPT VISUAL THƯỜNG GẶP TRONG STOCK FOOTAGE — KHÔNG dùng tên riêng lịch sử (Pexels không có "Giotto" hay "Lamentation"). 2-4 từ tả CẢNH MODERN có thật trong kho stock.
-    TỐT: "italian cathedral interior dim light", "old leather book turning pages", "stone wall texture close up", "tuscan landscape sunset aerial", "candle flame slow burn", "renaissance church marble columns", "monk hand holding manuscript", "italian village morning aerial".
-    TỆ: "Giotto fresco", "14th century Padua", "Lamentation scene" (Pexels không có; sẽ trả 0 kết quả hoặc clip không liên quan).
-  • Khi assetType="archive" (Wikimedia): keyword PHẢI có tên tác phẩm gốc + chi tiết focus để search ra đúng.
-    TỐT: "Giotto Lamentation full fresco Arena Chapel", "Mary cradling Christ head close-up detail".
-    TỆ: "buc tranh dep", "Giotto art", "fresco" (quá generic).
-  • Khi assetType="ai": keyword = câu mô tả cảnh muốn dựng (sẽ ghép vào aiPrompt cho Draw Things).
-  • Khi assetType="motion": keyword = tên recipe (Quote, Timeline, …) — không phải search query.
-- "kenBurns": camera motion phù hợp với loại ảnh:
-  * "zoom-in": cho ảnh chân dung họa sĩ hoặc detail-shot (default)
-  * "zoom-out": reveal toàn cảnh từ chi tiết
-  * "pan-left" / "pan-right": cho fresco tường dài hoặc landscape
-  * "pan-up": cho tranh dọc/altarpiece cao
-  * "pan-down": từ trời xuống đất (rare)
-  * "static": chỉ dùng cho text overlay/diagram (hiếm)
-- "role": vai trò shot trong mạch kể tài liệu (CHỌN 1 trong 6):
-  * "establishing": mở không gian/thời gian (1 chapter chỉ 1-2 establishing đầu)
-  * "subject": chân dung họa sĩ, tượng nhân vật, ảnh tác phẩm cụ thể
-  * "detail": cận cảnh, nhấn 1 chi tiết (chữ ký, nét cọ, ngón tay)
-  * "concept": ý trừu tượng → motion graphic (perspective, chiaroscuro)
-  * "transition": cầu nối ngắn giữa 2 đoạn
-  * "payoff": câu chốt, quote, cao trào (mỗi chương 1-2 cái)
-- "assetType": nguồn asset cần fetch (CHỌN 1 trong 4) — DEFAULT phải là "stock" cho video động, chỉ "archive" khi nhắc tên tác phẩm/họa sĩ CỤ THỂ:
-  * "stock" (DEFAULT — dùng cho 60-70% shots): video Pexels match keyword tiếng Anh. Documentary modern style — luôn ưu tiên video động hơn ảnh tĩnh. Vd "candlelight cathedral interior", "old book hand turning pages", "italian renaissance city aerial".
-  * "archive": ảnh tĩnh public-domain Wikimedia — CHỈ khi câu nhắc TÊN tác phẩm/họa sĩ cụ thể cần show đúng bức đó (Lamentation, Mona Lisa, Giotto portrait).
-  * "ai": cảnh không quay/không có archive → Draw Things gen (vd "Giotto workshop 14th century").
-  * "motion": Remotion vẽ động (Quote, Timeline, PerspectiveDiagram, …).
-- "note": (optional, "" nếu không cần) — gợi ý cho asset team, vd "ưu tiên ảnh restoration 2002".
+- "sentenceIdx": index 0-based của câu trong transcript khi shot bắt đầu. MONOTONIC TĂNG.
+- "keyword": mô tả ảnh NGẮN bằng TIẾNG ANH — CHỌN THEO assetType:
+  • assetType="archive" (Wikimedia/Met — NÊN CHIẾM ~50% với chủ đề cổ đại): tranh/tượng/gốm/fresco cổ điển PD. PHẢI cụ thể + có loại hình:
+    TỐT: "Socrates marble bust", "Plato bust sculpture", "The School of Athens Raphael fresco", "The Death of Socrates Jacques-Louis David painting", "ancient greek red-figure pottery vase", "Roman fresco Pompeii", "Parthenon frieze marble relief", "ancient map of Greece".
+    TỆ: "philosopher", "greek statue", "old painting" (quá generic → ra sai).
+  • assetType="stock" (b-roll VÔ THỜI GIAN — thiên nhiên/đá/lửa, KHÔNG hiện đại): 2-4 từ.
+    TỐT (cổ đại): "ancient stone ruins sunset", "marble columns temple", "stormy sea waves rocks", "starry night sky timelapse", "candle flame darkness", "fog mountain dawn", "olive trees mediterranean wind", "sunbeam dust temple", "fire embers slow motion".
+    TỐT (chỉ cho chương AI): "server room data center", "smartphone glowing night", "ai neural network", "city crowd timelapse".
+    TỆ: "man walking misty path", "person thinking office", "people in city" (người hiện đại → lạc chủ đề cổ đại).
+  • assetType="ai": cảnh lịch sử cụ thể không có archive → câu mô tả classical style (ghép vào aiPrompt Draw Things) — vd "Socrates teaching young men in Athens agora, ancient greek classical painting style".
+  • assetType="motion": keyword = tên recipe (Quote, …). Dùng cho CÂU NÓI KINH ĐIỂN → hiện text quote.
+- "kenBurns": "zoom-in" (chân dung/tượng — default), "zoom-out" (reveal cảnh rộng), "pan-left"/"pan-right" (tranh ngang/landscape), "pan-up" (tượng/tranh dọc), "static" (quote).
+- "role" (CHỌN 1 trong 6): "establishing" (mở cảnh, 1-2 đầu chương), "subject" (tượng/tranh nhân vật được nhắc tên), "detail" (cận cảnh chi tiết tranh/tượng/cuộn giấy), "concept" (ý trừu tượng → motion), "transition" (cầu nối ngắn), "payoff" (câu chốt/quote).
+- "assetType": với chủ đề CỔ ĐẠI ưu tiên thứ tự: archive (tranh/tượng) > stock vô thời gian > ai > motion.
+- "note": (optional, "" nếu không cần).
 
 Quy tắc shot:
-- Shot đầu (sentenceIdx=0) PHẢI có — establish shot mở chương, DÙNG STOCK VIDEO (vd aerial cathedral, candlelit museum hall).
-- Khi voiceover nhắc TÊN 1 tác phẩm cụ thể trong câu → ngay câu đó hoặc câu kế NÊN có shot của tác phẩm đó (role="subject", assetType="archive"). Đây là exception duy nhất cho archive.
-- KHÔNG để gap > 4 câu giữa 2 shots (khán giả sẽ nhìn 1 hình quá lâu).
-- Đa dạng kenBurns — không dồn hết zoom-in.
-- Mục tiêu mix: ~60-70% stock video, ~20% archive (khi nhắc tác phẩm), ~10% motion (quote/concept), 0-10% ai. Cả chương chỉ NÊN có 1-2 shot ảnh tĩnh archive trừ khi tập trung phân tích 1 tác phẩm.
+- Shot đầu (sentenceIdx=0): establishing — dùng archive (tranh cổ điển toàn cảnh) HOẶC stock vô thời gian ("ancient stone ruins sunset"). KHÔNG dùng cảnh hiện đại.
+- Khi voiceover nhắc TÊN 1 triết gia/tác phẩm/sự kiện → ngay đó shot archive tranh/tượng/fresco của họ (role="subject").
+- Câu nói kinh điển → 1 shot motion recipe Quote (role="payoff").
+- KHÔNG gap > 2 câu giữa 2 shots (đổi hình ~4-5s/lần). Đa dạng kenBurns.
+- ⚠️ ĐA DẠNG HÌNH GIỮA CÁC CHƯƠNG: payload có "KEYWORDS_DA_DUNG_O_CHUONG_KHAC" — TUYỆT ĐỐI KHÔNG dùng lại các keyword đó. Mỗi chương phải có bộ hình RIÊNG, hợp nội dung chương. ĐỪNG mặc định lặp "The School of Athens" + 1 tượng cho mọi chương. Tận dụng kho hình rộng:
+  • Tượng/chân dung khác nhau: "Socrates bust Vatican", "Plato Roman copy bust", "Aristotle Altemps bust", "Greek philosopher herm sculpture".
+  • Tranh cổ điển đa dạng: "The Death of Socrates David", "Socrates dragging Alcibiades Regnault", "Plato's Academy mosaic Pompeii", "Phryne before the Areopagus", "Anselm Feuerbach Symposium painting".
+  • Gốm/khảo cổ: "greek red-figure pottery symposium", "black-figure amphora", "ancient greek coin", "papyrus fragment greek text", "Linear B clay tablet".
+  • Bối cảnh cụ thể: "Athens Acropolis ruins", "ancient Agora Athens stoa", "Delphi temple ruins", "Aegean sea cliffs", "Greek theatre Epidaurus", "olive grove Attica".
+  • Yếu tố vô thời gian (stock): "storm clouds lightning", "ocean waves rocks", "starry sky", "candle flame", "fog forest dawn", "fire embers", "marble texture", "sunbeam dust".
+- Mix mục tiêu CHỦ ĐỀ CỔ ĐẠI: ~50% archive (tranh/tượng cổ điển), ~35% stock vô thời gian, ~10% motion (quote), ~5% ai. (Riêng chương 'thời AI': tăng stock hiện đại.)
 
 OUTPUT JSON CHẶT (KHÔNG markdown wrap, KHÔNG meta-text):
 
 {
   "transcript": "Câu 1. Câu 2. ... Câu N.",
   "shots": [
-    {"sentenceIdx": 0, "keyword": "padua italy aerial morning fog", "kenBurns": "pan-right", "role": "establishing", "assetType": "stock", "note": ""},
-    {"sentenceIdx": 3, "keyword": "Giotto Lamentation full fresco", "kenBurns": "pan-right", "role": "subject", "assetType": "archive", "note": ""},
-    {"sentenceIdx": 6, "keyword": "candle flame slow flicker close up", "kenBurns": "static", "role": "detail", "assetType": "stock", "note": ""},
-    {"sentenceIdx": 8, "keyword": "perspective diagram axial lines", "kenBurns": "static", "role": "concept", "assetType": "motion", "note": ""},
+    {"sentenceIdx": 0, "keyword": "ancient stone ruins sunset", "kenBurns": "pan-right", "role": "establishing", "assetType": "stock", "note": ""},
+    {"sentenceIdx": 2, "keyword": "The School of Athens Raphael fresco", "kenBurns": "pan-left", "role": "establishing", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 4, "keyword": "Socrates marble bust", "kenBurns": "zoom-in", "role": "subject", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 6, "keyword": "The Death of Socrates Jacques-Louis David painting", "kenBurns": "zoom-in", "role": "subject", "assetType": "archive", "note": ""},
+    {"sentenceIdx": 8, "keyword": "candle flame darkness", "kenBurns": "static", "role": "detail", "assetType": "stock", "note": ""},
+    {"sentenceIdx": 10, "keyword": "Quote", "kenBurns": "static", "role": "payoff", "assetType": "motion", "note": ""},
     ...
   ]
 }`;
@@ -522,6 +527,7 @@ const buildTranscriptUserPrompt = (
   chapter: StoryboardChapter,
   chapterIdx: number,
   adjacentChapters: StoryboardChapter[],
+  usedKeywords: string[] = [],
 ): string => {
   // Truncate keyWorks list theo chapter để giảm context
   const chapterKeyWorks = idea.keyWorks.filter((kw) =>
@@ -554,7 +560,9 @@ const buildTranscriptUserPrompt = (
       nextChapter: nextTitle,
     },
     targetWords: chapter.minutes * 160,
-    instruction: `Viết voiceover NGUYÊN VĂN cho chương "${chapter.title}" — ~${chapter.minutes * 160} từ.`,
+    "KEYWORDS_DA_DUNG_O_CHUONG_KHAC (TUYỆT ĐỐI tránh lặp — chọn hình KHÁC, đặc thù nội dung chương này)":
+      usedKeywords.length > 0 ? usedKeywords : undefined,
+    instruction: `Viết voiceover NGUYÊN VĂN cho chương "${chapter.title}" — ~${chapter.minutes * 160} từ. Shots PHẢI dùng hình ẢNH RIÊNG cho chương này, KHÔNG trùng các keyword đã liệt kê ở KEYWORDS_DA_DUNG_O_CHUONG_KHAC.`,
   };
   return JSON.stringify(payload, null, 2);
 };
@@ -589,6 +597,20 @@ export async function generateChapterTranscript(input: {
     throw err;
   }
 
+  // Keyword đã dùng ở các chương KHÁC (stock/archive) → truyền vào prompt để
+  // LLM TRÁNH lặp lại cùng vài tác phẩm/hình ở mọi chương.
+  const usedKeywords = Array.from(
+    new Set(
+      plan.chapters.flatMap((ch, i) =>
+        i === input.chapterIdx
+          ? []
+          : ch.shots
+              .filter((s) => s.assetType !== "motion" && s.keyword.trim())
+              .map((s) => s.keyword.trim()),
+      ),
+    ),
+  );
+
   const content = await chat({
     provider: input.provider,
     model: input.model,
@@ -598,8 +620,9 @@ export async function generateChapterTranscript(input: {
       chapter,
       input.chapterIdx,
       plan.chapters,
+      usedKeywords,
     ),
-    temperature: 0.75,
+    temperature: 0.8,
     jsonMode: true,
   });
 

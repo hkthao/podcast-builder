@@ -5,8 +5,10 @@
  * Mode mapping với VisualBeat.kenBurns enum:
  *   zoom-in / zoom-out / pan-left / pan-right / pan-up / pan-down / static
  *
- * Ảnh fit chế độ "cover" (lấp đầy 16:9, crop dư) — Phase 4d.x sẽ add
- * blur-letterbox fallback cho ảnh tỉ lệ lệch quá nhiều (vd cao 2:3).
+ * Blur-letterbox: ảnh chính fit "contain" (hiện TRỌN VẸN, không crop) đè lên
+ * 1 bản blur phủ đầy 16:9 làm nền. Ảnh ~16:9 vẫn lấp gần hết khung; ảnh lệch
+ * tỉ lệ (chân dung 2:3, ảnh vuông) không bị "cover" cắt mất mép — thay vào đó
+ * có viền blur mềm hai bên đúng kiểu phim tài liệu. Ken Burns áp lên ảnh chính.
  */
 import React from "react";
 import { AbsoluteFill, Img, interpolate, useCurrentFrame } from "remotion";
@@ -117,12 +119,29 @@ export const KenBurnsImage: React.FC<{
 
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
+      {/* Nền blur phủ đầy khung — lấp khoảng trống của ảnh lệch tỉ lệ.
+          scale 1.15 + blur để mép blur không hở viền; brightness hạ để
+          nền không hút mắt khỏi ảnh chính. */}
       <Img
         src={src}
         style={{
+          position: "absolute",
           width: "100%",
           height: "100%",
           objectFit: "cover",
+          transform: "scale(1.15)",
+          filter: "blur(28px) brightness(0.5)",
+          transformOrigin: "center center",
+        }}
+      />
+      {/* Ảnh chính — contain để hiện trọn vẹn, Ken Burns pan/zoom áp ở đây. */}
+      <Img
+        src={src}
+        style={{
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
           transform: `translate(${x}%, ${y}%) scale(${scale})`,
           transformOrigin: "center center",
         }}

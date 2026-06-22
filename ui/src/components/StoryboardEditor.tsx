@@ -144,7 +144,9 @@ function computePacingWarnings(shots: Shot[]): Array<{
     ) as AssetType | "?";
     if (t !== currentType) {
       const runLength = i - runStart;
-      if (runLength >= 4) {
+      // Chỉ cảnh báo chuỗi CÙNG LOẠI THẬT — bỏ qua "?" (shot chưa set assetType,
+      // không phải "cùng loại" mà chỉ là chưa cấu hình → cảnh báo gây nhiễu).
+      if (runLength >= 4 && currentType !== "?") {
         warnings.push({
           fromIdx: runStart,
           toIdx: i - 1,
@@ -324,6 +326,9 @@ export function StoryboardEditor({
         kenBurns: "zoom-in",
         durationMs: null,
         note: "",
+        // Default thật để shot mới không hiện "?" + lint pacing chạy đúng.
+        role: "detail",
+        assetType: "stock",
       },
     ]);
   };

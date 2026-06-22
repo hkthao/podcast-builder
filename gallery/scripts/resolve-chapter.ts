@@ -136,9 +136,9 @@ async function main(): Promise<void> {
 
   console.log(`Cache dir : ${opts.cacheDir}`);
   console.log(`Watch dir : ${opts.drawThingsWatchDir}`);
-  console.log(
-    `Pexels key: ${opts.pexelsKey ? "set (****" + opts.pexelsKey.slice(-4) + ")" : "<missing>"}`,
-  );
+  const keyTag = (k?: string) =>
+    k ? "set (****" + k.slice(-4) + ")" : "<missing>";
+  console.log(`Stock keys: pexels=${keyTag(opts.pexelsKey)}  pixabay=${keyTag(opts.pixabayKey)}  coverr=${keyTag(opts.coverrKey)}`);
 
   const startTime = Date.now();
   const result = await resolveChapterAssets({

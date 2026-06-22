@@ -1617,7 +1617,9 @@ export type ApiKeyProvider =
   | "gemini"
   | "anthropic"
   | "google-vertex-ai"
-  | "pexels";
+  | "pexels"
+  | "pixabay"
+  | "coverr";
 
 export type ApiKeyStatus = {
   provider: ApiKeyProvider;

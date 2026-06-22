@@ -20,6 +20,7 @@ function ensureConnection() {
     "ping",
     "episodes:changed",
     "render:progress",
+    "gallery-render:progress",
   ]) {
     eventSource.addEventListener(event, (e) => {
       const msg = (e as MessageEvent).data;
