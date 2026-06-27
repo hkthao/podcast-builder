@@ -43,7 +43,7 @@ const MAX_HASHTAGS = 5;
 const DEFAULT_HASHTAGS = [
   "bytecasttech",
   "podcast",
-  "trietoc",
+  "triethoc",
   "tamlyhoc",
   "suyngam",
 ];
@@ -53,7 +53,7 @@ const SUGGESTED_HASHTAGS = [
   "bytecasttech",
   "podcast",
   "podcasttiengviet",
-  "trietoc",
+  "triethoc",
   "tamlyhoc",
   "suyngam",
   "cuocsong",

@@ -71,7 +71,7 @@ Quan sát kỹ: 10 dòng, mở bằng "Nếu…", liệt kê 4 options 1-3 từ,
 
 - ĐÚNG 3-5 hashtag (không stuff).
 - 1 brand: bytecast HOẶC bytecasttech.
-- 2-3 chủ đề cụ thể tập (trietoc, tamlyhoc, suyngam, codon, ketnoi, …).
+- 2-3 chủ đề cụ thể tập (triethoc, tamlyhoc, suyngam, codon, ketnoi, …).
 - 0-1 tiếng Anh phổ biến nếu chủ đề universal (philosophy, mindfulness, lonely).
 - Lowercase, không dấu, không space.
 
