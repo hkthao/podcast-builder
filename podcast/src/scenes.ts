@@ -116,6 +116,30 @@ const SCENE_KEYWORDS: Record<Exclude<SceneType, "PodcastDesk">, RegExp> = {
     /\b(soi gương|tấm gương|phản chiếu|phản gương|nhìn lại mình|nội tâm hóa|looking glass|gương)\b/gi,
   Threshold:
     /\b(ngưỡng cửa|bước qua|ranh giới|chuyển giao|nghi thức|thiêng liêng|thế giới bên kia|liên minh)\b/gi,
+  // ──────── Phase triết học (lô 1) ────────
+  CaveShadows:
+    /\b(ảo ảnh|ảo tưởng|sự thật|cái bóng|thực tại|che giấu|nhìn nhận|hang|Plato|lầm tưởng|tưởng lầm)\b/gi,
+  MementoMori:
+    /\b(cái chết|hữu hạn|sinh tử|mong manh|kiếp người|kết thúc|hư vô của đời|ngắn ngủi|phù du|tử thần)\b/gi,
+  Sisyphus:
+    /\b(phi lý|nỗ lực|vượt qua|đỉnh|gian nan|leo|đẩy|lặp lại|vô vọng|bền bỉ|Sisyphus|kiên trì)\b/gi,
+  Scales:
+    /\b(đạo đức|đúng sai|công bằng|lương tâm|thiện ác|thiện và ác|giá trị|cân nhắc|chuẩn mực đạo đức|phán xét)\b/gi,
+  MachineMind:
+    /\b(trí tuệ nhân tạo|máy móc|thuật toán|robot|dữ liệu|công nghệ|tự động hóa|máy tính|kỹ thuật số|hậu nhân loại)\b/gi,
+  // ──────── Phase triết học (lô 2) ────────
+  Seesaw:
+    /\b(dopamine|khoái cảm|khoái lạc|nghiện|phần thưởng|thỏa mãn|cai nghiện|bập bênh|cân bằng não|kích thích|lướt điện thoại|mạng xã hội|đau và sướng)\b/gi,
+  Compass:
+    /\b(ý nghĩa|mục đích|lẽ sống|phương hướng|lạc hướng|kim chỉ nam|định hướng|tìm đường đời|sứ mệnh)\b/gi,
+  Void:
+    /\b(hư vô|trống rỗng|vô nghĩa|hư không|vực thẳm|hư vô chủ nghĩa|chông chênh|mất phương hướng|tê liệt)\b/gi,
+  StoicPillar:
+    /\b(khắc kỷ|điềm tĩnh|vững vàng|chấp nhận|kiên định|bình thản|stoic|không thể kiểm soát|an nhiên|chịu đựng)\b/gi,
+  Owl:
+    /\b(minh triết|khôn ngoan|trí tuệ|hiền triết|thông thái|thông tuệ|chiêm nghiệm sâu|uyên bác|lẽ phải)\b/gi,
+  ThirdEye:
+    /\b(ý thức|nhận biết|quan sát|tỉnh giác|tự nhận thức|tỉnh thức|chú tâm|soi vào trong|giác quan thứ sáu)\b/gi,
 };
 
 export const pickScene = (text: string): SceneType => {

@@ -23,6 +23,17 @@ import { Metamorphosis } from "./components/scenes/Metamorphosis";
 import { Bridge } from "./components/scenes/Bridge";
 import { Mirror } from "./components/scenes/Mirror";
 import { Threshold } from "./components/scenes/Threshold";
+import { CaveShadows } from "./components/scenes/CaveShadows";
+import { MementoMori } from "./components/scenes/MementoMori";
+import { Sisyphus } from "./components/scenes/Sisyphus";
+import { Scales } from "./components/scenes/Scales";
+import { MachineMind } from "./components/scenes/MachineMind";
+import { Seesaw } from "./components/scenes/Seesaw";
+import { Compass } from "./components/scenes/Compass";
+import { Void } from "./components/scenes/Void";
+import { StoicPillar } from "./components/scenes/StoicPillar";
+import { Owl } from "./components/scenes/Owl";
+import { ThirdEye } from "./components/scenes/ThirdEye";
 import { MOOD_ACCENTS, type MoodKey, type SceneType } from "./theme";
 
 const REGISTRY: Record<SceneType, React.FC<{ mood: MoodKey; accentColor: string; progress: number; audioLevel?: number }>> = {
@@ -48,6 +59,17 @@ const REGISTRY: Record<SceneType, React.FC<{ mood: MoodKey; accentColor: string;
   Bridge,
   Mirror,
   Threshold,
+  CaveShadows,
+  MementoMori,
+  Sisyphus,
+  Scales,
+  MachineMind,
+  Seesaw,
+  Compass,
+  Void,
+  StoicPillar,
+  Owl,
+  ThirdEye,
 };
 
 export type ScenePreviewProps = {

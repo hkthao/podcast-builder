@@ -32,6 +32,17 @@ import { Metamorphosis } from "./scenes/Metamorphosis";
 import { Bridge } from "./scenes/Bridge";
 import { Mirror } from "./scenes/Mirror";
 import { Threshold } from "./scenes/Threshold";
+import { CaveShadows } from "./scenes/CaveShadows";
+import { MementoMori } from "./scenes/MementoMori";
+import { Sisyphus } from "./scenes/Sisyphus";
+import { Scales } from "./scenes/Scales";
+import { MachineMind } from "./scenes/MachineMind";
+import { Seesaw } from "./scenes/Seesaw";
+import { Compass } from "./scenes/Compass";
+import { Void } from "./scenes/Void";
+import { StoicPillar } from "./scenes/StoicPillar";
+import { Owl } from "./scenes/Owl";
+import { ThirdEye } from "./scenes/ThirdEye";
 import type { SceneProps } from "./scenes/base";
 
 const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
@@ -57,6 +68,17 @@ const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
   Bridge,
   Mirror,
   Threshold,
+  CaveShadows,
+  MementoMori,
+  Sisyphus,
+  Scales,
+  MachineMind,
+  Seesaw,
+  Compass,
+  Void,
+  StoicPillar,
+  Owl,
+  ThirdEye,
 };
 
 type Props = {

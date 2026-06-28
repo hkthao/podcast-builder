@@ -144,6 +144,19 @@ export const SCENE_TYPES = [
   "Bridge",
   "Mirror",
   "Threshold",
+  // ──────── Phase triết học (lô 1) ────────
+  "CaveShadows",
+  "MementoMori",
+  "Sisyphus",
+  "Scales",
+  "MachineMind",
+  // ──────── Phase triết học (lô 2) ────────
+  "Seesaw",
+  "Compass",
+  "Void",
+  "StoicPillar",
+  "Owl",
+  "ThirdEye",
 ] as const;
 
 export type SceneType = (typeof SCENE_TYPES)[number];
