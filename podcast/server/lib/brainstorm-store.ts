@@ -10,11 +10,6 @@ import { chat, type LLMProvider } from "../../../shared/studio-core/llm-provider
 import { getDb } from "../../../shared/studio-core/db";
 import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import { safeParseJson } from "../../../shared/lib/safe-json";
-import {
-  GalleryBrainstormIdeaSchema,
-  buildGalleryUserPrompt,
-  type GalleryBrainstormIdea,
-} from "../../../gallery/src/brainstorm-idea";
 const DEFAULT_PROVIDER: LLMProvider =
   (process.env.BRAINSTORM_PROVIDER as LLMProvider) ?? "openai";
 const DEFAULT_MODEL = process.env.BRAINSTORM_MODEL ?? "gpt-4o-mini";
@@ -115,42 +110,33 @@ export const TOPIC_CATEGORIES = [
 ] as const;
 export type TopicCategory = (typeof TOPIC_CATEGORIES)[number];
 
-/** Video style — Phase 2 team split. */
-export type Style = "podcast" | "gallery";
+/** Video style — chỉ còn podcast (gallery đã gỡ; giữ field để khỏi migrate DB). */
+export type Style = "podcast";
 
 /**
- * Phase 3a: brainstorm session schema branched theo style.
- * - Podcast: ideas = BrainstormIdea[] (philosophical, 13 fields)
- * - Gallery: ideas = GalleryBrainstormIdea[] (documentary art, chapters/keyWorks/license)
- *
- * `categories` chỉ áp dụng podcast (TOPIC_CATEGORIES = Meaning/AI/Loss…).
- * Gallery dùng `era` + `region` ngay trong từng idea (không có session-level category).
+ * Brainstorm session schema (podcast): ideas = BrainstormIdea[] (philosophical,
+ * 13 fields). `categories` lấy từ TOPIC_CATEGORIES (Meaning/AI/Loss…).
  */
 export type BrainstormSession = {
   id: string;
   topic: string;
   tone: string;
-  ideas: BrainstormIdea[] | GalleryBrainstormIdea[];
+  ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
-  /** Phase C: 1-3 category cố định từ TOPIC_CATEGORIES. [] cho legacy + cho gallery. */
+  /** Phase C: 1-3 category cố định từ TOPIC_CATEGORIES. [] cho legacy. */
   categories: TopicCategory[];
   /** Provider+model dùng để gen. Optional cho session cũ. */
   provider?: LLMProvider;
   model?: string;
-  /** Phase 2: workspace style. Default "podcast" cho row cũ. */
+  /** Workspace style — luôn "podcast". */
   style: Style;
 };
 
-/** Type guards để narrow union. */
+/** Type guard — giữ cho call-site cũ; luôn true. */
 export const isPodcastSession = (
   s: BrainstormSession,
 ): s is BrainstormSession & { ideas: BrainstormIdea[] } => s.style === "podcast";
-
-export const isGallerySession = (
-  s: BrainstormSession,
-): s is BrainstormSession & { ideas: GalleryBrainstormIdea[] } =>
-  s.style === "gallery";
 
 const slugify = (s: string): string =>
   s
@@ -176,7 +162,6 @@ type DbRow = {
 };
 
 const rowToSession = (r: DbRow): BrainstormSession => {
-  const style: Style = r.style === "gallery" ? "gallery" : "podcast";
   const rawIdeas = JSON.parse(r.ideas_json) as unknown;
   const s: BrainstormSession = {
     id: r.id,
@@ -187,10 +172,8 @@ const rowToSession = (r: DbRow): BrainstormSession => {
     provider: (r.provider ?? undefined) as LLMProvider | undefined,
     model: r.model ?? undefined,
     createdAt: r.created_at,
-    ideas: (Array.isArray(rawIdeas) ? rawIdeas : []) as
-      | BrainstormIdea[]
-      | GalleryBrainstormIdea[],
-    style,
+    ideas: Array.isArray(rawIdeas) ? (rawIdeas as BrainstormIdea[]) : [],
+    style: "podcast",
   };
   return normalizeSession(s);
 };
@@ -256,36 +239,22 @@ const normalizeSession = (s: BrainstormSession): BrainstormSession => {
       (TOPIC_CATEGORIES as readonly string[]).includes(c),
     );
   }
-  // Phase 2: backfill style default "podcast"
-  if (s.style !== "podcast" && s.style !== "gallery") {
-    s.style = "podcast";
-  }
-  // Phase 3a: branch backfill theo style.
-  if (s.style === "podcast") {
-    // Backfill cho idea legacy podcast (trước v2)
-    for (const idea of s.ideas as BrainstormIdea[]) {
-      if (typeof idea.outline !== "string") idea.outline = "";
-      if (typeof idea.observation !== "string") idea.observation = "";
-      if (!idea.scores || typeof idea.scores !== "object") {
-        idea.scores = { ...DEFAULT_SCORES };
-      } else {
-        idea.scores = normalizeScores(idea.scores);
-      }
-      if (!Array.isArray(idea.knowledgeMap)) idea.knowledgeMap = [];
-      if (typeof idea.contrarianView !== "string") idea.contrarianView = "";
-      if (!Array.isArray(idea.thumbnailHooks)) idea.thumbnailHooks = [];
-      if (typeof idea.futureConnection !== "string") idea.futureConnection = "";
-      if (!Array.isArray(idea.historicalExamples)) idea.historicalExamples = [];
-      if (!Array.isArray(idea.storyBank)) idea.storyBank = [];
+  s.style = "podcast";
+  // Backfill cho idea legacy podcast (trước v2)
+  for (const idea of s.ideas as BrainstormIdea[]) {
+    if (typeof idea.outline !== "string") idea.outline = "";
+    if (typeof idea.observation !== "string") idea.observation = "";
+    if (!idea.scores || typeof idea.scores !== "object") {
+      idea.scores = { ...DEFAULT_SCORES };
+    } else {
+      idea.scores = normalizeScores(idea.scores);
     }
-  } else {
-    // Gallery: zod sanitize qua schema.parse với default fields fill in.
-    s.ideas = (s.ideas as unknown[])
-      .map((raw) => {
-        const r = GalleryBrainstormIdeaSchema.safeParse(raw);
-        return r.success ? r.data : null;
-      })
-      .filter((x): x is GalleryBrainstormIdea => x !== null);
+    if (!Array.isArray(idea.knowledgeMap)) idea.knowledgeMap = [];
+    if (typeof idea.contrarianView !== "string") idea.contrarianView = "";
+    if (!Array.isArray(idea.thumbnailHooks)) idea.thumbnailHooks = [];
+    if (typeof idea.futureConnection !== "string") idea.futureConnection = "";
+    if (!Array.isArray(idea.historicalExamples)) idea.historicalExamples = [];
+    if (!Array.isArray(idea.storyBank)) idea.storyBank = [];
   }
   return s;
 };
@@ -325,9 +294,7 @@ export async function deleteIdeaAt(
     err.code = "VALIDATION";
     throw err;
   }
-  s.ideas = (s.ideas as Array<BrainstormIdea | GalleryBrainstormIdea>).filter(
-    (_, i) => i !== ideaIdx,
-  ) as typeof s.ideas;
+  s.ideas = s.ideas.filter((_, i) => i !== ideaIdx);
   if (s.pickedIdx !== null) {
     if (s.pickedIdx === ideaIdx) s.pickedIdx = null;
     else if (s.pickedIdx > ideaIdx) s.pickedIdx -= 1;
@@ -696,21 +663,7 @@ export async function generateAndSave(
     String(now.getSeconds()).padStart(2, "0");
   const id = `${ts}-${slugify(topic) || "untitled"}`;
 
-  if (style === "gallery") {
-    return generateGalleryAndSave({
-      id,
-      topic,
-      tone,
-      count,
-      provider,
-      model,
-      now,
-      existingTopics,
-      systemPromptOverride: input.systemPromptOverride,
-    });
-  }
-
-  // ────── Podcast branch ──────
+  // ────── Podcast brainstorm ──────
   const userPayload: Record<string, unknown> = { topic, tone };
   if (existingTopics.length > 0 && !expandUserIdeas) {
     // Expand mode: KHÔNG diversify vì idea là của user, mọi "trùng" đều
@@ -945,101 +898,6 @@ export async function generateAndSave(
     provider,
     model,
     style: "podcast",
-  };
-  saveSession(session);
-  return session;
-}
-
-/**
- * Gallery branch của generateAndSave — gen ideas tài liệu nghệ thuật + parse
- * qua zod schema (GalleryBrainstormIdeaSchema). Categories empty vì gallery
- * dùng era+region trong từng idea, không có session-level category.
- */
-type GalleryGenContext = {
-  id: string;
-  topic: string;
-  tone: string;
-  count: number;
-  provider: LLMProvider;
-  model: string;
-  now: Date;
-  existingTopics: string[];
-  systemPromptOverride?: string;
-};
-
-async function generateGalleryAndSave(
-  ctx: GalleryGenContext,
-): Promise<BrainstormSession> {
-  const userContent = buildGalleryUserPrompt(
-    ctx.topic,
-    ctx.count,
-    ctx.existingTopics,
-  );
-
-  const basePrompt =
-    ctx.systemPromptOverride ?? getEffectivePrompt("gallery.brainstorm");
-  const content = await chat({
-    provider: ctx.provider,
-    model: ctx.model,
-    systemPrompt: basePrompt.replace("{N}", String(ctx.count)),
-    userContent,
-    temperature: 0.7,
-    jsonMode: true,
-  });
-
-  const parsed = safeParseJson<{ ideas?: unknown }>(content);
-  if (!Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
-    throw new Error("LLM response thiếu mảng 'ideas' (gallery)");
-  }
-
-  const ideas: GalleryBrainstormIdea[] = [];
-  const issueSummaries: string[] = [];
-  for (const raw of parsed.ideas as unknown[]) {
-    const r = GalleryBrainstormIdeaSchema.safeParse(raw);
-    if (r.success) {
-      ideas.push(r.data);
-    } else {
-      // Gom field + lý do để debug — trước đây nuốt im lặng nên không biết sai gì.
-      const title =
-        (raw as { title?: unknown })?.title &&
-        typeof (raw as { title?: unknown }).title === "string"
-          ? ((raw as { title: string }).title.slice(0, 40))
-          : "(no title)";
-      const issues = r.error.issues
-        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-        .join(" | ");
-      issueSummaries.push(`"${title}" → ${issues}`);
-    }
-  }
-  if (ideas.length === 0) {
-    console.error(
-      `[gallery-brainstorm] Tất cả ${
-        (parsed.ideas as unknown[]).length
-      } idea fail zod:\n  ${issueSummaries.join("\n  ")}\n--- Raw (1200 chars) ---\n${content.slice(0, 1200)}`,
-    );
-    throw new Error(
-      `LLM response gallery không có idea nào parse được qua zod schema. Lỗi: ${
-        issueSummaries[0] ?? "unknown"
-      }`,
-    );
-  }
-  if (issueSummaries.length > 0) {
-    console.warn(
-      `[gallery-brainstorm] ${issueSummaries.length} idea bị loại: ${issueSummaries.join("; ")}`,
-    );
-  }
-
-  const session: BrainstormSession = {
-    id: ctx.id,
-    topic: ctx.topic,
-    tone: ctx.tone,
-    ideas,
-    createdAt: ctx.now.toISOString(),
-    pickedIdx: null,
-    categories: [], // Gallery không dùng TOPIC_CATEGORIES
-    provider: ctx.provider,
-    model: ctx.model,
-    style: "gallery",
   };
   saveSession(session);
   return session;

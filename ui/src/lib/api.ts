@@ -28,8 +28,8 @@ export type EpisodeStatus =
   | "rendered"
   | "outdated";
 
-/** Workspace style — Phase 2 team split. */
-export type Style = "podcast" | "gallery";
+/** Workspace style — chỉ còn podcast (gallery đã gỡ). */
+export type Style = "podcast";
 
 export type EpisodeConfig = {
   style: Style;
@@ -275,87 +275,23 @@ export type TopicCategory =
   | "Ethics"
   | "Future";
 
-// Phase 3a: Gallery brainstorm schema — hoàn toàn khác podcast.
-export type GalleryArchetype =
-  | "monograph"
-  | "masterpiece"
-  | "movement"
-  | "theme";
-
-export type LicenseRisk = "safe" | "check" | "blocked";
-
-export type ChapterKind = "narration" | "music";
-
-export type StructureMode = "linear" | "doubled";
-
-export type GalleryChapter = {
-  kind: ChapterKind;
-  title: string;
-  minutes: number;
-  keyWorks: string[];
-  summary: string;
-  musicCue?: string;
-};
-
-export type GalleryKeyWork = {
-  title: string;
-  year: string;
-  location: string;
-  medium: string;
-  whyImportant: string;
-};
-
-export type GalleryAssetSources = {
-  wikimedia: boolean;
-  met: boolean;
-  customMuseums: string[];
-  estimatedImageCount: number;
-  estimatedClipCount: number;
-};
-
-export type GalleryBrainstormIdea = {
-  title: string;
-  archetype: GalleryArchetype;
-  hook: string;
-  era: string;
-  region: string;
-  estimatedMinutes: number;
-  structureMode: StructureMode;
-  chapters: GalleryChapter[];
-  keyWorks: GalleryKeyWork[];
-  licenseRisk: LicenseRisk;
-  licenseNote: string;
-  assetSources: GalleryAssetSources;
-  references: string[];
-  scholarlyDebate: string;
-  audience: string;
-  uniqueAngle: string;
-};
-
 export type BrainstormSession = {
   id: string;
   topic: string;
   tone: string;
-  /** Phase 3a: union — kiểu thực phụ thuộc style (podcast vs gallery). */
-  ideas: BrainstormIdea[] | GalleryBrainstormIdea[];
+  ideas: BrainstormIdea[];
   createdAt: string;
   pickedIdx: number | null;
   categories: TopicCategory[];
   provider?: LLMProvider;
   model?: string;
-  /** Phase 2: workspace style — default "podcast" cho legacy. */
+  /** Workspace style — luôn "podcast". */
   style: Style;
 };
 
-/** Type guards để narrow union. */
 export const isPodcastSession = (
   s: BrainstormSession,
 ): s is BrainstormSession & { ideas: BrainstormIdea[] } => s.style === "podcast";
-
-export const isGallerySession = (
-  s: BrainstormSession,
-): s is BrainstormSession & { ideas: GalleryBrainstormIdea[] } =>
-  s.style === "gallery";
 
 export type EssayBrainstormRef = {
   id: string;
@@ -536,152 +472,6 @@ export type RenderProgressEvent = RenderJob & {
   elapsedMs: number;
 };
 
-// ─── Phase 26 — Research / Gallery assets ───────────────────────────────
-export type AssetKind = "image" | "video" | "audio";
-export type LicenseStatus = "safe" | "check" | "blocked";
-
-export type AssetResult = {
-  id: string;
-  provider: string;
-  kind: AssetKind;
-  title: string;
-  author?: string;
-  year?: string;
-  thumbUrl: string;
-  fullUrl: string;
-  sourcePage: string;
-  license: string;
-  licenseStatus: LicenseStatus;
-  width?: number;
-  height?: number;
-  durationMs?: number;
-};
-
-export type SavedAsset = AssetResult & {
-  tags: string[];
-  savedAt: string;
-  pinned: boolean;
-  usedInEpisodes: string[];
-};
-
-export type ProviderInfo = {
-  id: string;
-  label: string;
-  kinds: AssetKind[];
-  needsKey: boolean;
-  enabled: boolean;
-  note?: string;
-};
-
-// ─── Phase 3d / 4a — Gallery chapter plan ──────────────────────────────
-export type KenBurnsMode =
-  | "zoom-in"
-  | "zoom-out"
-  | "pan-left"
-  | "pan-right"
-  | "pan-up"
-  | "pan-down"
-  | "static";
-
-export type Shot = {
-  sentenceIdx: number;
-  keyword: string;
-  assetIdRef: string | null;
-  kenBurns: KenBurnsMode;
-  durationMs: number | null;
-  note: string;
-  // Documentary direction (Phase 1+) — optional additive fields, mirror
-  // gallery/src/shot.ts. Backend backfills defaults in rowToStoryboard.
-  role?: "establishing" | "subject" | "detail" | "concept" | "transition" | "payoff";
-  assetType?: "stock" | "ai" | "archive" | "motion";
-  aiPrompt?: string;
-  transitionIn?: "cut" | "crossfade" | "fadeblack" | "whippan";
-};
-
-export type WordTimestamp = {
-  word: string;
-  startMs: number;
-  endMs: number;
-};
-
-export type StoryboardChapter = GalleryChapter & {
-  transcript: string;
-  /** Phase 4a: visual beats sidecar — anchored bằng sentenceIdx. */
-  shots: Shot[];
-  status: "pending" | "draft" | "approved";
-  /** Phase 4b: TTS audio filename (trong /tmp/) + duration + word timestamps. */
-  audioFilename: string | null;
-  audioDurationMs: number | null;
-  wordTimestamps: WordTimestamp[];
-  /** Phase 4d: video MP4 filename (trong /tmp/) sau khi render qua Remotion. */
-  videoFilename: string | null;
-  videoDurationMs: number | null;
-  renderedAt: string | null;
-};
-
-export type Storyboard = {
-  id: string;
-  brainstormId: string;
-  ideaIdx: number;
-  ideaSnapshot: GalleryBrainstormIdea;
-  chapters: StoryboardChapter[];
-  provider: LLMProvider | null;
-  model: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** Phase 4e: final video MP4 sau khi concat tất cả chapters. */
-  outputFilename: string | null;
-  outputDurationMs: number | null;
-  exportedAt: string | null;
-  /** Phase 4e.x: BGM file của plan. Auto-mix với voice cho narration, BGM segment cho music. */
-  bgmFilename: string | null;
-};
-
-// ─── Documentary direction resolver types (Phase 4) ─────────────────────
-
-export type ResolvedAssetSource =
-  | "wikimedia"
-  | "pexels"
-  | "drawthings"
-  | "motion";
-
-export type ResolvedAssetClient = {
-  beatIdx: number;
-  localPath: string;
-  remoteUrl?: string;
-  isVideo: boolean;
-  source: ResolvedAssetSource;
-  title?: string;
-  author?: string;
-  year?: string;
-  license: string;
-  sourceUrl?: string;
-  /** Đánh dấu khi resolver fallback từ source ưu tiên — UI badge "fallback". */
-  fallbackFrom?: "archive" | "stock";
-  fallbackReason?: string;
-};
-
-export type PendingBeatClient = {
-  beatIdx: number;
-  hash: string;
-  promptPath: string;
-  prompt: string;
-  expectedFilename: string;
-};
-
-export type FailedBeatClient = {
-  beatIdx: number;
-  reason: string;
-};
-
-export type ResearchSearchResponse = {
-  results: AssetResult[];
-  total: number;
-  perProvider: Record<string, { count: number; error?: string }>;
-  page: number;
-  pageSize: number;
-};
-
 const styleQuery = (style?: Style): string =>
   style ? `?style=${style}` : "";
 
@@ -693,6 +483,12 @@ export const api = {
 
   getEpisode: (name: string) =>
     jsonFetch<EpisodeSummary>(`/api/episodes/${encodeURIComponent(name)}`),
+
+  deleteEpisode: (name: string) =>
+    jsonFetch<{ deleted: boolean }>(
+      `/api/episodes/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    ),
 
   getTranscript: (name: string) =>
     jsonFetch<TranscriptPayload>(
@@ -835,7 +631,6 @@ export const api = {
   getBrainstormPrompts: () =>
     jsonFetch<{
       podcast: { brainstorm: string; expand: string };
-      gallery: string;
     }>("/api/brainstorm/_/prompts"),
 
 
@@ -1164,235 +959,6 @@ export const api = {
       { method: "DELETE" },
     ),
 
-  // ─── Phase 26 — Research / Gallery assets ─────────────────────────────
-  listResearchProviders: () =>
-    jsonFetch<{ providers: ProviderInfo[] }>("/api/research/providers"),
-
-  searchResearch: (input: {
-    q: string;
-    kind: AssetKind;
-    providers?: string[];
-    page?: number;
-    pageSize?: number;
-  }) => {
-    const params = new URLSearchParams();
-    params.set("q", input.q);
-    params.set("kind", input.kind);
-    if (input.providers && input.providers.length > 0)
-      params.set("providers", input.providers.join(","));
-    if (input.page) params.set("page", String(input.page));
-    if (input.pageSize) params.set("pageSize", String(input.pageSize));
-    return jsonFetch<ResearchSearchResponse>(
-      `/api/research/search?${params.toString()}`,
-    );
-  },
-
-  saveResearchAsset: (asset: AssetResult, tags: string[] = []) =>
-    jsonFetch<SavedAsset>("/api/research/save", {
-      method: "POST",
-      body: JSON.stringify({ asset, tags }),
-    }),
-
-  listResearchLibrary: (filters: {
-    q?: string;
-    kind?: AssetKind;
-    provider?: string;
-    licenseStatus?: LicenseStatus;
-    tag?: string;
-    pinned?: boolean;
-  } = {}) => {
-    const params = new URLSearchParams();
-    if (filters.q) params.set("q", filters.q);
-    if (filters.kind) params.set("kind", filters.kind);
-    if (filters.provider) params.set("provider", filters.provider);
-    if (filters.licenseStatus) params.set("licenseStatus", filters.licenseStatus);
-    if (filters.tag) params.set("tag", filters.tag);
-    if (filters.pinned !== undefined)
-      params.set("pinned", filters.pinned ? "true" : "false");
-    const qs = params.toString();
-    return jsonFetch<{ assets: SavedAsset[] }>(
-      `/api/research/library${qs ? `?${qs}` : ""}`,
-    );
-  },
-
-  getResearchAsset: (id: string) =>
-    jsonFetch<SavedAsset>(
-      `/api/research/library/${encodeURIComponent(id)}`,
-    ),
-
-  deleteResearchAsset: (id: string) =>
-    jsonFetch<{ deleted: boolean }>(
-      `/api/research/library/${encodeURIComponent(id)}`,
-      { method: "DELETE" },
-    ),
-
-  toggleResearchAssetPin: (id: string) =>
-    jsonFetch<SavedAsset>(
-      `/api/research/library/${encodeURIComponent(id)}/pin`,
-      { method: "PUT" },
-    ),
-
-  updateResearchAssetTags: (id: string, tags: string[]) =>
-    jsonFetch<SavedAsset>(
-      `/api/research/library/${encodeURIComponent(id)}/tags`,
-      { method: "PUT", body: JSON.stringify({ tags }) },
-    ),
-
-  // ─── Phase 3d — Gallery chapter plans ────────────────────────────────
-  listStoryboards: (brainstormId?: string) => {
-    const qs = brainstormId
-      ? `?brainstormId=${encodeURIComponent(brainstormId)}`
-      : "";
-    return jsonFetch<{ plans: Storyboard[] }>(
-      `/api/gallery/storyboards${qs}`,
-    );
-  },
-
-  getStoryboard: (id: string) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(id)}`,
-    ),
-
-  lookupStoryboard: (brainstormId: string, ideaIdx: number) =>
-    jsonFetch<{ plan: Storyboard | null }>(
-      `/api/gallery/storyboards/_/lookup?brainstormId=${encodeURIComponent(
-        brainstormId,
-      )}&ideaIdx=${ideaIdx}`,
-    ),
-
-  createStoryboard: (brainstormId: string, ideaIdx: number) =>
-    jsonFetch<Storyboard>("/api/gallery/storyboards", {
-      method: "POST",
-      body: JSON.stringify({ brainstormId, ideaIdx }),
-    }),
-
-  updateStoryboardChapter: (
-    planId: string,
-    chapterIdx: number,
-    patch: {
-      transcript?: string;
-      status?: StoryboardChapter["status"];
-      shots?: Shot[];
-    },
-  ) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}`,
-      { method: "PUT", body: JSON.stringify(patch) },
-    ),
-
-  saveStoryboardChapters: (
-    planId: string,
-    chapters: StoryboardChapter[],
-  ) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters`,
-      { method: "PUT", body: JSON.stringify({ chapters }) },
-    ),
-
-  genStoryboardChapter: (
-    planId: string,
-    chapterIdx: number,
-    input: { provider: LLMProvider; model: string },
-  ) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/generate`,
-      { method: "POST", body: JSON.stringify(input) },
-    ),
-
-  genStoryboardChapterAudio: (
-    planId: string,
-    chapterIdx: number,
-    input: {
-      ttsProvider?: "openai" | "gemini";
-      voice?: string;
-      ttsModel?: string;
-      force?: boolean;
-      // Gemini Cloud TTS extras
-      speakingRate?: number;
-      pitch?: number;
-      languageCode?: string;
-      styleInstruction?: string;
-    } = {},
-  ) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/audio`,
-      { method: "POST", body: JSON.stringify(input) },
-    ),
-
-  /** Phase 4e.x: upload BGM file (mp3/m4a/wav/aac). */
-  uploadGalleryPlanBgm: async (
-    planId: string,
-    file: File,
-  ): Promise<Storyboard> => {
-    const form = new FormData();
-    form.append("bgm", file);
-    const res = await fetch(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/bgm`,
-      { method: "POST", body: form },
-    );
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new ApiError(res.status, body.error ?? res.statusText);
-    }
-    return (await res.json()) as Storyboard;
-  },
-
-  deleteStoryboardBgm: (planId: string) =>
-    jsonFetch<Storyboard>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/bgm`,
-      { method: "DELETE" },
-    ),
-
-  /** Phase 4e: concat tất cả chapter MP4 + inject FFMETADATA chapter markers. */
-  exportStoryboard: (planId: string) =>
-    jsonFetch<{
-      plan: Storyboard;
-      outputPath: string;
-      outputDurationMs: number;
-      chaptersTxtPath: string;
-    }>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/export`,
-      { method: "POST" },
-    ),
-
-  /** Phase 4d: render chapter qua Remotion. Sync, ~60-90s. */
-  renderStoryboardChapter: (planId: string, chapterIdx: number) =>
-    jsonFetch<{
-      plan: Storyboard;
-      outputPath: string;
-      durationMs: number;
-    }>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/render`,
-      { method: "POST" },
-    ),
-
-  /**
-   * Documentary Phase 4: resolve assets multi-backend cho 1 chapter.
-   * Server tự wire kết quả vào gallery_assets DB + set beat.assetIdRef
-   * cho archive/stock/AI. Sync, có thể chậm 10-30s (Pexels rate limit).
-   * Idempotent: re-call OK (cache hash-based).
-   */
-  resolveStoryboardChapter: (
-    planId: string,
-    chapterIdx: number,
-    opts: { watchDir?: string } = {},
-  ) =>
-    jsonFetch<{
-      resolved: ResolvedAssetClient[];
-      pending: PendingBeatClient[];
-      failed: FailedBeatClient[];
-      attached: number;
-      plan: Storyboard;
-    }>(
-      `/api/gallery/storyboards/${encodeURIComponent(planId)}/chapters/${chapterIdx}/resolve`,
-      { method: "POST", body: JSON.stringify(opts) },
-    ),
-
-  deleteStoryboard: (id: string) =>
-    jsonFetch<{ deleted: boolean }>(
-      `/api/gallery/storyboards/${encodeURIComponent(id)}`,
-      { method: "DELETE" },
-    ),
 
   // ─── Podcast script gen + audio gen (dialogue 2 voice) ────────────────
   listVoices: () =>
@@ -1616,10 +1182,7 @@ export type ApiKeyProvider =
   | "openai"
   | "gemini"
   | "anthropic"
-  | "google-vertex-ai"
-  | "pexels"
-  | "pixabay"
-  | "coverr";
+  | "google-vertex-ai";
 
 export type ApiKeyStatus = {
   provider: ApiKeyProvider;

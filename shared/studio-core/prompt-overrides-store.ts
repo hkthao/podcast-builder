@@ -17,8 +17,6 @@ import { PODCAST_SYSTEM_PROMPT, PODCAST_EXPAND_SYSTEM_PROMPT } from "../../podca
 import { ESSAY_SYSTEM_PROMPT, NLM_PROMPT_SYSTEM } from "../../podcast/server/lib/essay-store";
 import { SCRIPT_SYSTEM_PROMPT } from "../../podcast/server/lib/script-store";
 import { COVER_PROMPT_SYSTEM_PROMPT } from "../../podcast/server/lib/cover-prompt-store";
-import { GALLERY_SYSTEM_PROMPT } from "../../gallery/src/brainstorm-idea";
-import { TRANSCRIPT_SYSTEM_PROMPT } from "./gallery-storyboard-store";
 
 export type PromptKey =
   | "podcast.brainstorm"
@@ -26,9 +24,7 @@ export type PromptKey =
   | "podcast.essay"
   | "podcast.nlm-prompt"
   | "podcast.script"
-  | "podcast.cover-prompt"
-  | "gallery.brainstorm"
-  | "gallery.transcript";
+  | "podcast.cover-prompt";
 
 export type PromptMeta = {
   key: PromptKey;
@@ -95,25 +91,9 @@ const REGISTRY: Array<{
     key: "podcast.cover-prompt",
     label: "Prompt tạo ảnh cover thumbnail",
     description:
-      "Meta prompt — chỉ định LLM viết prompt cho AI image generator (Midjourney/Flux/DALL-E) tạo thumbnail 9:16 style 3D clay render pastel ByteCast. Fill title + 5 tickets + 1 notebook phrase theo nội dung tập.",
+      "Meta prompt — chỉ định LLM viết prompt (tiếng Anh, cấu trúc section) cho AI image generator (Midjourney/Flux/DALL-E/Imagen) tạo thumbnail 9:16 style premium clay 3D render pastel ByteCast. Fill title + storytelling object + 6 notification + notebook phrase theo nội dung tập.",
     usedBy: "podcast/server/routes/episodes.ts → cover-prompt endpoint",
     getDefault: () => COVER_PROMPT_SYSTEM_PROMPT,
-  },
-  {
-    key: "gallery.brainstorm",
-    label: "Brainstorm gallery (documentary art)",
-    description:
-      "System prompt khi LLM brainstorm ý tưởng video tài liệu nghệ thuật. Sinh chapters + key works + license risk + asset sources. Placeholder {N} thay = số ý.",
-    usedBy: "podcast/server/lib/brainstorm-store.ts → generateGalleryAndSave",
-    getDefault: () => GALLERY_SYSTEM_PROMPT,
-  },
-  {
-    key: "gallery.transcript",
-    label: "Gallery transcript (voiceover + visual beats)",
-    description:
-      "System prompt cho LLM viết voiceover tiếng Việt cho 1 chương + visual beats sidecar. Khan Academy Smarthistory style.",
-    usedBy: "shared/studio-core/gallery-storyboard-store.ts → generateChapterTranscript",
-    getDefault: () => TRANSCRIPT_SYSTEM_PROMPT,
   },
 ];
 

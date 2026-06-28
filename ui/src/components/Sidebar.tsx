@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Mic2,
   Home,
   Library,
-  Lightbulb,
   FileText,
   Network,
   Image as ImageIcon,
   Film,
-  Compass,
-  Star,
   Mic,
-  Frame,
+  Lightbulb,
+  Star,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -31,41 +29,18 @@ import {
   subscribeTheme,
   type Theme,
 } from "@/lib/theme";
-import { useWorkspace, type Workspace } from "@/lib/workspace";
 
 export function Sidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { workspace, setWorkspace } = useWorkspace();
   const { data } = useQuery({
-    queryKey: ["episodes", workspace],
-    queryFn: () => api.listEpisodes(workspace),
-    enabled: workspace === "podcast",
-  });
-  // Gallery: list plans cho "Pinned + Recent" bottom panel
-  const { data: galleryPlansData } = useQuery({
-    queryKey: ["gallery-plans"],
-    queryFn: () => api.listStoryboards(),
-    enabled: workspace === "gallery",
+    queryKey: ["episodes", "podcast"],
+    queryFn: () => api.listEpisodes("podcast"),
   });
   const [pinned, setPinned] = usePersistedState<string[]>(
     "sidebar.pinned",
     [],
   );
 
-  // Items chỉ thuộc 1 workspace — switch workspace mà đang ở page only-of-other
-  // → navigate về "/" (route "/" tự branch theo workspace mới).
-  const PODCAST_ONLY_PATHS = ["/scenes", "/essay", "/knowledge", "/visual"];
-  const GALLERY_ONLY_PATHS = ["/research", "/gallery/", "/brainstorm"];
-  const switchWorkspace = (next: Workspace) => {
-    if (next === workspace) return;
-    setWorkspace(next);
-    const otherPaths =
-      next === "podcast" ? GALLERY_ONLY_PATHS : PODCAST_ONLY_PATHS;
-    if (otherPaths.some((p) => location.pathname.startsWith(p))) {
-      navigate("/");
-    }
-  };
   const togglePin = (name: string) => {
     setPinned((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
@@ -93,122 +68,67 @@ export function Sidebar() {
         </NavLink>
       </div>
 
-      {/* Workspace switcher — top-level team toggle */}
-      <div className="px-3 pt-3 pb-2 border-b">
-        <div className="flex items-center gap-1 p-1 rounded-md border bg-secondary/30">
-          <WorkspaceButton
-            value="podcast"
-            current={workspace}
-            onClick={() => switchWorkspace("podcast")}
-            icon={<Mic className="size-3.5" />}
-            label="Podcast"
+      <nav className="p-3 space-y-3">
+        <div className="space-y-0.5">
+          <SectionLabel>Chung</SectionLabel>
+          <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
+          <NavItem
+            to="/brainstorm"
+            icon={<Lightbulb className="size-4" />}
+            label="Brainstorm"
           />
-          <WorkspaceButton
-            value="gallery"
-            current={workspace}
-            onClick={() => switchWorkspace("gallery")}
-            icon={<Frame className="size-3.5" />}
-            label="Gallery"
+          <NavItem
+            to="/essay"
+            icon={<FileText className="size-4" />}
+            label="Bài luận"
           />
         </div>
-      </div>
-
-      <nav className="p-3 space-y-3">
-        {workspace === "podcast" ? (
-          <>
-            {/* Podcast: Chung → Thư viện → Production */}
-            <div className="space-y-0.5">
-              <SectionLabel>Chung</SectionLabel>
-              <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
-              <NavItem
-                to="/essay"
-                icon={<FileText className="size-4" />}
-                label="Bài luận"
-              />
-            </div>
-            <div className="space-y-0.5">
-              <SectionLabel>Thư viện</SectionLabel>
-              <NavItem
-                to="/references"
-                icon={<Library className="size-4" />}
-                label="Tài liệu"
-              />
-              <NavItem
-                to="/knowledge"
-                icon={<Network className="size-4" />}
-                label="Tri thức"
-              />
-              <NavItem
-                to="/visual"
-                icon={<ImageIcon className="size-4" />}
-                label="Hình ảnh ý tưởng"
-              />
-            </div>
-            <div className="space-y-0.5">
-              <SectionLabel>
-                <span className="inline-flex items-center gap-1.5">
-                  <Mic className="size-3" />
-                  Production
-                </span>
-              </SectionLabel>
-              <NavItem
-                to="/scenes"
-                icon={<Film className="size-4" />}
-                label="Scene templates"
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Gallery: workflow 8 bước — gọn theo flow tạo content → tài nguyên */}
-            <div className="space-y-0.5">
-              <SectionLabel>
-                <span className="inline-flex items-center gap-1.5">
-                  <Frame className="size-3" />
-                  Sản xuất
-                </span>
-              </SectionLabel>
-              <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
-              <NavItem
-                to="/brainstorm"
-                icon={<Lightbulb className="size-4" />}
-                label="Brainstorm"
-              />
-            </div>
-            <div className="space-y-0.5">
-              <SectionLabel>Tài nguyên</SectionLabel>
-              <NavItem
-                to="/research"
-                icon={<Compass className="size-4" />}
-                label="Asset (Wikimedia/Met)"
-              />
-              <NavItem
-                to="/references"
-                icon={<Library className="size-4" />}
-                label="Tài liệu tham khảo"
-              />
-            </div>
-          </>
-        )}
+        <div className="space-y-0.5">
+          <SectionLabel>Thư viện</SectionLabel>
+          <NavItem
+            to="/references"
+            icon={<Library className="size-4" />}
+            label="Tài liệu"
+          />
+          <NavItem
+            to="/knowledge"
+            icon={<Network className="size-4" />}
+            label="Tri thức"
+          />
+          <NavItem
+            to="/visual"
+            icon={<ImageIcon className="size-4" />}
+            label="Hình ảnh ý tưởng"
+          />
+        </div>
+        <div className="space-y-0.5">
+          <SectionLabel>
+            <span className="inline-flex items-center gap-1.5">
+              <Mic className="size-3" />
+              Production
+            </span>
+          </SectionLabel>
+          <NavItem
+            to="/scenes"
+            icon={<Film className="size-4" />}
+            label="Scene templates"
+          />
+        </div>
       </nav>
 
-      {workspace === "podcast" ? (
-        <>
-          <div className="px-3 pt-3 pb-1 border-t mt-1">
-            <SectionLabel>
-              {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
-            </SectionLabel>
+      <div className="px-3 pt-3 pb-1 border-t mt-1">
+        <SectionLabel>
+          {pinnedEps.length > 0 ? "Pinned + Recent" : "Tập gần đây"}
+        </SectionLabel>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
+        {recent.length === 0 && (
+          <div className="px-3 py-2 text-sm text-muted-foreground">
+            Chưa có tập
           </div>
-
-
-
-          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-            {recent.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                Chưa có tập
-              </div>
-            )}
-            {recent.map((ep) => {
+        )}
+        {recent.map((ep) => {
           const path = `/episodes/${encodeURIComponent(ep.name)}`;
           const active = location.pathname === path;
           const pinned = isPinned(ep.name);
@@ -254,51 +174,7 @@ export function Sidebar() {
             </div>
           );
         })}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="px-3 pt-3 pb-1 border-t mt-1">
-            <SectionLabel>Tập gần đây</SectionLabel>
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-            {(galleryPlansData?.plans ?? []).length === 0 ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                Chưa có tập
-              </div>
-            ) : (
-              [...(galleryPlansData?.plans ?? [])]
-                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-                .slice(0, 8)
-                .map((p) => {
-                  const path = `/gallery/storyboards/${encodeURIComponent(p.id)}`;
-                  const active = location.pathname === path;
-                  const exported = p.outputFilename !== null;
-                  return (
-                    <NavLink
-                      key={p.id}
-                      to={path}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors hover:bg-secondary",
-                        active && "bg-secondary text-foreground font-medium",
-                      )}
-                      title={p.ideaSnapshot.title}
-                    >
-                      {exported ? (
-                        <CheckCircle2 className="size-3.5 text-accent shrink-0" />
-                      ) : (
-                        <Clock className="size-3.5 text-muted-foreground shrink-0" />
-                      )}
-                      <span className="truncate">
-                        {p.ideaSnapshot.title}
-                      </span>
-                    </NavLink>
-                  );
-                })
-            )}
-          </div>
-        </>
-      )}
+      </div>
 
       <div className="border-t p-3 space-y-2">
         <NavLink
@@ -339,38 +215,6 @@ export function Sidebar() {
         <ThemeSwitcher />
       </div>
     </aside>
-  );
-}
-
-function WorkspaceButton({
-  value,
-  current,
-  onClick,
-  icon,
-  label,
-}: {
-  value: Workspace;
-  current: Workspace;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  const active = value === current;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex-1 inline-flex items-center justify-center gap-1.5 rounded h-7 text-xs font-medium transition-colors",
-        active
-          ? "bg-card text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-      aria-pressed={active}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 
