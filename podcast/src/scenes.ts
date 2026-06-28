@@ -140,6 +140,25 @@ const SCENE_KEYWORDS: Record<Exclude<SceneType, "PodcastDesk">, RegExp> = {
     /\b(minh triết|khôn ngoan|trí tuệ|hiền triết|thông thái|thông tuệ|chiêm nghiệm sâu|uyên bác|lẽ phải)\b/gi,
   ThirdEye:
     /\b(ý thức|nhận biết|quan sát|tỉnh giác|tự nhận thức|tỉnh thức|chú tâm|soi vào trong|giác quan thứ sáu)\b/gi,
+  // ──────── Phase triết học (lô 3) ────────
+  TimeRiver:
+    /\b(thời gian|trôi qua|khoảnh khắc|dòng chảy|quá khứ|tương lai|đồng hồ|năm tháng|thời khắc|tích tắc)\b/gi,
+  Wave:
+    /\b(con sóng|sóng biển|tan biến|phù du|biển cả|cuốn trôi|gợn sóng|đại dương|trôi đi)\b/gi,
+  Cosmos:
+    /\b(vũ trụ|bao la|nhỏ bé|vì sao|không gian|vô tận|choáng ngợp|thiên hà|ngân hà|bầu trời sao)\b/gi,
+  Labyrinth:
+    /\b(lạc lối|rối ren|phức tạp|mê cung|hoang mang|bế tắc|loanh quanh|rối bời|mắc kẹt)\b/gi,
+  Burden:
+    /\b(gánh nặng|trách nhiệm|áp lực|mang vác|nặng nề|đè nén|oằn vai|gồng gánh|sức ép)\b/gi,
+  Fate:
+    /\b(định mệnh|số phận|nhân quả|tất yếu|an bài|quy luật|dây chuyền|hệ quả|kết cục|sắp đặt)\b/gi,
+  Enlightenment:
+    /\b(khai sáng|giác ngộ|ánh sáng|soi rọi|bừng sáng|lý trí|sáng tỏ|vỡ lẽ|thông suốt)\b/gi,
+  Paradox:
+    /\b(nghịch lý|mâu thuẫn|trái ngược|oái oăm|đối nghịch|tréo ngoe|vừa.{0,6}vừa|ngược đời)\b/gi,
+  BrokenChains:
+    /\b(tự do|giải phóng|xiềng xích|ràng buộc|bứt phá|tự chủ|thoát khỏi|gông cùm|cởi trói|giải thoát)\b/gi,
 };
 
 export const pickScene = (text: string): SceneType => {

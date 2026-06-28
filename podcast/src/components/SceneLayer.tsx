@@ -43,6 +43,15 @@ import { Void } from "./scenes/Void";
 import { StoicPillar } from "./scenes/StoicPillar";
 import { Owl } from "./scenes/Owl";
 import { ThirdEye } from "./scenes/ThirdEye";
+import { TimeRiver } from "./scenes/TimeRiver";
+import { Wave } from "./scenes/Wave";
+import { Cosmos } from "./scenes/Cosmos";
+import { Labyrinth } from "./scenes/Labyrinth";
+import { Burden } from "./scenes/Burden";
+import { Fate } from "./scenes/Fate";
+import { Enlightenment } from "./scenes/Enlightenment";
+import { Paradox } from "./scenes/Paradox";
+import { BrokenChains } from "./scenes/BrokenChains";
 import type { SceneProps } from "./scenes/base";
 
 const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
@@ -79,6 +88,15 @@ const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
   StoicPillar,
   Owl,
   ThirdEye,
+  TimeRiver,
+  Wave,
+  Cosmos,
+  Labyrinth,
+  Burden,
+  Fate,
+  Enlightenment,
+  Paradox,
+  BrokenChains,
 };
 
 type Props = {

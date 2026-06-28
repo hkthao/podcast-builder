@@ -157,6 +157,16 @@ export const SCENE_TYPES = [
   "StoicPillar",
   "Owl",
   "ThirdEye",
+  // ──────── Phase triết học (lô 3) ────────
+  "TimeRiver",
+  "Wave",
+  "Cosmos",
+  "Labyrinth",
+  "Burden",
+  "Fate",
+  "Enlightenment",
+  "Paradox",
+  "BrokenChains",
 ] as const;
 
 export type SceneType = (typeof SCENE_TYPES)[number];
