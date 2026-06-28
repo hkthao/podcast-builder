@@ -64,13 +64,6 @@ const PROVIDER_META: Record<
     description:
       "Gemini TTS qua Vertex AI Express Mode — cùng voices Kore/Aoede/Charon như AI Studio nhưng billing tại Cloud project. Free tier hào phóng (~15 RPM, 1500 RPD, 1M TPM). Lấy key tại Cloud Console → Agent Platform Studio → API keys. Hỗ trợ đầy đủ style instruction + TTS model.",
   },
-  pexels: {
-    label: "Pexels",
-    docsUrl: "https://www.pexels.com/api/",
-    placeholder: "563492ad6f9170000100000…",
-    description:
-      "Stock photo + video API — dùng cho gallery documentary asset resolver (assetType='stock' cho establishing/transition shots). Free tier 200 req/h, 20k/tháng. Đăng ký tại pexels.com → API → Get Started.",
-  },
   anthropic: {
     label: "Anthropic Claude",
     docsUrl: "https://console.anthropic.com/settings/keys",

@@ -113,7 +113,7 @@ export function ShortcutsHelp() {
                 title="Navigation"
                 items={[
                   ["g e", "Episodes"],
-                  ["g b", "Brainstorm (gallery)"],
+                  ["g b", "Brainstorm"],
                   ["g s", "Essay"],
                   ["g r", "References"],
                   ["g k", "Knowledge"],

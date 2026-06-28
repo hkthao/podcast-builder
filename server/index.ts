@@ -9,8 +9,6 @@ import { episodesRoutes } from "../podcast/server/routes/episodes";
 import { essayRoutes } from "../podcast/server/routes/essay";
 import { llmRoutes } from "../shared/studio-core/routes/llm";
 import { ttsRoutes } from "../shared/studio-core/routes/tts";
-import { researchRoutes } from "../shared/studio-core/routes/research";
-import { galleryStoryboardRoutes } from "../shared/studio-core/routes/gallery-storyboards";
 import { settingsRoutes } from "../shared/studio-core/routes/settings";
 import { promptsRoutes } from "../shared/studio-core/routes/prompts";
 import { referencesRoutes } from "../podcast/server/routes/references";
@@ -77,8 +75,6 @@ app.route("/api/brainstorm", brainstormRoutes);
 app.route("/api/essay", essayRoutes);
 app.route("/api/llm", llmRoutes);
 app.route("/api/tts", ttsRoutes);
-app.route("/api/research", researchRoutes);
-app.route("/api/gallery/storyboards", galleryStoryboardRoutes);
 app.route("/api/settings", settingsRoutes);
 app.route("/api/prompts", promptsRoutes);
 app.route("/api/knowledge", knowledgeRoutes);
@@ -154,30 +150,6 @@ app.get("/output/:filename", serveStatic(OUTPUT_DIR));
 app.get("/input/:filename", serveStatic(INPUT_DIR));
 app.get("/tmp/:filename", serveStatic(TMP_DIR));
 app.get("/scene-catalog/:filename", serveStatic(SCENE_CATALOG_DIR));
-
-// Gallery documentary direction — assets resolver tải về
-// `tmp/gallery-assets/<planId>/<hash>.<ext>`. Render đọc qua fullUrl =
-// "/tmp/gallery-assets/<planId>/<filename>" nên cần route riêng (single-
-// segment /tmp/:filename không match được path 3 cấp).
-app.get("/tmp/gallery-assets/:planId/:filename", async (c) => {
-  const planId = c.req.param("planId");
-  const filename = c.req.param("filename");
-  if (
-    !planId ||
-    !filename ||
-    planId.includes("..") ||
-    planId.includes("/") ||
-    filename.includes("..") ||
-    filename.includes("/") ||
-    filename.startsWith(".")
-  ) {
-    return c.json({ error: "invalid path" }, 400);
-  }
-  const dir = path.join(TMP_DIR, "gallery-assets", planId);
-  const handler = serveStatic(dir);
-  // Trick: serveStatic đọc c.req.param("filename") — đúng key ta đã set.
-  return handler(c);
-});
 
 startFsWatcher();
 

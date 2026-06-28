@@ -9,14 +9,11 @@ import {
   PODCAST_SYSTEM_PROMPT,
   updatePickedIdx,
 } from "../lib/brainstorm-store";
-import { GALLERY_SYSTEM_PROMPT } from "../../../gallery/src/brainstorm-idea";
 
 export const brainstormRoutes = new Hono();
 
 brainstormRoutes.get("/", async (c) => {
-  const styleParam = c.req.query("style");
-  const style =
-    styleParam === "gallery" || styleParam === "podcast" ? styleParam : undefined;
+  const style = c.req.query("style") === "podcast" ? "podcast" : undefined;
   const sessions = await listSessions(style ? { style } : {});
   return c.json({ sessions });
 });
@@ -31,7 +28,6 @@ brainstormRoutes.get("/_/prompts", (c) =>
       brainstorm: PODCAST_SYSTEM_PROMPT,
       expand: PODCAST_EXPAND_SYSTEM_PROMPT,
     },
-    gallery: GALLERY_SYSTEM_PROMPT,
   }),
 );
 
@@ -65,8 +61,8 @@ brainstormRoutes.post("/", async (c) => {
   if (body.provider && body.provider !== "openai" && body.provider !== "ollama") {
     return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
   }
-  if (body.style && body.style !== "podcast" && body.style !== "gallery") {
-    return c.json({ error: "style phải là 'podcast' hoặc 'gallery'" }, 400);
+  if (body.style && body.style !== "podcast") {
+    return c.json({ error: "style phải là 'podcast'" }, 400);
   }
   try {
     const session = await generateAndSave({
@@ -75,7 +71,7 @@ brainstormRoutes.post("/", async (c) => {
       count: typeof body.count === "number" ? body.count : undefined,
       provider: body.provider as "openai" | "ollama" | undefined,
       model: typeof body.model === "string" ? body.model : undefined,
-      style: body.style as "podcast" | "gallery" | undefined,
+      style: body.style as "podcast" | undefined,
       expandUserIdeas: body.expandUserIdeas === true,
       systemPromptOverride:
         typeof body.systemPromptOverride === "string" &&

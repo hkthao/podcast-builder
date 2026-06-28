@@ -1,33 +1,38 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   FileAudio2,
   Plus,
   Loader2,
+  Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { api, type EpisodeStatus, type EpisodeSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useWorkspace } from "@/lib/workspace";
+import { Input } from "@/components/ui/input";
+
+const PAGE_SIZE = 12;
 
 export function EpisodeList() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { workspace } = useWorkspace();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["episodes", workspace],
-    queryFn: () => api.listEpisodes(workspace),
+    queryKey: ["episodes", "podcast"],
+    queryFn: () => api.listEpisodes("podcast"),
   });
 
   const createEpisode = useMutation({
     mutationFn: (title: string) =>
-      api.createEpisode({ title, style: workspace }),
+      api.createEpisode({ title, style: "podcast" }),
     onSuccess: (ep) => {
       qc.invalidateQueries({ queryKey: ["episodes"] });
       navigate(`/episodes/${encodeURIComponent(ep.name)}`);
@@ -36,14 +41,61 @@ export function EpisodeList() {
 
   const [createOpen, setCreateOpen] = useState(false);
 
+  // --- Search / lọc ngày / phân trang (client-side) ---
+  const [q, setQ] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+
+  const all = data?.episodes ?? [];
+  const total = all.length;
+  const hasFilter = q.trim() !== "" || dateFrom !== "" || dateTo !== "";
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toMs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
+    return all.filter((ep) => {
+      if (needle) {
+        const hay = `${ep.config.title ?? ""} ${ep.config.hook ?? ""} ${ep.name}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      if (fromMs !== null && ep.mtimeMs < fromMs) return false;
+      if (toMs !== null && ep.mtimeMs > toMs) return false;
+      return true;
+    });
+  }, [all, q, dateFrom, dateTo]);
+
+  // Reset về trang 1 khi bộ lọc đổi
+  useEffect(() => {
+    setPage(1);
+  }, [q, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  const clearFilters = () => {
+    setQ("");
+    setDateFrom("");
+    setDateTo("");
+  };
+
   return (
     <div className="min-h-screen relative">
       <div className="container max-w-5xl py-10">
-        <header className="mb-8 flex items-center justify-between gap-6">
+        <header className="mb-6 flex items-center justify-between gap-6">
           <div>
             <h1 className="text-3xl font-serif tracking-tight">Danh sách tập</h1>
             <p className="mt-1 text-muted-foreground text-sm">
-              {data ? `${data.episodes.length} tập` : "Đang tải…"}
+              {data
+                ? hasFilter
+                  ? `Hiển thị ${filtered.length} / ${total} tập`
+                  : `${total} tập`
+                : "Đang tải…"}
               {" · "}
               Tạo tập mới rồi upload audio (hoặc gen TTS) trong trang chi tiết
             </p>
@@ -58,6 +110,62 @@ export function EpisodeList() {
             </Button>
           </div>
         </header>
+
+        {/* Thanh tìm kiếm + lọc ngày */}
+        {data && total > 0 && (
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Tìm theo tên tập / hook…"
+                className="pl-9 pr-9"
+              />
+              {q && (
+                <button
+                  onClick={() => setQ("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-secondary"
+                  title="Xoá tìm kiếm"
+                >
+                  <X className="size-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Từ ngày
+                </label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Đến ngày
+                </label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              {hasFilter && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <X className="size-4" />
+                  Xoá lọc
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -80,7 +188,7 @@ export function EpisodeList() {
           </Card>
         )}
 
-        {data && data.episodes.length === 0 && (
+        {data && total === 0 && (
           <Card className="border-dashed p-12 text-center">
             <FileAudio2 className="mx-auto mb-4 size-12 text-muted-foreground" />
             <h2 className="mb-2 text-xl font-serif">Chưa có tập nào</h2>
@@ -91,12 +199,54 @@ export function EpisodeList() {
           </Card>
         )}
 
-        {data && data.episodes.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {data.episodes.map((ep) => (
-              <EpisodeCard key={ep.name} ep={ep} />
-            ))}
-          </div>
+        {data && total > 0 && filtered.length === 0 && (
+          <Card className="border-dashed p-12 text-center">
+            <Search className="mx-auto mb-4 size-12 text-muted-foreground" />
+            <h2 className="mb-2 text-xl font-serif">Không có tập nào khớp bộ lọc</h2>
+            <p className="text-muted-foreground mb-4">
+              Thử đổi từ khoá hoặc khoảng ngày.
+            </p>
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              <X className="size-4" />
+              Xoá lọc
+            </Button>
+          </Card>
+        )}
+
+        {data && pageItems.length > 0 && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {pageItems.map((ep) => (
+                <EpisodeCard key={ep.name} ep={ep} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                >
+                  <ChevronLeft className="size-4" />
+                  Trước
+                </Button>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  Trang {safePage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                >
+                  Sau
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -203,15 +353,38 @@ function CreateEpisodeDialog({
 }
 
 function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
+  const qc = useQueryClient();
+  const title = ep.config.title || ep.name;
+
+  const deleteEpisode = useMutation({
+    mutationFn: () => api.deleteEpisode(ep.name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (deleteEpisode.isPending) return;
+    if (
+      confirm(
+        `Xoá tập "${title}"?\n\nXoá toàn bộ audio, cover, script, transcript và video đã render. Không hoàn tác được.`,
+      )
+    ) {
+      deleteEpisode.mutate();
+    }
+  };
+
   return (
     <Link
       to={`/episodes/${encodeURIComponent(ep.name)}`}
-      className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+      className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className="flex flex-col p-5 h-full transition-colors hover:bg-secondary/40 hover:border-primary/40 cursor-pointer">
+      <Card className="relative flex flex-col p-5 h-full transition-colors hover:bg-secondary/40 hover:border-primary/40 cursor-pointer">
         <div className="mb-3 flex items-start justify-between gap-2">
           <h3 className="font-serif text-lg leading-tight line-clamp-2">
-            {ep.config.title || ep.name}
+            {title}
           </h3>
           <StatusBadge status={ep.status} />
         </div>
@@ -230,6 +403,18 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
               <span>Rendered {timeAgo(ep.renderedAt)}</span>
             </>
           )}
+          <button
+            onClick={handleDelete}
+            disabled={deleteEpisode.isPending}
+            title="Xoá tập"
+            className="ml-auto p-1.5 rounded text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+          >
+            {deleteEpisode.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+          </button>
         </div>
       </Card>
     </Link>

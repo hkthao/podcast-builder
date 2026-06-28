@@ -116,6 +116,49 @@ const SCENE_KEYWORDS: Record<Exclude<SceneType, "PodcastDesk">, RegExp> = {
     /\b(soi gương|tấm gương|phản chiếu|phản gương|nhìn lại mình|nội tâm hóa|looking glass|gương)\b/gi,
   Threshold:
     /\b(ngưỡng cửa|bước qua|ranh giới|chuyển giao|nghi thức|thiêng liêng|thế giới bên kia|liên minh)\b/gi,
+  // ──────── Phase triết học (lô 1) ────────
+  CaveShadows:
+    /\b(ảo ảnh|ảo tưởng|sự thật|cái bóng|thực tại|che giấu|nhìn nhận|hang|Plato|lầm tưởng|tưởng lầm)\b/gi,
+  MementoMori:
+    /\b(cái chết|hữu hạn|sinh tử|mong manh|kiếp người|kết thúc|hư vô của đời|ngắn ngủi|phù du|tử thần)\b/gi,
+  Sisyphus:
+    /\b(phi lý|nỗ lực|vượt qua|đỉnh|gian nan|leo|đẩy|lặp lại|vô vọng|bền bỉ|Sisyphus|kiên trì)\b/gi,
+  Scales:
+    /\b(đạo đức|đúng sai|công bằng|lương tâm|thiện ác|thiện và ác|giá trị|cân nhắc|chuẩn mực đạo đức|phán xét)\b/gi,
+  MachineMind:
+    /\b(trí tuệ nhân tạo|máy móc|thuật toán|robot|dữ liệu|công nghệ|tự động hóa|máy tính|kỹ thuật số|hậu nhân loại)\b/gi,
+  // ──────── Phase triết học (lô 2) ────────
+  Seesaw:
+    /\b(dopamine|khoái cảm|khoái lạc|nghiện|phần thưởng|thỏa mãn|cai nghiện|bập bênh|cân bằng não|kích thích|lướt điện thoại|mạng xã hội|đau và sướng)\b/gi,
+  Compass:
+    /\b(ý nghĩa|mục đích|lẽ sống|phương hướng|lạc hướng|kim chỉ nam|định hướng|tìm đường đời|sứ mệnh)\b/gi,
+  Void:
+    /\b(hư vô|trống rỗng|vô nghĩa|hư không|vực thẳm|hư vô chủ nghĩa|chông chênh|mất phương hướng|tê liệt)\b/gi,
+  StoicPillar:
+    /\b(khắc kỷ|điềm tĩnh|vững vàng|chấp nhận|kiên định|bình thản|stoic|không thể kiểm soát|an nhiên|chịu đựng)\b/gi,
+  Owl:
+    /\b(minh triết|khôn ngoan|trí tuệ|hiền triết|thông thái|thông tuệ|chiêm nghiệm sâu|uyên bác|lẽ phải)\b/gi,
+  ThirdEye:
+    /\b(ý thức|nhận biết|quan sát|tỉnh giác|tự nhận thức|tỉnh thức|chú tâm|soi vào trong|giác quan thứ sáu)\b/gi,
+  // ──────── Phase triết học (lô 3) ────────
+  TimeRiver:
+    /\b(thời gian|trôi qua|khoảnh khắc|dòng chảy|quá khứ|tương lai|đồng hồ|năm tháng|thời khắc|tích tắc)\b/gi,
+  Wave:
+    /\b(con sóng|sóng biển|tan biến|phù du|biển cả|cuốn trôi|gợn sóng|đại dương|trôi đi)\b/gi,
+  Cosmos:
+    /\b(vũ trụ|bao la|nhỏ bé|vì sao|không gian|vô tận|choáng ngợp|thiên hà|ngân hà|bầu trời sao)\b/gi,
+  Labyrinth:
+    /\b(lạc lối|rối ren|phức tạp|mê cung|hoang mang|bế tắc|loanh quanh|rối bời|mắc kẹt)\b/gi,
+  Burden:
+    /\b(gánh nặng|trách nhiệm|áp lực|mang vác|nặng nề|đè nén|oằn vai|gồng gánh|sức ép)\b/gi,
+  Fate:
+    /\b(định mệnh|số phận|nhân quả|tất yếu|an bài|quy luật|dây chuyền|hệ quả|kết cục|sắp đặt)\b/gi,
+  Enlightenment:
+    /\b(khai sáng|giác ngộ|ánh sáng|soi rọi|bừng sáng|lý trí|sáng tỏ|vỡ lẽ|thông suốt)\b/gi,
+  Paradox:
+    /\b(nghịch lý|mâu thuẫn|trái ngược|oái oăm|đối nghịch|tréo ngoe|vừa.{0,6}vừa|ngược đời)\b/gi,
+  BrokenChains:
+    /\b(tự do|giải phóng|xiềng xích|ràng buộc|bứt phá|tự chủ|thoát khỏi|gông cùm|cởi trói|giải thoát)\b/gi,
 };
 
 export const pickScene = (text: string): SceneType => {
@@ -131,6 +174,61 @@ export const pickScene = (text: string): SceneType => {
     }
   }
   return best;
+};
+
+/** Cửa sổ chống lặp: không tái dùng sceneType trong N cảnh gần nhất. */
+const RECENT_WINDOW = 3;
+
+/**
+ * Gán sceneType cho CẢ chuỗi cảnh, ưu tiên keyword nhưng ĐA DẠNG HOÁ:
+ *  1. Ứng viên theo keyword (điểm > 0), chọn cái điểm cao nhất KHÔNG nằm trong
+ *     N cảnh gần đây → tránh lặp liền kề + tránh dồn 1 scene.
+ *  2. Câu không trúng keyword (hoặc mọi ứng viên đều vừa dùng) → xoay vòng
+ *     deterministic qua toàn bộ 22 scene, bỏ qua N cảnh gần đây (thay vì luôn
+ *     rơi về PodcastDesk).
+ *
+ * Đây là gốc rễ fix "hình ảnh lặp đi lặp lại": trước đây câu thiếu keyword đều
+ * thành PodcastDesk và không có luật chống lặp.
+ */
+export const assignSceneTypes = (texts: string[]): SceneType[] => {
+  const out: SceneType[] = [];
+  const recent: SceneType[] = [];
+  let rrCursor = 0;
+
+  const notRecent = (t: SceneType) => !recent.includes(t);
+  const remember = (t: SceneType) => {
+    recent.push(t);
+    if (recent.length > RECENT_WINDOW) recent.shift();
+  };
+
+  for (const text of texts) {
+    const ranked = SCENE_TYPES.filter((t) => t !== "PodcastDesk")
+      .map((t) => ({
+        t,
+        score: countMatches(text, SCENE_KEYWORDS[t as Exclude<SceneType, "PodcastDesk">]),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    let chosen: SceneType | undefined = ranked.find((x) => notRecent(x.t))?.t;
+
+    if (!chosen) {
+      // Round-robin đa dạng qua toàn bộ scene, bỏ qua N cảnh gần đây.
+      for (let k = 0; k < SCENE_TYPES.length; k++) {
+        const cand = SCENE_TYPES[(rrCursor + k) % SCENE_TYPES.length];
+        if (notRecent(cand)) {
+          chosen = cand;
+          rrCursor = (rrCursor + k + 1) % SCENE_TYPES.length;
+          break;
+        }
+      }
+    }
+
+    const final = chosen ?? DEFAULT_SCENE;
+    out.push(final);
+    remember(final);
+  }
+  return out;
 };
 
 type Segment = { startMs: number; endMs: number; text: string };
@@ -195,13 +293,16 @@ export const splitScenes = (transcript: Transcript): Scene[] => {
   }
   flush();
 
+  // Gán sceneType cả chuỗi (chống lặp + đa dạng) thay vì pickScene từng câu.
+  const sceneTypes = assignSceneTypes(raw.map((r) => r.text));
+
   return raw.map((r, index) => ({
     index,
     startMs: r.startMs,
     endMs: r.endMs,
     text: r.text,
     mood: pickMood(r.text),
-    sceneType: pickScene(r.text),
+    sceneType: sceneTypes[index] ?? DEFAULT_SCENE,
   }));
 };
 

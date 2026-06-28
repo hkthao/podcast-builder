@@ -442,3 +442,305 @@ export const Cocoon: React.FC<StickerProps> = (props) => (
     <StickerShape d="M 36 78 Q 50 82 64 78" inkWidth={3} halo={false} />
   </StickerBase>
 );
+
+/* ─────────────────────  Triết học (Phase philosophy)  ───────────────────── */
+
+/** Hang động — vòm tối + lối sáng cuối hang (ẩn dụ hang Plato). */
+export const CaveArch: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape
+      d="M 10 90 L 10 55 Q 10 15 50 15 Q 90 15 90 55 L 90 90 Z"
+      fill={INK}
+    />
+    {/* Lối sáng cuối hang — vàng tươi (ánh sáng), to hơn để đọc rõ. */}
+    <StickerShape
+      d="M 34 90 L 34 60 Q 34 42 50 42 Q 66 42 66 60 L 66 90 Z"
+      fill={COLORS.bg}
+      halo={false}
+    />
+  </StickerBase>
+);
+
+/** Tia sáng — chùm sáng đổ xuống (giác ngộ / sự thật rọi vào). */
+export const LightBeam: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape d="M 50 8 L 24 92 L 76 92 Z" fill={props.accent ?? COLORS.accentRed} />
+    <StickerShape line={{ x1: 50, y1: 20, x2: 42, y2: 88 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 50, y1: 20, x2: 58, y2: 88 }} inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Ngọn nến — thân nến + lửa (hữu hạn, memento mori). */
+export const Candle: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape rect={{ x: 38, y: 46, width: 24, height: 44, rx: 4 }} fill={COLORS.white} />
+    <StickerShape line={{ x1: 50, y1: 46, x2: 50, y2: 40 }} inkWidth={4} halo={false} />
+    {/* Lửa LUÔN ấm (đỏ coral) — không theo accent để mood contemplative (navy) không làm tối lửa. */}
+    <StickerShape d="M 50 12 Q 62 28 50 40 Q 38 28 50 12 Z" fill={COLORS.accentRed} />
+    <StickerShape line={{ x1: 44, y1: 60, x2: 44, y2: 74 }} inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Chiếc lá rơi — vô thường, thời gian trôi. */
+export const Leaf: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape d="M 50 12 Q 86 42 50 88 Q 14 42 50 12 Z" fill={props.accent ?? COLORS.accentTeal} />
+    <StickerShape line={{ x1: 50, y1: 20, x2: 50, y2: 80 }} inkWidth={4} halo={false} />
+    <StickerShape d="M 50 40 L 36 34" inkWidth={3} halo={false} />
+    <StickerShape d="M 50 54 L 64 48" inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Ngọn núi — đỉnh cao, gian nan (Sisyphus / vượt khó). */
+export const Mountain: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape d="M 8 88 L 40 26 L 58 54 L 72 34 L 92 88 Z" fill={props.accent ?? COLORS.accentBlue} />
+    <StickerShape d="M 33 38 L 40 26 L 48 42 Q 44 38 40 41 Q 37 38 33 38 Z" fill={COLORS.white} halo={false} />
+  </StickerBase>
+);
+
+/** Tảng đá — gánh nặng phi lý (hòn đá Sisyphus). */
+export const Boulder: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape
+      d="M 22 80 Q 10 56 28 40 Q 46 24 68 32 Q 90 40 84 64 Q 80 82 56 84 Q 34 86 22 80 Z"
+      fill={props.accent ?? COLORS.inkMuted}
+    />
+    <StickerShape d="M 40 46 L 52 60 L 44 72" inkWidth={3} halo={false} />
+    <StickerShape d="M 64 50 L 72 58" inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Cán cân — đạo đức, công bằng (thiện/ác, đúng/sai). */
+export const BalanceScale: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape line={{ x1: 50, y1: 20, x2: 50, y2: 84 }} />
+    <StickerShape line={{ x1: 34, y1: 84, x2: 66, y2: 84 }} />
+    <StickerShape line={{ x1: 18, y1: 30, x2: 82, y2: 30 }} />
+    <StickerShape circle={{ cx: 50, cy: 20, r: 6 }} fill={props.accent ?? COLORS.accentRed} />
+    <StickerShape d="M 6 36 Q 18 56 30 36 Z" fill={COLORS.accentTeal} />
+    <StickerShape line={{ x1: 18, y1: 30, x2: 6, y2: 36 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 18, y1: 30, x2: 30, y2: 36 }} inkWidth={3} halo={false} />
+    <StickerShape d="M 70 36 Q 82 56 94 36 Z" fill={COLORS.accentTeal} />
+    <StickerShape line={{ x1: 82, y1: 30, x2: 70, y2: 36 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 82, y1: 30, x2: 94, y2: 36 }} inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Đầu robot — trí tuệ nhân tạo, ý thức máy. */
+export const RobotHead: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape line={{ x1: 50, y1: 30, x2: 50, y2: 16 }} />
+    <StickerShape circle={{ cx: 50, cy: 13, r: 5 }} fill={COLORS.accentRed} />
+    {/* Đầu LUÔN xanh dương để không bị tối khi mood=contemplative (accent navy). */}
+    <StickerShape rect={{ x: 24, y: 30, width: 52, height: 48, rx: 10 }} fill={COLORS.accentBlue} />
+    {/* Mắt/miệng halo=false để KHÔNG phủ trắng lên màu đầu. */}
+    <StickerShape circle={{ cx: 39, cy: 50, r: 6 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 61, cy: 50, r: 6 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 39, cy: 50, r: 2.4 }} fill={INK} halo={false} />
+    <StickerShape circle={{ cx: 61, cy: 50, r: 2.4 }} fill={INK} halo={false} />
+    <StickerShape rect={{ x: 41, y: 64, width: 18, height: 7, rx: 3 }} fill={COLORS.white} halo={false} />
+  </StickerBase>
+);
+
+/* ────────────────  Triết học lô 2  ──────────────── */
+
+/** Bập bênh khoái cảm–nỗi đau (Anna Lembke / Dopamine Nation). Đòn nghiêng:
+ * bên "sướng" (coral) bổng lên, bên "đau" (teal) chìm xuống — homeostasis. */
+export const Seesaw: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* đòn nghiêng (parallelogram trắng) */}
+    <StickerShape d="M 12 27 L 88 51 L 88 65 L 12 41 Z" fill={COLORS.white} />
+    {/* trụ tam giác */}
+    <StickerShape d="M 50 49 L 38 86 L 62 86 Z" fill={props.accent ?? COLORS.accentBlue} />
+    {/* quả nặng "sướng" bổng (coral) + "đau" chìm (teal) — màu cố định */}
+    <StickerShape circle={{ cx: 16, cy: 22, r: 10 }} fill={COLORS.accentRed} />
+    <StickerShape circle={{ cx: 84, cy: 70, r: 10 }} fill={COLORS.accentTeal} />
+  </StickerBase>
+);
+
+/** La bàn — đi tìm ý nghĩa / phương hướng. Kim Bắc đỏ, Nam navy. */
+export const Compass: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape circle={{ cx: 50, cy: 50, r: 38 }} fill={COLORS.white} />
+    <StickerShape line={{ x1: 50, y1: 12, x2: 50, y2: 20 }} inkWidth={4} halo={false} />
+    <StickerShape d="M 50 24 L 58 50 L 42 50 Z" fill={COLORS.accentRed} />
+    <StickerShape d="M 50 76 L 58 50 L 42 50 Z" fill={INK} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 5 }} fill={props.accent ?? COLORS.accentBlue} halo={false} />
+  </StickerBase>
+);
+
+/** Hư vô — vực thẳm tối, 1 đốm bị hút vào. */
+export const Void: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape circle={{ cx: 50, cy: 50, r: 36 }} fill={INK} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 23 }} fill="none" inkWidth={2} halo={false} />
+    <StickerShape circle={{ cx: 66, cy: 36, r: 4 }} fill={COLORS.accentRed} halo={false} />
+  </StickerBase>
+);
+
+/** Cột Hy Lạp — khắc kỷ, vững vàng (Stoicism). Capital loe + thân rãnh + đế bệ. */
+export const Column: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* Capital: tấm abacus + phần loe echinus */}
+    <StickerShape rect={{ x: 20, y: 12, width: 60, height: 9, rx: 2 }} fill={COLORS.white} />
+    <StickerShape d="M 30 21 Q 50 29 70 21 L 66 31 L 34 31 Z" fill={COLORS.white} />
+    {/* Thân cột + rãnh dọc (fluting) */}
+    <StickerShape rect={{ x: 34, y: 31, width: 32, height: 45 }} fill={COLORS.white} />
+    <StickerShape line={{ x1: 42, y1: 34, x2: 42, y2: 73 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 50, y1: 34, x2: 50, y2: 73 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 58, y1: 34, x2: 58, y2: 73 }} inkWidth={3} halo={false} />
+    {/* Đế: phần loe + bệ rộng */}
+    <StickerShape d="M 34 76 L 66 76 L 70 84 L 30 84 Z" fill={COLORS.white} />
+    <StickerShape rect={{ x: 18, y: 84, width: 64, height: 9, rx: 2 }} fill={COLORS.white} />
+  </StickerBase>
+);
+
+/** Cú Minerva — minh triết. Mắt to đồng tâm + mỏ tam giác + tai nhọn. */
+export const Owl: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* tai nhọn */}
+    <StickerShape d="M 30 24 L 22 6 L 42 20 Z" fill={props.accent ?? COLORS.accentBlue} />
+    <StickerShape d="M 70 24 L 78 6 L 58 20 Z" fill={props.accent ?? COLORS.accentBlue} />
+    {/* thân/đầu trứng */}
+    <StickerShape
+      d="M 50 14 Q 82 14 82 50 Q 82 90 50 90 Q 18 90 18 50 Q 18 14 50 14 Z"
+      fill={props.accent ?? COLORS.accentBlue}
+    />
+    {/* mắt cú: đĩa trắng to + đồng tử (đồng tâm) */}
+    <StickerShape circle={{ cx: 37, cy: 40, r: 15 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 63, cy: 40, r: 15 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 37, cy: 40, r: 6 }} fill={INK} halo={false} />
+    <StickerShape circle={{ cx: 63, cy: 40, r: 6 }} fill={INK} halo={false} />
+    <StickerShape circle={{ cx: 34, cy: 37, r: 2 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 60, cy: 37, r: 2 }} fill={COLORS.white} halo={false} />
+    {/* mỏ tam giác giữa 2 mắt */}
+    <StickerShape d="M 50 46 L 43 57 L 57 57 Z" fill={COLORS.accentRed} halo={false} />
+    {/* ngực — chevron lông */}
+    <StickerShape d="M 33 68 Q 50 78 67 68" fill="none" inkWidth={3} halo={false} />
+    <StickerShape d="M 38 78 Q 50 85 62 78" fill="none" inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/** Con mắt ý thức — quan sát, tỉnh giác. Iris LUÔN xanh để không tối ở contemplative. */
+export const Eye: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape d="M 10 50 Q 50 18 90 50 Q 50 82 10 50 Z" fill={COLORS.white} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 20 }} fill={COLORS.accentBlue} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 8 }} fill={INK} halo={false} />
+    <StickerShape circle={{ cx: 44, cy: 44, r: 4 }} fill={COLORS.white} halo={false} />
+    <StickerShape line={{ x1: 50, y1: 16, x2: 50, y2: 7 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 78, y1: 31, x2: 86, y2: 23 }} inkWidth={3} halo={false} />
+    <StickerShape line={{ x1: 22, y1: 31, x2: 14, y2: 23 }} inkWidth={3} halo={false} />
+  </StickerBase>
+);
+
+/* ────────────────  Triết học lô 3  ──────────────── */
+
+/** Đồng hồ cát — thời gian trôi, vô thường (cát LUÔN ấm). */
+export const Hourglass: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape rect={{ x: 24, y: 12, width: 52, height: 8, rx: 3 }} fill={COLORS.white} />
+    <StickerShape rect={{ x: 24, y: 80, width: 52, height: 8, rx: 3 }} fill={COLORS.white} />
+    <StickerShape d="M 30 20 L 70 20 L 52 50 L 48 50 Z" fill={COLORS.white} />
+    <StickerShape d="M 48 50 L 52 50 L 70 80 L 30 80 Z" fill={COLORS.white} />
+    <StickerShape d="M 38 24 L 62 24 L 51 42 L 49 42 Z" fill={COLORS.accentRed} halo={false} />
+    <StickerShape d="M 44 76 L 56 76 L 52 66 L 48 66 Z" fill={COLORS.accentRed} halo={false} />
+    <StickerShape line={{ x1: 50, y1: 50, x2: 50, y2: 66 }} inkWidth={2} halo={false} />
+  </StickerBase>
+);
+
+/** Sóng — vô thường, tan biến. Hai dải sóng teal xếp chồng (nước LUÔN teal). */
+export const Wave: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape
+      d="M 8 42 Q 26 28 44 42 Q 62 56 80 42 Q 87 36 92 41 L 92 53 Q 87 48 80 54 Q 62 68 44 54 Q 26 40 8 54 Z"
+      fill={COLORS.accentTeal}
+    />
+    <StickerShape
+      d="M 8 64 Q 26 50 44 64 Q 62 78 80 64 Q 87 58 92 63 L 92 75 Q 87 70 80 76 Q 62 90 44 76 Q 26 62 8 76 Z"
+      fill={COLORS.accentTeal}
+    />
+  </StickerBase>
+);
+
+/** Hành tinh có vành — vũ trụ bao la, con người nhỏ bé. */
+export const Planet: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape circle={{ cx: 50, cy: 48, r: 26 }} fill={props.accent ?? COLORS.accentBlue} />
+    <StickerShape ellipse={{ cx: 50, cy: 52, rx: 42, ry: 12 }} fill="none" inkWidth={5} />
+    <StickerShape circle={{ cx: 42, cy: 42, r: 5 }} fill={COLORS.white} halo={false} />
+    <StickerShape circle={{ cx: 58, cy: 54, r: 3 }} fill={COLORS.white} halo={false} />
+  </StickerBase>
+);
+
+/** Mê cung — lạc lối, phức tạp; đích ở tâm (đỏ). */
+export const Maze: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape
+      d="M 16 16 L 84 16 L 84 84 L 16 84 L 16 28 L 72 28 L 72 72 L 28 72 L 28 40 L 60 40 L 60 60 L 40 60"
+      fill="none"
+      inkWidth={5}
+    />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 4 }} fill={COLORS.accentRed} halo={false} />
+  </StickerBase>
+);
+
+/** Gánh nặng — khối đá nặng + mũi tên đè xuống. */
+export const Weight: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape rect={{ x: 22, y: 42, width: 56, height: 44, rx: 5 }} fill={props.accent ?? COLORS.inkMuted} />
+    <StickerShape d="M 40 52 L 48 66 L 42 76" fill="none" inkWidth={3} halo={false} />
+    <StickerShape d="M 36 12 L 36 30 M 30 24 L 36 32 L 42 24" fill="none" inkWidth={4} halo={false} />
+    <StickerShape d="M 64 12 L 64 30 M 58 24 L 64 32 L 70 24" fill="none" inkWidth={4} halo={false} />
+  </StickerBase>
+);
+
+/** Domino — định mệnh, nhân quả. Hiệu ứng đổ dây chuyền: nghiêng tăng dần
+ * từ quân đã đổ (trái, coral) → quân còn đứng (phải). */
+export const Dominoes: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    {/* quân 1 — đã đổ (coral, gần nằm ngang) */}
+    <StickerShape d="M 8 86 L 20 86 L 64 66 L 52 66 Z" fill={COLORS.accentRed} />
+    {/* quân 2 — nghiêng nhiều */}
+    <StickerShape d="M 34 86 L 46 86 L 77 49 L 65 49 Z" fill={COLORS.white} />
+    {/* quân 3 — nghiêng nhẹ */}
+    <StickerShape d="M 58 86 L 70 86 L 85 40 L 73 40 Z" fill={COLORS.white} />
+    {/* quân 4 — đứng */}
+    <StickerShape rect={{ x: 80, y: 40, width: 13, height: 46, rx: 2 }} fill={COLORS.white} />
+    <StickerShape circle={{ cx: 86.5, cy: 54, r: 2.6 }} fill={INK} halo={false} />
+    <StickerShape circle={{ cx: 86.5, cy: 72, r: 2.6 }} fill={INK} halo={false} />
+  </StickerBase>
+);
+
+/** Mặt trời tia sáng — khai sáng, giác ngộ (lõi LUÔN coral để nổi trên nền vàng). */
+export const Sunburst: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape
+      d="M 50 6 L 50 20 M 50 80 L 50 94 M 6 50 L 20 50 M 80 50 L 94 50 M 19 19 L 29 29 M 71 71 L 81 81 M 81 19 L 71 29 M 29 71 L 19 81"
+      fill="none"
+      inkWidth={5}
+    />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 20 }} fill={COLORS.accentRed} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 9 }} fill={COLORS.bg} halo={false} />
+  </StickerBase>
+);
+
+/** Nút thắt — nghịch lý: 2 vòng lồng vào nhau, tâm đỏ. */
+export const Knot: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape circle={{ cx: 38, cy: 50, r: 22 }} fill="none" inkWidth={6} />
+    <StickerShape circle={{ cx: 62, cy: 50, r: 22 }} fill="none" inkWidth={6} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 6 }} fill={props.accent ?? COLORS.accentRed} halo={false} />
+  </StickerBase>
+);
+
+/** Xích đứt — tự do, phá bỏ ràng buộc (tia đứt đỏ). */
+export const BrokenChain: React.FC<StickerProps> = (props) => (
+  <StickerBase {...props}>
+    <StickerShape ellipse={{ cx: 26, cy: 50, rx: 18, ry: 11 }} fill="none" inkWidth={7} />
+    <StickerShape ellipse={{ cx: 74, cy: 50, rx: 18, ry: 11 }} fill="none" inkWidth={7} />
+    <StickerShape d="M 50 36 L 46 50 L 54 50 L 50 64" fill="none" inkWidth={4} halo={false} />
+    <StickerShape circle={{ cx: 50, cy: 50, r: 4 }} fill={COLORS.accentRed} halo={false} />
+  </StickerBase>
+);

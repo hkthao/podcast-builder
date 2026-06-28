@@ -43,7 +43,10 @@ const isCacheValid = (jsonPath: string, audioPath: string): boolean => {
 export async function transcribeAudio(
   audioPath: string,
   jsonPath: string,
-  { signal }: { signal?: AbortSignal } = {},
+  {
+    signal,
+    language = "vi",
+  }: { signal?: AbortSignal; language?: string } = {},
 ): Promise<Transcript> {
   if (!fs.existsSync(audioPath)) {
     throw new Error(`File audio không tồn tại: ${audioPath}`);
@@ -69,7 +72,8 @@ export async function transcribeAudio(
     whisperCppVersion: WHISPER_CPP_VERSION,
     model,
     tokenLevelTimestamps: true,
-    language: "vi",
+    // @remotion type union các mã ngôn ngữ; nhận string runtime (vd "en", "auto").
+    language: language as never,
     printOutput: false,
     signal,
   });

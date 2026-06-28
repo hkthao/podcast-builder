@@ -8,22 +8,17 @@ import { EssayPage } from "./pages/Essay";
 import { KnowledgePage } from "./pages/Knowledge";
 import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
-import { ResearchPage } from "./pages/Research";
-import { GalleryStoryboardPage } from "./pages/GalleryStoryboard";
-import { GalleryStoryboardList } from "./pages/GalleryStoryboardList";
 import { SettingsPage } from "./pages/Settings";
 import { PromptsPage } from "./pages/Prompts";
 import { useEpisodesChangedSync } from "./lib/sse";
-import { WorkspaceProvider, useWorkspace } from "./lib/workspace";
 
 export function App() {
   useEpisodesChangedSync();
   return (
     <BrowserRouter>
-      <WorkspaceProvider>
-        <AppLayout>
+      <AppLayout>
         <Routes>
-          <Route path="/" element={<HomeRoute />} />
+          <Route path="/" element={<EpisodeList />} />
           <Route path="/episodes/:name" element={<EpisodeEdit />} />
           <Route path="/references" element={<ReferenceList />} />
           <Route path="/brainstorm" element={<Brainstorm />} />
@@ -31,19 +26,10 @@ export function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
-          <Route path="/research" element={<ResearchPage />} />
-          <Route path="/gallery/storyboards/:id" element={<GalleryStoryboardPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/prompts" element={<PromptsPage />} />
         </Routes>
-        </AppLayout>
-      </WorkspaceProvider>
+      </AppLayout>
     </BrowserRouter>
   );
-}
-
-/** "/" branches theo workspace: podcast → EpisodeList, gallery → GalleryStoryboardList. */
-function HomeRoute() {
-  const { workspace } = useWorkspace();
-  return workspace === "gallery" ? <GalleryStoryboardList /> : <EpisodeList />;
 }

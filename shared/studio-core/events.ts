@@ -13,6 +13,10 @@ import { PATHS } from "./paths";
  * update state.
  */
 export const bus = new EventEmitter();
+// Mỗi SSE client (tab UI) + render-runner đăng ký listener; nhiều tab/reconnect
+// dễ vượt mặc định 10 → MaxListenersExceededWarning (vô hại nhưng nhiễu). Tất
+// cả đều cleanup khi disconnect (sseFromBus bus.off on abort) nên nâng an toàn.
+bus.setMaxListeners(100);
 
 export type ChangeReason = "add" | "change" | "unlink";
 export type ChangeEvent = {

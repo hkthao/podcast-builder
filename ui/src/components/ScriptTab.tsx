@@ -1056,6 +1056,8 @@ function ScriptEditor({
         />
       )}
 
+      {turns.length > 0 && <HookScoreBar turns={turns} />}
+
       <div className="space-y-2">
         {turns.slice(pageStart, pageEnd).map((turn, vi) => {
           const i = pageStart + vi;
@@ -1172,6 +1174,148 @@ function ScriptEditor({
         />
       )}
     </Card>
+  );
+}
+
+// ── Hook strength scorer ─────────────────────────────────────────────────
+//
+// Chấm điểm 1-3 turn đầu theo 4 tiêu chí giữ chân khán giả Reels (xem
+// analytics review trong session 2026-06-18):
+//   - Curiosity gap: câu hỏi mở (?), từ khoá "tại sao/vì sao/ai/cái gì..."
+//   - Pain point cụ thể: emotion/pain words + specific noun
+//   - Tránh opener sáo: "chào mừng", "hôm nay chúng ta", "trong cuộc sống"
+//   - Story-first: nhắc tới người/khoảnh khắc cụ thể trong câu mở
+//
+// Heuristic, không gọi LLM — instant feedback khi user edit script.
+
+const HOOK_PAIN_KEYWORDS = [
+  "cô đơn", "trì hoãn", "kiệt sức", "lo lắng", "áp lực", "lạc lõng",
+  "mất kết nối", "vô nghĩa", "chông chênh", "hối tiếc", "ghen tị",
+  "tự ti", "sợ", "đau", "buồn", "trống rỗng", "bất an", "nghi ngờ",
+  "thất bại", "phán xét", "so sánh", "ngộp", "burnout",
+];
+
+const HOOK_GENERIC_OPENERS = [
+  "chào mừng", "hôm nay chúng ta", "trong cuộc sống", "không thể phủ nhận",
+  "thời đại 4.0", "thân chào quý vị", "guồng quay", "hôm nay mình sẽ",
+  "trong tập này", "video hôm nay", "tập này chúng ta", "xã hội hiện đại",
+  "ngày nay", "thời đại ngày nay",
+];
+
+const HOOK_QUESTION_TRIGGERS = [
+  "tại sao", "vì sao", "đã bao giờ", "có bao giờ", "ai sẽ", "ai là",
+  "cái gì", "bao lâu", "khi nào", "nếu", "liệu", "phải chăng",
+  "bạn có", "bạn đã", "điều gì",
+];
+
+const HOOK_STORY_TRIGGERS = [
+  "có một", "tôi từng", "tôi đã", "anh ấy", "cô ấy", "có người",
+  "một buổi", "một lần", "ngồi", "đứng", "đi", "lúc đó", "khi đó",
+  "một đêm", "một sáng", "buổi tối", "tuần trước", "hôm qua",
+  "vài năm trước", "có lần",
+];
+
+function scoreHook(turns: PodcastScriptTurn[]): {
+  total: number;
+  curiosity: number;
+  painPoint: number;
+  freshOpener: number;
+  storyFirst: number;
+  tips: string[];
+} {
+  const tips: string[] = [];
+  const head = turns.slice(0, 3).map((t) => t.text.toLowerCase()).join(" ");
+  const firstTurnLower = (turns[0]?.text ?? "").toLowerCase();
+
+  // 1. Curiosity gap (0-3) — question marks + trigger words trong 3 turn đầu
+  const questionMarks = (head.match(/\?/g) ?? []).length;
+  const triggerHits = HOOK_QUESTION_TRIGGERS.filter((k) =>
+    head.includes(k),
+  ).length;
+  const curiosity = Math.min(3, questionMarks + Math.min(2, triggerHits));
+  if (curiosity < 2) {
+    tips.push("Thêm câu hỏi mở ở turn đầu (tại sao / đã bao giờ / nếu…?)");
+  }
+
+  // 2. Pain point cụ thể (0-3) — keyword bắt vào nỗi đau khán giả
+  const painHits = HOOK_PAIN_KEYWORDS.filter((k) => head.includes(k)).length;
+  const painPoint = Math.min(3, painHits);
+  if (painHits === 0) {
+    tips.push("Chưa chạm pain point cụ thể (cô đơn / áp lực / lạc lõng…)");
+  }
+
+  // 3. Tránh opener sáo (0-2)
+  const genericHits = HOOK_GENERIC_OPENERS.filter((k) =>
+    firstTurnLower.includes(k),
+  );
+  const freshOpener = Math.max(0, 2 - genericHits.length);
+  if (genericHits.length > 0) {
+    tips.push(`Bỏ opener sáo: "${genericHits[0]}" — vào thẳng câu chuyện.`);
+  }
+
+  // 4. Story-first (0-2) — turn đầu nhắc tới person/scene cụ thể
+  const storyHits = HOOK_STORY_TRIGGERS.filter((k) =>
+    firstTurnLower.includes(k),
+  ).length;
+  const storyFirst = Math.min(2, storyHits > 0 ? 1 + (storyHits > 1 ? 1 : 0) : 0);
+  if (storyFirst === 0) {
+    tips.push("Mở bằng tình huống/người cụ thể, không định nghĩa khái niệm.");
+  }
+
+  return {
+    total: curiosity + painPoint + freshOpener + storyFirst,
+    curiosity,
+    painPoint,
+    freshOpener,
+    storyFirst,
+    tips,
+  };
+}
+
+function HookScoreBar({ turns }: { turns: PodcastScriptTurn[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const score = useMemo(() => scoreHook(turns), [turns]);
+  const colorCls =
+    score.total >= 8
+      ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/5"
+      : score.total >= 5
+        ? "text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/5"
+        : "text-red-600 dark:text-red-400 border-red-500/40 bg-red-500/5";
+  return (
+    <div className={cn("mb-3 rounded-md border px-3 py-2", colorCls)}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 text-xs"
+      >
+        <span className="font-mono font-medium">Hook score</span>
+        <span className="font-mono font-bold tabular-nums">
+          {score.total}/10
+        </span>
+        <span className="text-muted-foreground font-mono">
+          (curiosity {score.curiosity}/3 · pain {score.painPoint}/3 · fresh{" "}
+          {score.freshOpener}/2 · story {score.storyFirst}/2)
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 ml-auto transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+      {expanded && score.tips.length > 0 && (
+        <ul className="mt-2 text-[11px] leading-relaxed space-y-0.5 text-foreground/80">
+          {score.tips.map((t, i) => (
+            <li key={i}>• {t}</li>
+          ))}
+        </ul>
+      )}
+      {expanded && score.tips.length === 0 && (
+        <p className="mt-2 text-[11px] text-foreground/80">
+          Hook đủ mạnh — sẵn sàng record.
+        </p>
+      )}
+    </div>
   );
 }
 

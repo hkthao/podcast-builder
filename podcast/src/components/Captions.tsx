@@ -193,19 +193,8 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
 
   const scale = 0.94 + Math.min(1, localMs / 180) * 0.06;
 
-  const words = page.text.split(/\s+/).filter(Boolean);
-  const wc = words.length;
+  const wc = page.text.split(/\s+/).filter(Boolean).length;
   const fontSize = wc > 7 ? 56 : wc > 5 ? 62 : TYPE_SCALE.caption;
-
-  // Word-level "moving spotlight" — linear-approx timing vì spell-fix drop
-  // token-level timestamps (corrected.json có tokens: []). Mỗi từ chiếm 1
-  // equal slot trong page duration. Trễ/sớm 100-300ms so với voice nhưng vẫn
-  // tạo motion retention-friendly cho mute viewer.
-  const wordDuration = durationMs / Math.max(1, wc);
-  const activeWordIdx = Math.min(
-    wc - 1,
-    Math.max(0, Math.floor(localMs / wordDuration)),
-  );
 
   return (
     <AbsoluteFill
@@ -239,32 +228,9 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
             lineHeight: 1.25,
             color: COLORS.ink,
             letterSpacing: "-0.01em",
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: "0 0.32em",
           }}
         >
-          {words.map((word, i) => {
-            const isActive = i === activeWordIdx;
-            return (
-              <span
-                key={i}
-                style={{
-                  display: "inline-block",
-                  padding: isActive ? "0 0.18em" : 0,
-                  backgroundColor: isActive ? COLORS.bg : "transparent",
-                  borderRadius: isActive ? 8 : 0,
-                  transform: isActive ? "scale(1.06)" : "scale(1)",
-                  transformOrigin: "center bottom",
-                  transition: "none",
-                  color: COLORS.ink,
-                }}
-              >
-                {word}
-              </span>
-            );
-          })}
+          {page.text}
         </div>
       </div>
     </AbsoluteFill>

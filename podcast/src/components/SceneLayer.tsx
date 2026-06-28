@@ -1,9 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import {
   AbsoluteFill,
-  cancelRender,
-  continueRender,
-  delayRender,
   interpolate,
   staticFile,
   useCurrentFrame,
@@ -11,7 +8,8 @@ import {
 } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 import { MOOD_ACCENTS, DEFAULT_SCENE, type SceneType } from "../theme";
-import type { Scene, ScenePlan } from "../scenes";
+import type { Scene } from "../scenes";
+import { CROSSFADE_MS, sceneMotionTransform } from "./scene-runtime";
 import { PodcastDesk } from "./scenes/PodcastDesk";
 import { Idea } from "./scenes/Idea";
 import { Connection } from "./scenes/Connection";
@@ -34,9 +32,27 @@ import { Metamorphosis } from "./scenes/Metamorphosis";
 import { Bridge } from "./scenes/Bridge";
 import { Mirror } from "./scenes/Mirror";
 import { Threshold } from "./scenes/Threshold";
+import { CaveShadows } from "./scenes/CaveShadows";
+import { MementoMori } from "./scenes/MementoMori";
+import { Sisyphus } from "./scenes/Sisyphus";
+import { Scales } from "./scenes/Scales";
+import { MachineMind } from "./scenes/MachineMind";
+import { Seesaw } from "./scenes/Seesaw";
+import { Compass } from "./scenes/Compass";
+import { Void } from "./scenes/Void";
+import { StoicPillar } from "./scenes/StoicPillar";
+import { Owl } from "./scenes/Owl";
+import { ThirdEye } from "./scenes/ThirdEye";
+import { TimeRiver } from "./scenes/TimeRiver";
+import { Wave } from "./scenes/Wave";
+import { Cosmos } from "./scenes/Cosmos";
+import { Labyrinth } from "./scenes/Labyrinth";
+import { Burden } from "./scenes/Burden";
+import { Fate } from "./scenes/Fate";
+import { Enlightenment } from "./scenes/Enlightenment";
+import { Paradox } from "./scenes/Paradox";
+import { BrokenChains } from "./scenes/BrokenChains";
 import type { SceneProps } from "./scenes/base";
-
-const CROSSFADE_MS = 1000;
 
 const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
   PodcastDesk,
@@ -61,39 +77,38 @@ const REGISTRY: Record<SceneType, React.FC<SceneProps>> = {
   Bridge,
   Mirror,
   Threshold,
+  CaveShadows,
+  MementoMori,
+  Sisyphus,
+  Scales,
+  MachineMind,
+  Seesaw,
+  Compass,
+  Void,
+  StoicPillar,
+  Owl,
+  ThirdEye,
+  TimeRiver,
+  Wave,
+  Cosmos,
+  Labyrinth,
+  Burden,
+  Fate,
+  Enlightenment,
+  Paradox,
+  BrokenChains,
 };
 
 type Props = {
-  planSrc: string | null;
+  scenes: Scene[];
   audioSrc: string;
 };
 
-/** Router cảnh — load plan.json + audioLevel, dispatch sang scene recipe. */
-export const SceneLayer: React.FC<Props> = ({ planSrc, audioSrc }) => {
+/** Router cảnh — nhận scenes (plan đã fetch ở Video) + audioLevel, dispatch
+ * sang scene recipe kèm motion Ken Burns + transition có hướng. */
+export const SceneLayer: React.FC<Props> = ({ scenes, audioSrc }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const [plan, setPlan] = useState<ScenePlan | null>(null);
-  const handleRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!planSrc) return;
-    handleRef.current = delayRender(`scene-plan:${planSrc}`);
-    fetch(staticFile(planSrc))
-      .then((r) => {
-        if (!r.ok) throw new Error(`fetch ${planSrc} ${r.status}`);
-        return r.json() as Promise<ScenePlan>;
-      })
-      .then((p) => {
-        setPlan(p);
-        if (handleRef.current !== null) continueRender(handleRef.current);
-      })
-      .catch((e: unknown) => {
-        if (handleRef.current !== null) cancelRender(e);
-      });
-    return () => {
-      if (handleRef.current !== null) continueRender(handleRef.current);
-    };
-  }, [planSrc]);
 
   const audioData = useAudioData(staticFile(audioSrc));
   const audioLevel = useMemo(() => {
@@ -109,7 +124,6 @@ export const SceneLayer: React.FC<Props> = ({ planSrc, audioSrc }) => {
   }, [audioData, frame, fps]);
 
   const currentMs = (frame / fps) * 1000;
-  const scenes = plan?.scenes ?? [];
 
   if (scenes.length === 0) {
     return (
@@ -126,7 +140,7 @@ export const SceneLayer: React.FC<Props> = ({ planSrc, audioSrc }) => {
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      {scenes.map((scene) => {
+      {scenes.map((scene, index) => {
         const opacity = sceneOpacity(scene, currentMs);
         if (opacity <= 0.001) return null;
         const sceneType: SceneType = REGISTRY[scene.sceneType]
@@ -136,14 +150,28 @@ export const SceneLayer: React.FC<Props> = ({ planSrc, audioSrc }) => {
         const duration = scene.endMs - scene.startMs;
         const elapsed = Math.max(0, currentMs - scene.startMs);
         const progress = Math.min(1, elapsed / duration);
+        const transform = sceneMotionTransform(
+          index,
+          scene,
+          currentMs,
+          audioLevel,
+        );
         return (
           <AbsoluteFill key={scene.startMs} style={{ opacity }}>
-            <SceneComp
-              mood={scene.mood}
-              accentColor={MOOD_ACCENTS[scene.mood]}
-              progress={progress}
-              audioLevel={audioLevel}
-            />
+            <AbsoluteFill
+              style={{
+                transform,
+                transformOrigin: "center center",
+                willChange: "transform",
+              }}
+            >
+              <SceneComp
+                mood={scene.mood}
+                accentColor={MOOD_ACCENTS[scene.mood]}
+                progress={progress}
+                audioLevel={audioLevel}
+              />
+            </AbsoluteFill>
           </AbsoluteFill>
         );
       })}

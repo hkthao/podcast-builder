@@ -20,7 +20,6 @@ export const KNOWN_PROVIDERS = [
   "gemini",
   "anthropic",
   "google-vertex-ai",
-  "pexels",
 ] as const;
 export type ApiKeyProvider = (typeof KNOWN_PROVIDERS)[number];
 
