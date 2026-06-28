@@ -15,6 +15,7 @@ import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
 import { SceneLayer } from "./components/SceneLayer";
 import { Visualizer } from "./components/Visualizer";
 import { Watermark } from "./components/Watermark";
+import { useScenePlan } from "./components/scene-runtime";
 import type { EpisodeConfig } from "./episode";
 
 export type CompProps = {
@@ -35,6 +36,8 @@ export const Video: React.FC<CompProps> = ({
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const mood = episode.moodOverride ?? "positive";
+  const plan = useScenePlan(planSrc);
+  const scenes = plan?.scenes ?? [];
 
   const introFrames = episode.showIntro ? INTRO_DURATION_FRAMES : 0;
   const hookFrames = episode.hook ? HOOK_DURATION_FRAMES : 0;
@@ -53,7 +56,7 @@ export const Video: React.FC<CompProps> = ({
 
   return (
     <AbsoluteFill>
-      <Background mood={mood} />
+      <Background mood={mood} scenes={scenes} />
       {audioSrc ? <Audio src={staticFile(audioSrc)} /> : null}
 
       {bgmSrc ? (
@@ -68,8 +71,8 @@ export const Video: React.FC<CompProps> = ({
 
       {audioSrc ? (
         <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
-          <SceneLayer planSrc={planSrc} audioSrc={audioSrc} />
-          <Visualizer audioSrc={audioSrc} mood={mood} />
+          <SceneLayer scenes={scenes} audioSrc={audioSrc} />
+          <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} />
           <Captions transcriptSrc={transcriptSrc} hideRanges={captionHideRanges} />
           <Watermark episodeNumber={episode.episodeNumber} />
         </AbsoluteFill>

@@ -2,22 +2,29 @@ import { useMemo } from "react";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 import { COLORS, FORMAT, MOOD_ACCENTS, type MoodKey } from "../theme";
+import type { Scene } from "../scenes";
+import { currentSceneIndex, sceneVariant } from "./scene-runtime";
 
 const NUM_BANDS = 64;
 const SMOOTH_WINDOW = 2;
-const MAX_HEIGHT = 220;
 const MIN_HEIGHT = 12;
 const HEIGHT_POW = 0.5;
-/** Bar thinner để toàn wave fit trong SAFE_ZONE (avoid right action buttons FB Reels). */
-const BAR_WIDTH = 4;
-const BAR_GAP = 2;
+
+/** Biến thể hình sóng theo scene → wave không cố định cả video. */
+const VIS_VARIANTS = [
+  { barWidth: 4, barGap: 2, maxHeight: 220, centerYRatio: 0.69 },
+  { barWidth: 5, barGap: 2, maxHeight: 200, centerYRatio: 0.66 },
+  { barWidth: 3, barGap: 3, maxHeight: 240, centerYRatio: 0.71 },
+  { barWidth: 4, barGap: 3, maxHeight: 210, centerYRatio: 0.67 },
+] as const;
 
 type Props = {
   audioSrc: string;
   mood?: MoodKey;
+  scenes?: Scene[];
 };
 
-export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive" }) => {
+export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scenes }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const audioData = useAudioData(staticFile(audioSrc));
@@ -47,14 +54,29 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive" }) => 
 
   if (!smoothed) return null;
 
-  const accent = MOOD_ACCENTS[mood];
+  // Mood + variant theo scene đang active.
+  const currentMs = (frame / fps) * 1000;
+  let activeMood: MoodKey = mood;
+  let variant = 0;
+  if (scenes && scenes.length > 0) {
+    const idx = currentSceneIndex(scenes, currentMs);
+    if (idx >= 0) {
+      activeMood = scenes[idx].mood;
+      variant = sceneVariant(idx);
+    }
+  }
+  const vis = VIS_VARIANTS[variant];
+  const BAR_WIDTH = vis.barWidth;
+  const BAR_GAP = vis.barGap;
+  const MAX_HEIGHT = vis.maxHeight;
+
+  const accent = MOOD_ACCENTS[activeMood];
   // Bars mirror đối xứng quanh trung tâm. Tổng 2*NUM_BANDS bars.
   const totalBars = NUM_BANDS * 2;
   const totalWidth = totalBars * BAR_WIDTH + (totalBars - 1) * BAR_GAP;
   const leftX = (FORMAT.width - totalWidth) / 2;
-  // centerY 0.67 — wave bottom edge ~1396 nằm sát caption top edge (~1410) → gap ~14px.
-  const centerY = FORMAT.height * 0.67;
-  const gradientId = `wave-grad-${mood}`;
+  const centerY = FORMAT.height * vis.centerYRatio;
+  const gradientId = `wave-grad-${activeMood}-${variant}`;
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>

@@ -133,6 +133,61 @@ export const pickScene = (text: string): SceneType => {
   return best;
 };
 
+/** Cửa sổ chống lặp: không tái dùng sceneType trong N cảnh gần nhất. */
+const RECENT_WINDOW = 3;
+
+/**
+ * Gán sceneType cho CẢ chuỗi cảnh, ưu tiên keyword nhưng ĐA DẠNG HOÁ:
+ *  1. Ứng viên theo keyword (điểm > 0), chọn cái điểm cao nhất KHÔNG nằm trong
+ *     N cảnh gần đây → tránh lặp liền kề + tránh dồn 1 scene.
+ *  2. Câu không trúng keyword (hoặc mọi ứng viên đều vừa dùng) → xoay vòng
+ *     deterministic qua toàn bộ 22 scene, bỏ qua N cảnh gần đây (thay vì luôn
+ *     rơi về PodcastDesk).
+ *
+ * Đây là gốc rễ fix "hình ảnh lặp đi lặp lại": trước đây câu thiếu keyword đều
+ * thành PodcastDesk và không có luật chống lặp.
+ */
+export const assignSceneTypes = (texts: string[]): SceneType[] => {
+  const out: SceneType[] = [];
+  const recent: SceneType[] = [];
+  let rrCursor = 0;
+
+  const notRecent = (t: SceneType) => !recent.includes(t);
+  const remember = (t: SceneType) => {
+    recent.push(t);
+    if (recent.length > RECENT_WINDOW) recent.shift();
+  };
+
+  for (const text of texts) {
+    const ranked = SCENE_TYPES.filter((t) => t !== "PodcastDesk")
+      .map((t) => ({
+        t,
+        score: countMatches(text, SCENE_KEYWORDS[t as Exclude<SceneType, "PodcastDesk">]),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    let chosen: SceneType | undefined = ranked.find((x) => notRecent(x.t))?.t;
+
+    if (!chosen) {
+      // Round-robin đa dạng qua toàn bộ scene, bỏ qua N cảnh gần đây.
+      for (let k = 0; k < SCENE_TYPES.length; k++) {
+        const cand = SCENE_TYPES[(rrCursor + k) % SCENE_TYPES.length];
+        if (notRecent(cand)) {
+          chosen = cand;
+          rrCursor = (rrCursor + k + 1) % SCENE_TYPES.length;
+          break;
+        }
+      }
+    }
+
+    const final = chosen ?? DEFAULT_SCENE;
+    out.push(final);
+    remember(final);
+  }
+  return out;
+};
+
 type Segment = { startMs: number; endMs: number; text: string };
 
 const collectSegments = (transcript: Transcript): Segment[] =>
@@ -195,13 +250,16 @@ export const splitScenes = (transcript: Transcript): Scene[] => {
   }
   flush();
 
+  // Gán sceneType cả chuỗi (chống lặp + đa dạng) thay vì pickScene từng câu.
+  const sceneTypes = assignSceneTypes(raw.map((r) => r.text));
+
   return raw.map((r, index) => ({
     index,
     startMs: r.startMs,
     endMs: r.endMs,
     text: r.text,
     mood: pickMood(r.text),
-    sceneType: pickScene(r.text),
+    sceneType: sceneTypes[index] ?? DEFAULT_SCENE,
   }));
 };
 

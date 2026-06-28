@@ -1,35 +1,54 @@
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS, FORMAT, MOOD_BG, SAFE_ZONE, type MoodKey } from "../theme";
 import { Sparkle, Squiggle, StarSmall, DottedPath } from "./doodles";
+import type { Scene } from "../scenes";
+import { currentSceneIndex, sceneVariant } from "./scene-runtime";
 
 const GRID = 80;
 
 /**
- * Nền scrapbook / bullet journal: giấy grid vàng tươi + masking tape ở mép
- * + vài doodle drifting THƯA ở rìa. Không đè vùng caption (safe-zone bottom).
+ * Nền scrapbook / bullet journal: giấy grid + masking tape + doodle drifting.
+ * Phase variety: mood + layout doodle/tape ĐỔI THEO scene đang active (variant
+ * 0..3) thay vì cố định cả video → nền không còn y hệt nhau.
  */
 type Props = {
   mood?: MoodKey;
+  scenes?: Scene[];
 };
 
-export const Background: React.FC<Props> = ({ mood = "positive" }) => {
-  const bg = MOOD_BG[mood];
+export const Background: React.FC<Props> = ({ mood = "positive", scenes }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const currentMs = (frame / fps) * 1000;
+
+  let activeMood: MoodKey = mood;
+  let variant = 0;
+  if (scenes && scenes.length > 0) {
+    const idx = currentSceneIndex(scenes, currentMs);
+    if (idx >= 0) {
+      activeMood = scenes[idx].mood;
+      variant = sceneVariant(idx);
+    }
+  }
+
+  const bg = MOOD_BG[activeMood];
+  const tapeRotate = [-8, 5, -4, 9][variant];
   return (
     <AbsoluteFill style={{ backgroundColor: bg }}>
-      <GridPaper />
-      <MaskingTape x={FORMAT.width * 0.18} y={70} width={260} rotate={-8} />
+      <GridPaper opacity={0.7 + variant * 0.05} />
+      <MaskingTape x={FORMAT.width * 0.18} y={70} width={260} rotate={tapeRotate} />
       <MaskingTape
         x={FORMAT.width * 0.85}
         y={FORMAT.height - 130}
         width={220}
-        rotate={6}
+        rotate={-tapeRotate}
       />
-      <DriftingDoodles />
+      <DriftingDoodles variant={variant} />
     </AbsoluteFill>
   );
 };
 
-const GridPaper: React.FC = () => (
+const GridPaper: React.FC<{ opacity: number }> = ({ opacity }) => (
   <div
     style={{
       position: "absolute",
@@ -39,7 +58,7 @@ const GridPaper: React.FC = () => (
         linear-gradient(to bottom, ${COLORS.gridLine} 1px, transparent 1px)
       `,
       backgroundSize: `${GRID}px ${GRID}px`,
-      opacity: 0.85,
+      opacity,
     }}
   />
 );
@@ -65,48 +84,57 @@ const MaskingTape: React.FC<TapeProps> = ({ x, y, width, rotate = 0 }) => (
   />
 );
 
-const DriftingDoodles: React.FC = () => {
+/** Bộ màu doodle xoay theo variant — mỗi scene 1 tông rìa khác. */
+const DOODLE_PALETTES = [
+  [COLORS.accentRed, COLORS.accentTeal, COLORS.ink, COLORS.accentBlue],
+  [COLORS.accentBlue, COLORS.accentRed, COLORS.accentTeal, COLORS.ink],
+  [COLORS.accentTeal, COLORS.ink, COLORS.accentBlue, COLORS.accentRed],
+  [COLORS.ink, COLORS.accentBlue, COLORS.accentRed, COLORS.accentTeal],
+] as const;
+
+const DriftingDoodles: React.FC<{ variant: number }> = ({ variant }) => {
   const frame = useCurrentFrame();
   const t = frame / 60;
   const safeBottomY = FORMAT.height - SAFE_ZONE.bottom - 60;
-  // Đặt thưa quanh rìa, tránh giữa khung (chỗ scene sticker) + tránh
-  // vùng dưới (caption).
+  const pal = DOODLE_PALETTES[variant];
+  // Offset dọc xoay theo variant để vị trí doodle dịch giữa các scene.
+  const off = variant * 36;
   return (
     <>
-      <Sparkle x={120} y={260 + Math.sin(t) * 8} color={COLORS.accentRed} size={48} delay={0} />
+      <Sparkle x={120} y={240 + off + Math.sin(t) * 8} color={pal[0]} size={48} delay={0} />
       <Sparkle
         x={FORMAT.width - 140}
-        y={420 + Math.cos(t * 0.8) * 8}
-        color={COLORS.accentTeal}
+        y={440 - off + Math.cos(t * 0.8) * 8}
+        color={pal[1]}
         size={42}
         delay={20}
       />
       <StarSmall
         x={80}
-        y={FORMAT.height * 0.5}
-        color={COLORS.ink}
+        y={FORMAT.height * 0.5 + off}
+        color={pal[2]}
         size={56}
         delay={10}
       />
       <Squiggle
         x={FORMAT.width - 100}
-        y={FORMAT.height * 0.62}
-        color={COLORS.accentBlue}
+        y={FORMAT.height * 0.62 - off}
+        color={pal[3]}
         size={84}
-        rotate={28}
+        rotate={28 + variant * 12}
         delay={5}
       />
       <DottedPath
         x={FORMAT.width * 0.5}
         y={safeBottomY}
-        color={COLORS.ink}
+        color={pal[2]}
         size={120}
         delay={30}
       />
       <StarSmall
         x={FORMAT.width - 90}
-        y={220}
-        color={COLORS.accentRed}
+        y={220 + off}
+        color={pal[0]}
         size={44}
         delay={45}
       />
