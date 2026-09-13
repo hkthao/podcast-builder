@@ -91,15 +91,15 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scene
       >
         <defs>
           {/*
-            Gradient ngang: navy ngoài → accent (coral) ở giữa → navy về phải.
-            Tạo cảm giác "energy peak" tự nhiên ở center, không hard cut.
+            Gradient ngang: MÀU CHỦ ĐẠO (accent) chiếm phần lớn sóng để đồng bộ
+            với cover — chỉ fade sang navy ở 2 mép để tạo chiều sâu, không để
+            navy nuốt mất màu theme (user: "màu của wave" phải theo màu chủ đề).
           */}
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor={COLORS.ink} />
-            <stop offset="35%" stopColor={COLORS.ink} />
-            <stop offset="48%" stopColor={accent} />
-            <stop offset="52%" stopColor={accent} />
-            <stop offset="65%" stopColor={COLORS.ink} />
+            <stop offset="16%" stopColor={accent} />
+            <stop offset="50%" stopColor={accent} />
+            <stop offset="84%" stopColor={accent} />
             <stop offset="100%" stopColor={COLORS.ink} />
           </linearGradient>
         </defs>

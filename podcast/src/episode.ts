@@ -34,6 +34,12 @@ export const EpisodeConfigSchema = z.object({
   accentColor: z.string().nullable().default(null),
   bgm: z.string().nullable().default(null),
   bgmVolumeDb: z.number().default(-28),
+  /**
+   * Số giây NHẠC NỀN kéo dài ở CUỐI video sau khi hết tiếng nói (music-only
+   * outro tail). Trong khoảng này giọng đã im, chỉ còn nhạc + thẻ outro rồi fade
+   * out. Chỉ áp dụng khi có bgm. 0 = tắt (kết thúc ngay khi hết tiếng).
+   */
+  outroTailSec: z.number().nonnegative().default(6),
   showIntro: z.boolean().default(true),
   showOutro: z.boolean().default(true),
   /** Bật lớp biên tập gốc trên màn hình (tiêu đề chương + trích dẫn có nguồn). */
@@ -90,6 +96,19 @@ export const EpisodeConfigSchema = z.object({
 
 export type EpisodeConfig = z.infer<typeof EpisodeConfigSchema>;
 
+/**
+ * Số FRAME nhạc-nền-đuôi ở cuối video (music-only outro tail). Chỉ >0 khi có
+ * bgm và outroTailSec>0. Dùng chung ở Root (tổng duration), Video (vùng outro)
+ * và pipeline footage (mixBgmIntoVoice tailSec) để không lệch nhau.
+ */
+export const outroTailFrames = (
+  episode: Pick<EpisodeConfig, "bgm" | "outroTailSec">,
+  fps: number,
+): number =>
+  episode.bgm && episode.outroTailSec > 0
+    ? Math.round(episode.outroTailSec * fps)
+    : 0;
+
 export const buildEpisodeTemplate = (
   name: string,
   style: EpisodeConfig["style"] = "podcast",
@@ -102,6 +121,7 @@ export const buildEpisodeTemplate = (
   accentColor: null,
   bgm: null,
   bgmVolumeDb: -28,
+  outroTailSec: 6,
   showIntro: true,
   showOutro: true,
   showEditorial: true,

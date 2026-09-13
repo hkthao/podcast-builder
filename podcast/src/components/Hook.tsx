@@ -1,5 +1,6 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { COLORS, FPS, SAFE_ZONE } from "../theme";
+import { HOOK_SECONDS } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
@@ -12,7 +13,7 @@ import { Sparkle, StarSmall } from "./doodles";
  * pulse shift trễ sau khi word-pop xong → 3 beats: read setup → climax →
  * underline seal.
  */
-export const HOOK_DURATION_FRAMES = Math.round(FPS * 3.5);
+export const HOOK_DURATION_FRAMES = Math.round(FPS * HOOK_SECONDS);
 
 const T = {
   punchlineStart: 10, // sau khi setup lines đã được đọc 1 nhịp

@@ -63,6 +63,18 @@ export type MixBgmInput = {
    * Mức bump intro/outro (dB above base). Default +10dB → final ≈ -12dB.
    */
   introOutroBumpDb?: number;
+  /**
+   * Số giây NHẠC-NỀN-ĐUÔI thêm vào SAU khi hết tiếng nói (music-only outro tail).
+   * Voice được pad im lặng thêm tailSec; nhạc tiếp tục ở base (không duck vì
+   * không còn tiếng) rồi fade out ở ~2.5s cuối. 0 = không kéo đuôi.
+   */
+  tailSec?: number;
+  /**
+   * LỊCH NHẠC (user chốt): nếu set headSec > 0 → nhạc CHỈ chạy ở 2 cửa sổ:
+   * [0, headSec] (đầu + intro/hook + ~5s) rồi FADE TẮT, và [voiceDur, +tailSec]
+   * (đuôi). Đoạn GIỮA KHÔNG có nhạc. Không set → nhạc chạy suốt (ducking) như cũ.
+   */
+  headSec?: number;
 };
 
 export type MixBgmResult = {
@@ -70,9 +82,13 @@ export type MixBgmResult = {
   durationMs: number;
 };
 
-const DEFAULT_BGM_VOLUME_DB = -22;
+const DEFAULT_BGM_VOLUME_DB = -18;
 const DEFAULT_INTRO_OUTRO_SEC = 3;
 const DEFAULT_INTRO_OUTRO_BUMP_DB = 10;
+/** Bump cho đuôi nhạc-only (to hơn intro vì phải nghe rõ, không có giọng đè). */
+const DEFAULT_TAIL_BUMP_DB = 12;
+/** Boost đuôi nhạc trong LỊCH NHẠC (dB, chuyển sang hệ số tuyến tính cho envelope). */
+const DEFAULT_TAIL_BOOST_DB = 12;
 
 /**
  * Mix BGM vào voice → output AAC mới trong TMP_DIR. Không xoá file gốc.
@@ -100,51 +116,100 @@ export async function mixBgmIntoVoice(
   const bgmVolDb = input.bgmVolumeDb ?? DEFAULT_BGM_VOLUME_DB;
   const introSec = Math.max(0, input.introOutroSec ?? DEFAULT_INTRO_OUTRO_SEC);
   const bumpDb = input.introOutroBumpDb ?? DEFAULT_INTRO_OUTRO_BUMP_DB;
+  const tailSec = Math.max(0, input.tailSec ?? 0);
 
   const voiceDur = await ffprobeDurationSec(input.voicePath);
+  // Tổng thời lượng sau khi kéo đuôi nhạc nền (giọng im ở đoạn tail).
+  const totalDur = voiceDur + tailSec;
 
   await fsp.mkdir(TMP_DIR, { recursive: true });
+  // Container .m4a (mp4) — có metadata duration chuẩn (ADTS .aac ước lượng sai
+   // → -shortest lúc mux có thể cắt cụt đuôi nhạc).
   const outputPath = path.join(
     TMP_DIR,
-    `${input.episodeName}.with-bgm.aac`,
+    `${input.episodeName}.with-bgm.m4a`,
   );
 
-  // Build filter graph
-  // - aloop=loop=-1: lặp vô tận, size đủ lớn cho podcast dài
-  // - equalizer=f=2500:t=q:w=1.5:g=-6: notch -6dB tại 2.5kHz, Q=1.5 cover 1-4kHz
-  // - sidechaincompress:
-  //     threshold=0.05 (~ -26dBFS) — voice ngưỡng kích hoạt
-  //     ratio=8 — duck mạnh
-  //     attack=20ms — phản ứng nhanh
-  //     release=400ms — pop lại mượt, không pump
+  // Build filter graph — TỐI ƯU LOA ĐIỆN THOẠI (nhạc nghe được trên loa nhỏ).
+  // BÀI HỌC (reel + podcast tập 102): loa điện thoại chỉ tái tạo tốt dải MID;
+  // nếu NOTCH mid + để nhạc quá nhỏ → nhạc BIẾN MẤT trên điện thoại (dù rõ trên
+  // headphone). Nên: highpass cắt sub-bass loa không phát được + BOOST mid/presence
+  // để nhạc "xuyên" qua loa nhỏ (KHÔNG notch), base to hơn, ducking nhẹ hơn.
+  // - highpass=f=120: bỏ trầm ù loa không phát được.
+  // - equalizer f=1800 g=+4: nhấn presence cho piano nổi trên loa điện thoại.
+  // - sidechaincompress ratio=4/release=300: duck vừa phải → nhạc vẫn hiện diện.
   const bgmChain = [
     "aloop=loop=-1:size=2147483647",
     "aformat=channel_layouts=stereo",
-    "equalizer=f=2500:t=q:w=1.5:g=-6",
+    "highpass=f=120",
+    "equalizer=f=1800:t=q:w=1.0:g=4",
     `volume=${bgmVolDb}dB`,
   ].join(",");
 
-  // Intro/outro bump expression — enable khi t<intro_sec hoặc t>dur-intro_sec
-  // ffmpeg eval syntax: between(x,min,max) → 1 nếu trong khoảng, 0 khác.
-  const enableExpr =
-    introSec > 0
-      ? `between(t,0,${introSec})+between(t,${(voiceDur - introSec).toFixed(3)},${voiceDur.toFixed(3)})`
-      : null;
+  const useSchedule = typeof input.headSec === "number" && input.headSec > 0;
 
-  const bumpFilter = enableExpr
-    ? `,volume=enable='${enableExpr}':volume=${bumpDb}dB`
-    : "";
+  // Filter áp lên [ducked] (nhạc sau ducking) + filter áp sau amix.
+  let bgmFinalExtra: string;
+  let amixTail: string;
 
+  if (useSchedule) {
+    // LỊCH NHẠC: nhạc CHỈ ở [0, headSec] và [voiceDur, totalDur]; GIỮA = 0.
+    // Envelope gain(t) eval theo frame (không dùng afade vì afade-out là vĩnh
+    // viễn, sẽ giết luôn đuôi). Đầu: fade in 0.5s + fade out 1.5s cuối cửa sổ.
+    // Đuôi: fade in 1s + boost + fade out. Giữa: 0 (im nhạc).
+    const HS = input.headSec!.toFixed(3);
+    const VD = voiceDur.toFixed(3);
+    const TD = totalDur.toFixed(3);
+    const TB = Math.pow(10, DEFAULT_TAIL_BOOST_DB / 20).toFixed(3);
+    const tfo = Math.min(2.5, tailSec > 0 ? tailSec : 2.5).toFixed(3);
+    // ffmpeg expr: min()/max() CHỈ nhận 2 tham số → phải lồng nhau.
+    const headG = `max(0,min(min(1,t/0.5),(${HS}-t)/1.5))`;
+    const tailG =
+      tailSec > 0
+        ? `${TB}*max(0,min(min(1,(t-${VD})/1.0),(${TD}-t)/${tfo}))`
+        : "0";
+    const env = `if(lt(t,${HS}),${headG},if(lt(t,${VD}),0,${tailG}))`;
+    bgmFinalExtra = `,volume=eval=frame:volume='${env}'`;
+    amixTail = "";
+  } else {
+    // CŨ: nhạc chạy suốt + bump intro/outro + (nếu có) đuôi + fade cuối.
+    const introExpr = introSec > 0 ? `between(t,0,${introSec})` : null;
+    const outroExpr =
+      introSec > 0 && tailSec === 0
+        ? `between(t,${(voiceDur - introSec).toFixed(3)},${voiceDur.toFixed(3)})`
+        : null;
+    const enableExpr = [introExpr, outroExpr].filter(Boolean).join("+") || null;
+    let bumpFilter = enableExpr
+      ? `,volume=enable='${enableExpr}':volume=${bumpDb}dB`
+      : "";
+    if (tailSec > 0) {
+      const tailExpr = `between(t,${voiceDur.toFixed(3)},${totalDur.toFixed(3)})`;
+      bumpFilter += `,volume=enable='${tailExpr}':volume=${DEFAULT_TAIL_BUMP_DB}dB`;
+    }
+    const fadeDur = tailSec > 0 ? Math.min(2.5, tailSec) : 0;
+    bgmFinalExtra = bumpFilter;
+    amixTail =
+      fadeDur > 0
+        ? `,afade=t=out:st=${(totalDur - fadeDur).toFixed(3)}:d=${fadeDur.toFixed(3)}`
+        : "";
+  }
+
+  // KÉO ĐUÔI: pad voice bằng im lặng tới totalDur (apad=whole_dur — chuẩn xác
+  // trong ffmpeg 8). QUAN TRỌNG: sidechaincompress KẾT THÚC khi input sidechain
+  // (voice) hết → nếu không pad, cả graph bị cắt ở voiceDur, mất đuôi.
+  const voicePad =
+    tailSec > 0 ? `,apad=whole_dur=${totalDur.toFixed(3)}` : "";
   const filterComplex = [
     // BGM chain
     `[1:a]${bgmChain}[bgm_eq]`,
-    // Sidechain ducking (voice [0:a] as trigger, BGM as main)
-    `[bgm_eq][0:a]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[ducked]`,
-    // Intro/outro bump (apply lên kết quả ducked)
-    `[ducked]aformat=channel_layouts=stereo${bumpFilter}[bgm_final]`,
-    // Final mix — voice (force stereo) + bgm_final, duration theo voice
-    `[0:a]aformat=channel_layouts=stereo[voice_st]`,
-    `[voice_st][bgm_final]amix=inputs=2:duration=first:dropout_transition=0[out]`,
+    // Voice (force stereo + pad đuôi) → tách 2 nhánh: sidechain trigger + trộn.
+    `[0:a]aformat=channel_layouts=stereo${voicePad},asplit=2[vtrig][vmix]`,
+    // Sidechain ducking (voice làm trigger, BGM làm main)
+    `[bgm_eq][vtrig]sidechaincompress=threshold=0.05:ratio=4:attack=20:release=300[ducked]`,
+    // Envelope lịch nhạc (hoặc bump cũ) áp lên nhạc sau ducking.
+    `[ducked]aformat=channel_layouts=stereo${bgmFinalExtra}[bgm_final]`,
+    // Final mix — voice(pad) + bgm; longest theo BGM vô tận, "-t" cắt ở totalDur.
+    `[vmix][bgm_final]amix=inputs=2:duration=longest:dropout_transition=0,alimiter=limit=0.95${amixTail}[out]`,
   ].join(";");
 
   await execFileAsync("ffmpeg", [
@@ -157,6 +222,9 @@ export async function mixBgmIntoVoice(
     filterComplex,
     "-map",
     "[out]",
+    // Cắt cứng ở totalDur (voice + đuôi nhạc) vì BGM loop vô tận.
+    "-t",
+    String(totalDur),
     "-c:a",
     "aac",
     "-b:a",

@@ -14,6 +14,7 @@ import {
   EpisodeConfigSchema,
   type EpisodeConfig,
 } from "../src/episode";
+import { INTRO_SECONDS, HOOK_SECONDS, HEAD_MUSIC_EXTRA_SECONDS } from "../src/timing";
 import { processAudio } from "../../shared/audio/process-audio";
 import { transcribeAudio } from "../../shared/transcribe/transcribe";
 import { getModel } from "../../shared/transcribe/whisper-config";
@@ -22,7 +23,7 @@ import { planEpisode } from "./plan-episode";
 import { generateEditorial } from "./gen-editorial";
 import { stageFootageClips } from "./footage-clips";
 import { buildFootageBg, compositeChunk, muxAudio, concatVideos } from "./footage-composite";
-import { mixBgmIntoVoice } from "../../shared/audio/bgm-mix";
+import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 
 dotenv.config();
 
@@ -247,9 +248,14 @@ async function main() {
     );
 
     // 9. Render
+    const isVerifyClip = Number(process.env.RENDER_MAX_FRAMES ?? 0) > 0;
     const outputPath = path.join(
       OUTPUT_DIR,
-      args.preview ? `${baseName}.preview.mp4` : `${baseName}.mp4`,
+      args.preview
+        ? `${baseName}.preview.mp4`
+        : isVerifyClip
+          ? `${baseName}.verify.mp4`
+          : `${baseName}.mp4`,
     );
 
     if (args.preview) {
@@ -299,14 +305,22 @@ async function main() {
         id: COMPOSITION_ID,
         inputProps: overlayInputProps,
       });
-      const durationSec = overlayComposition.durationInFrames / overlayComposition.fps;
-      const total = overlayComposition.durationInFrames;
+      // RENDER_MAX_FRAMES: cap để render CLIP VERIFY ngắn (vd 3') qua ĐÚNG pipeline
+      // 2-pass (look + bgm + editorial chuẩn). Không set = render full.
+      const maxFrames = Number(process.env.RENDER_MAX_FRAMES ?? 0);
+      const total = maxFrames > 0
+        ? Math.min(overlayComposition.durationInFrames, maxFrames)
+        : overlayComposition.durationInFrames;
+      const durationSec = total / overlayComposition.fps;
+      if (maxFrames > 0) console.log(`[make] VERIFY clip: cap ${total} frames (~${durationSec.toFixed(0)}s)`);
       // B1: dựng nền footage full (ffmpeg — decode footage native, nhanh + ổn).
       console.log(`[make] footage 2-pass: dựng nền footage (ffmpeg)...`);
       const footageAbs = episode.footage
         .map((f) => path.resolve(path.dirname(args.audioPath), "footage", f))
         .filter((f) => fs.existsSync(f));
-      buildFootageBg(footageAbs, durationSec, footageBg);
+      buildFootageBg(footageAbs, durationSec, footageBg, {
+        themeColor: episode.accentColor,
+      });
       // B2: render ProRes alpha theo đoạn + ghép ngay + xoá ProRes.
       const OCHUNK = Number(process.env.RENDER_OVERLAY_CHUNK ?? 1500);
       const nOchunks = Math.ceil(total / OCHUNK);
@@ -348,11 +362,18 @@ async function main() {
         const bgmAbs = path.resolve(path.dirname(args.audioPath), episode.bgm);
         if (fs.existsSync(bgmAbs)) {
           console.log(`[make] mix nhạc nền (ducking): ${episode.bgm}`);
+          // Cửa sổ nhạc đầu = intro + hook + ~5s (khớp timeline overlay video).
+          const headMusicSec =
+            (episode.showIntro ? INTRO_SECONDS : 0) +
+            (episode.hook ? HOOK_SECONDS : 0) +
+            HEAD_MUSIC_EXTRA_SECONDS;
           const mixed = await mixBgmIntoVoice({
             voicePath: renderWav,
             bgmPath: bgmAbs,
             episodeName: baseName,
             bgmVolumeDb: episode.bgmVolumeDb,
+            tailSec: episode.outroTailSec,
+            headSec: headMusicSec,
           });
           audioForMux = mixed.outputPath;
         } else {
@@ -379,8 +400,8 @@ async function main() {
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[make] ✓ ${outputPath} (${elapsed}s)`);
 
-    // 10. Thumbnail (skip preview hoặc --no-thumb)
-    if (!args.preview && !args.noThumb) {
+    // 10. Thumbnail (skip preview, verify clip, hoặc --no-thumb)
+    if (!args.preview && !args.noThumb && !isVerifyClip) {
       const thumbPath = path.join(OUTPUT_DIR, `${baseName}.thumb.jpg`);
       const thumbFrame = Math.min(
         composition.durationInFrames - 1,
@@ -398,8 +419,8 @@ async function main() {
       console.log(`[make] ✓ ${thumbPath}`);
     }
 
-    // 11. Lock file
-    if (!args.preview) {
+    // 11. Lock file (skip verify clip)
+    if (!args.preview && !isVerifyClip) {
       const lockPath = path.join(OUTPUT_DIR, `${baseName}.lock.json`);
       const plan = JSON.parse(fs.readFileSync(planJsonPath, "utf-8"));
       const lock = {

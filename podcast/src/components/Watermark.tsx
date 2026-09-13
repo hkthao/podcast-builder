@@ -3,6 +3,8 @@ import { BRAND, COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
 
 type Props = {
   episodeNumber: number;
+  /** Màu chủ đề tập (hex) — nền badge số tập đồng bộ cover/wave/caption. */
+  accentColor?: string | null;
 };
 
 /** Logo height in px — keep ratio (~3:2) → width auto ≈ 1.5× height (~330px). */
@@ -15,7 +17,7 @@ const LOGO_WIDTH = LOGO_HEIGHT * 1.5;
  */
 const LOGO_ZOOM = 1.3;
 
-export const Watermark: React.FC<Props> = ({ episodeNumber }) => {
+export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor }) => {
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       {/*
@@ -60,7 +62,7 @@ export const Watermark: React.FC<Props> = ({ episodeNumber }) => {
         </div>
         <div
           style={{
-            backgroundColor: COLORS.accentRed,
+            backgroundColor: accentColor || COLORS.accentRed,
             color: COLORS.white,
             border: `5px solid ${COLORS.ink}`,
             borderRadius: 22,

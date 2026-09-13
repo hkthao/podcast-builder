@@ -1,5 +1,6 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, FPS } from "../theme";
+import { INTRO_SECONDS } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
@@ -8,12 +9,11 @@ import { Sparkle, StarSmall } from "./doodles";
  * Brand đã có trong Watermark (top-left) — KHÔNG lặp logo/episode badge ở cover.
  * Emphasis line: coral sticker bar uppercase trắng — đối lập cực mạnh với nền vàng.
  */
-export const INTRO_DURATION_FRAMES = Math.round(FPS * 3.0);
+export const INTRO_DURATION_FRAMES = Math.round(FPS * INTRO_SECONDS);
 
 const T = {
   underlineIn: 10,
   underlineSettle: 28,
-  outStart: INTRO_DURATION_FRAMES - 16,
 } as const;
 
 type Props = {
@@ -62,16 +62,12 @@ export const IntroCard: React.FC<Props> = ({
   const lines = splitIntoLines(title);
   const emphasisIdx = Math.floor(lines.length / 2);
 
-  // User-uploaded cover: render image full-frame với fade-out cuối, KHÔNG auto-gen.
+  // User-uploaded cover: render image full-frame. KHÔNG fade-out cuối — cover giữ
+  // đầy khung tới frame cuối rồi CẮT THẲNG sang Hook (2 thẻ đều full → không có
+  // khoảng trống footage/nền chớp giữa cover và hook = hết "giật").
   if (coverImage) {
-    const outOpacity = interpolate(
-      frame,
-      [T.outStart, INTRO_DURATION_FRAMES],
-      [1, 0],
-      { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-    );
     return (
-      <AbsoluteFill style={{ backgroundColor: COLORS.bg, opacity: outOpacity }}>
+      <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>
         <Img
           src={staticFile(coverImage)}
           style={{
@@ -97,12 +93,6 @@ export const IntroCard: React.FC<Props> = ({
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  const outOpacity = interpolate(
-    frame,
-    [T.outStart, INTRO_DURATION_FRAMES],
-    [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
 
   // Font size cho line thường (navy 3D bubble).
   const normalFontSize = (line: string): number => {
@@ -126,7 +116,6 @@ export const IntroCard: React.FC<Props> = ({
         backgroundColor: COLORS.bg,
         paddingLeft: 60,
         paddingRight: 60,
-        opacity: outOpacity,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

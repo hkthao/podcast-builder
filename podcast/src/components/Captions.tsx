@@ -17,6 +17,8 @@ const CAPTION_PADDING_BOTTOM = SAFE_ZONE.bottom - 40;
 type Props = {
   transcriptSrc: string | null;
   hideRanges?: ReadonlyArray<{ startMs: number; endMs: number }>;
+  /** Màu chủ đề tập (hex) — dùng cho viền + chữ caption, đồng bộ cover/wave. */
+  accentColor?: string | null;
 };
 
 type Page = {
@@ -141,7 +143,7 @@ const chunkBySentence = (transcript: Transcript): Page[] => {
   return pages;
 };
 
-export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
+export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentColor }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -196,6 +198,9 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
   const wc = page.text.split(/\s+/).filter(Boolean).length;
   const fontSize = wc > 7 ? 56 : wc > 5 ? 62 : TYPE_SCALE.caption;
 
+  // Viền + chữ theo màu chủ đề (fallback ink navy nếu tập chưa đặt màu).
+  const accent = accentColor || COLORS.ink;
+
   return (
     <AbsoluteFill
       style={{
@@ -212,11 +217,11 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
           opacity,
           transform: `scale(${scale})`,
           backgroundColor: COLORS.white,
-          border: `5px solid ${COLORS.ink}`,
+          border: `5px solid ${accent}`,
           borderRadius: 28,
           padding: "20px 36px",
           maxWidth: "100%",
-          boxShadow: `6px 6px 0 ${COLORS.ink}`,
+          boxShadow: `6px 6px 0 ${accent}`,
         }}
       >
         <div
@@ -226,7 +231,7 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges }) => {
             fontWeight: 700,
             fontSize,
             lineHeight: 1.25,
-            color: COLORS.ink,
+            color: accent,
             letterSpacing: "-0.01em",
           }}
         >

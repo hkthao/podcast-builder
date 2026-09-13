@@ -68,6 +68,54 @@ const clipHasPeople = async (videoPath: string): Promise<boolean> => {
   }
 };
 
+/** hex → HSL (h 0-360, s/l 0-1). null nếu hex sai. */
+const hexToHsl = (hex: string): { h: number; s: number; l: number } | null => {
+  const m = hex.trim().replace(/^#/, "").match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/);
+  if (!m) return null;
+  const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = (((g - b) / d) % 6 + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return { h, s, l };
+};
+
+type ColorFamily = { words: string; subjects: string[] };
+
+/** hue (0-360) → HỌ MÀU + danh sách cảnh thiên nhiên mang màu đó (KHÔNG người). */
+const pickColorFamily = (h: number): ColorFamily => {
+  if (h < 25 || h >= 345)
+    return { words: "đỏ / coral / hồng san hô / cam ấm", subjects: ["red poppy field in wind", "pink cherry blossom branch", "bougainvillea flowers", "red tulip field", "autumn red maple leaves", "warm golden sunset sky", "sunrise warm glow over ocean", "red rock canyon", "sand dunes at sunset", "hibiscus flower close up", "rose garden close up", "coral pink flowers"] };
+  if (h < 50)
+    return { words: "cam / hổ phách / vàng ấm", subjects: ["autumn forest golden orange leaves", "orange sunset clouds", "marigold flower field", "red canyon earth", "golden wheat field at sunset", "orange maple leaves", "desert dunes golden hour", "autumn birch forest", "amber dusk sky", "calendula flowers"] };
+  if (h < 70)
+    return { words: "vàng / vàng gold", subjects: ["sunflower field", "golden wheat field", "yellow tulip field", "canola flower field", "autumn golden birch forest", "golden hour meadow", "mustard flower field", "yellow ginkgo leaves", "daffodil field"] };
+  if (h < 160)
+    return { words: "xanh lá", subjects: ["spring fresh green forest", "green rice terraces", "bamboo forest", "tropical rainforest", "green tea hills", "moss covered forest", "fern leaves close up", "lily pads on pond", "green valley meadow", "waterfall in green forest"] };
+  if (h < 200)
+    return { words: "xanh ngọc / cyan", subjects: ["turquoise glacier lake", "clear tropical sea water", "turquoise waterfall pool", "blue glacier ice cave", "teal ocean lagoon", "icebergs in turquoise water", "green mint aurora sky"] };
+  if (h < 255)
+    return { words: "xanh dương / xanh biển", subjects: ["calm blue lake and mountains", "deep blue ocean waves", "blue hour mountains", "starry night sky milky way", "blue iceberg", "bluebell forest", "clear blue sky with clouds", "blue misty mountains at dawn"] };
+  if (h < 300)
+    return { words: "tím / oải hương", subjects: ["lavender field rows", "purple wisteria hanging", "jacaranda tree purple bloom", "violet twilight sky", "purple aurora sky", "lupine flower field", "purple crocus field"] };
+  return { words: "hồng / magenta / hồng sen", subjects: ["pink cherry blossom", "pink lotus flower pond", "magenta bougainvillea", "pink sunset sky", "pink cosmos flower field", "pink water lily", "pink muhly grass field"] };
+};
+
+/** Khối chỉ dẫn HỌ MÀU chủ đề cho shot-list (rỗng nếu không có accent / màu xám). */
+const themeColorGuidance = (hex: string | null): string => {
+  if (!hex) return "";
+  const hsl = hexToHsl(hex);
+  if (!hsl || hsl.s < 0.15) return ""; // gần xám → không ép màu
+  const fam = pickColorFamily(hsl.h);
+  return `\n\nMÀU CHỦ ĐỀ tập này: ${hex} (họ màu: ${fam.words}). ƯU TIÊN chọn cảnh có MÀU thuộc HỌ MÀU này — màu chủ đề VÀ các màu họ hàng gần đều được, KHÔNG cần đúng 100%. Gợi ý cảnh hợp màu (ưu tiên dùng, xoay vòng cho đa dạng, vẫn phải hợp mạch cảm xúc từng beat + TUYỆT ĐỐI KHÔNG NGƯỜI): ${fam.subjects.join(", ")}. Có thể xen vài cảnh trung tính (mây/nước/sương/nắng) mang tông màu đó qua ánh sáng. Đừng ép tất cả beat cùng một cảnh.`;
+};
+
 const genShotList = async (
   transcript: Transcript,
   episode: EpisodeConfig,
@@ -77,11 +125,12 @@ const genShotList = async (
     .filter(Boolean)
     .join(" ")
     .slice(0, 6000);
+  const guidance = themeColorGuidance(episode.accentColor);
   const raw = await chat({
     provider: "openai",
     model: SHOT_MODEL,
     systemPrompt: SHOTLIST_SYSTEM,
-    userContent: `Tiêu đề: ${episode.title}\n\nTranscript:\n${text}\n\nSinh shot-list 12-16 beat, query CHỈ cảnh thiên nhiên không người, màu đa dạng. JSON.`,
+    userContent: `Tiêu đề: ${episode.title}${guidance}\n\nTranscript:\n${text}\n\nSinh shot-list 12-16 beat, query CHỈ cảnh thiên nhiên không người, ƯU TIÊN họ màu chủ đề ở trên (không cần đúng 100%), màu đa dạng. JSON.`,
     temperature: 0.6,
     jsonMode: true,
     maxTokens: 2500,

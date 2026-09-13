@@ -12,6 +12,7 @@ import { processAudio } from "../../../shared/audio/process-audio";
 import { transcribeAudio } from "../../../shared/transcribe/transcribe";
 import { spellFix } from "../../scripts/spell-fix";
 import { planEpisode } from "../../scripts/plan-episode";
+import { INTRO_SECONDS, HOOK_SECONDS, HEAD_MUSIC_EXTRA_SECONDS } from "../../src/timing";
 import { generateEditorial } from "../../scripts/gen-editorial";
 import { stageFootageClips } from "../../scripts/footage-clips";
 import {
@@ -20,7 +21,7 @@ import {
   muxAudio,
   concatVideos,
 } from "../../scripts/footage-composite";
-import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
+import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 import { getModel } from "../../../shared/transcribe/whisper-config";
 import { bus } from "../../../shared/studio-core/events";
 import { PATHS, type EpisodeStatus, getEpisode } from "./episode-store";
@@ -538,7 +539,9 @@ async function runJob(job: JobInternal): Promise<void> {
         const footageAbs = episodeConfig.footage
           .map((f) => path.join(PATHS.INPUT_DIR, "footage", f))
           .filter((f) => fs.existsSync(f));
-        buildFootageBg(footageAbs, durationSec, footageBg);
+        buildFootageBg(footageAbs, durationSec, footageBg, {
+          themeColor: episodeConfig.accentColor,
+        });
         checkAbort();
 
         const OCHUNK = Number(process.env.RENDER_OVERLAY_CHUNK ?? 1500);
@@ -587,11 +590,17 @@ async function runJob(job: JobInternal): Promise<void> {
           const bgmAbs = path.resolve(path.dirname(ep.audioPath), episodeConfig.bgm);
           if (fs.existsSync(bgmAbs)) {
             setPhase(job, "render", 90, "Mix nhạc nền (ducking)…");
+            const headMusicSec =
+              (episodeConfig.showIntro ? INTRO_SECONDS : 0) +
+              (episodeConfig.hook ? HOOK_SECONDS : 0) +
+              HEAD_MUSIC_EXTRA_SECONDS;
             const mixed = await mixBgmIntoVoice({
               voicePath: renderWav,
               bgmPath: bgmAbs,
               episodeName: baseName,
               bgmVolumeDb: episodeConfig.bgmVolumeDb,
+              tailSec: episodeConfig.outroTailSec,
+              headSec: headMusicSec,
             });
             audioForMux = mixed.outputPath;
           }

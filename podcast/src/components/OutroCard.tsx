@@ -1,4 +1,10 @@
-import { AbsoluteFill, Img, interpolate, useCurrentFrame } from "remotion";
+import {
+  AbsoluteFill,
+  Img,
+  interpolate,
+  useCurrentFrame,
+  useVideoConfig,
+} from "remotion";
 import { BRAND, COLORS, FPS } from "../theme";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
@@ -11,13 +17,16 @@ const FADE_OUT_FRAMES = Math.round(FPS * 0.4);
 
 export const OutroCard: React.FC = () => {
   const frame = useCurrentFrame();
+  // durationInFrames = độ dài Sequence outro (có thể = đuôi nhạc nền, dài hơn
+  // OUTRO_DURATION_FRAMES) → fade-out canh theo CUỐI sequence, không cứng 4s.
+  const { durationInFrames } = useVideoConfig();
   const inOpacity = interpolate(frame, [0, FADE_IN_FRAMES], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const holdOpacity = interpolate(
     frame,
-    [OUTRO_DURATION_FRAMES - FADE_OUT_FRAMES, OUTRO_DURATION_FRAMES],
+    [durationInFrames - FADE_OUT_FRAMES, durationInFrames],
     [1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );

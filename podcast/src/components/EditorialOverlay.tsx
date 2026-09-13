@@ -31,6 +31,8 @@ type Props = {
    * thay vì bị nuốt trong lúc intro/hook che.
    */
   revealMs: number;
+  /** Màu chủ đề tập (hex) — viền + chữ chương đồng bộ cover/wave/caption. */
+  accentColor?: string | null;
 };
 
 /** Opacity fade-in/out cho một cửa sổ hiển thị [start, start+dur]. */
@@ -58,7 +60,9 @@ export const EditorialOverlay: React.FC<Props> = ({
   editorialSrc,
   speechOffsetMs,
   revealMs,
+  accentColor,
 }) => {
+  const accent = accentColor || COLORS.ink;
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const [editorial, setEditorial] = useState<Editorial | null>(null);
@@ -141,10 +145,10 @@ export const EditorialOverlay: React.FC<Props> = ({
               alignItems: "center",
               gap: 16,
               background: COLORS.white,
-              border: `3px solid ${COLORS.ink}`,
+              border: `3px solid ${accent}`,
               borderRadius: 22,
               padding: "14px 28px",
-              boxShadow: `6px 6px 0 ${withAlpha(COLORS.ink, 0.18)}`,
+              boxShadow: `6px 6px 0 ${withAlpha(accent, 0.18)}`,
               maxWidth: "100%",
             }}
           >
@@ -153,7 +157,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 width: 16,
                 height: 16,
                 borderRadius: "50%",
-                background: COLORS.accentRed,
+                background: accent,
                 flexShrink: 0,
               }}
             />
@@ -163,7 +167,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 fontWeight: 800,
                 fontSize: 36,
                 lineHeight: 1.15,
-                color: COLORS.ink,
+                color: accent,
                 textAlign: "center",
               }}
             >

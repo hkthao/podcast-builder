@@ -3,7 +3,7 @@ import { parseMedia } from "@remotion/media-parser";
 import { Video, type CompProps } from "./Video";
 import { ScenePreview, type ScenePreviewProps } from "./ScenePreview";
 import { FORMAT, FPS } from "./theme";
-import { buildEpisodeTemplate, EpisodeConfigSchema } from "./episode";
+import { buildEpisodeTemplate, EpisodeConfigSchema, outroTailFrames } from "./episode";
 
 const defaultProps: CompProps = {
   audioSrc: "",
@@ -42,8 +42,10 @@ export const RemotionRoot: React.FC = () => {
             fields: { slowDurationInSeconds: true },
             acknowledgeRemotionLicense: true,
           });
+          // + đuôi nhạc nền cuối (music-only outro tail) sau khi hết tiếng nói.
+          const tail = outroTailFrames(props.episode, FPS);
           return {
-            durationInFrames: Math.ceil(slowDurationInSeconds * FPS),
+            durationInFrames: Math.ceil(slowDurationInSeconds * FPS) + tail,
           };
         }}
       />
