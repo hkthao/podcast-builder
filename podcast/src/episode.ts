@@ -40,6 +40,12 @@ export const EpisodeConfigSchema = z.object({
    * out. Chỉ áp dụng khi có bgm. 0 = tắt (kết thúc ngay khi hết tiếng).
    */
   outroTailSec: z.number().nonnegative().default(6),
+  /**
+   * Cách chạy nhạc nền:
+   * - "full" (mặc định): nhạc chạy SUỐT video (ducking dưới tiếng nói) + đuôi.
+   * - "headtail": chỉ chạy ở đầu (intro+hook+5s) và đuôi, GIỮA tắt nhạc.
+   */
+  bgmMode: z.enum(["full", "headtail"]).default("full"),
   showIntro: z.boolean().default(true),
   showOutro: z.boolean().default(true),
   /** Bật lớp biên tập gốc trên màn hình (tiêu đề chương + trích dẫn có nguồn). */
@@ -122,6 +128,7 @@ export const buildEpisodeTemplate = (
   bgm: null,
   bgmVolumeDb: -28,
   outroTailSec: 6,
+  bgmMode: "full",
   showIntro: true,
   showOutro: true,
   showEditorial: true,

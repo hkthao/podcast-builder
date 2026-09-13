@@ -591,9 +591,11 @@ async function runJob(job: JobInternal): Promise<void> {
           if (fs.existsSync(bgmAbs)) {
             setPhase(job, "render", 90, "Mix nhạc nền (ducking)…");
             const headMusicSec =
-              (episodeConfig.showIntro ? INTRO_SECONDS : 0) +
-              (episodeConfig.hook ? HOOK_SECONDS : 0) +
-              HEAD_MUSIC_EXTRA_SECONDS;
+              episodeConfig.bgmMode === "headtail"
+                ? (episodeConfig.showIntro ? INTRO_SECONDS : 0) +
+                  (episodeConfig.hook ? HOOK_SECONDS : 0) +
+                  HEAD_MUSIC_EXTRA_SECONDS
+                : undefined;
             const mixed = await mixBgmIntoVoice({
               voicePath: renderWav,
               bgmPath: bgmAbs,

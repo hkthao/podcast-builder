@@ -212,6 +212,7 @@ const buildTemplate = (
   bgm: null,
   bgmVolumeDb: -28,
   outroTailSec: 6,
+  bgmMode: "full",
   showIntro: true,
   showOutro: true,
   showEditorial: true,

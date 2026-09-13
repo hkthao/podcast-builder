@@ -138,7 +138,15 @@ export async function mixBgmIntoVoice(
   // - highpass=f=120: bỏ trầm ù loa không phát được.
   // - equalizer f=1800 g=+4: nhấn presence cho piano nổi trên loa điện thoại.
   // - sidechaincompress ratio=4/release=300: duck vừa phải → nhạc vẫn hiện diện.
+  // GHÉP LẶP LIỀN MẠCH: cắt IM LẶNG/FADE-OUT ở CUỐI bản nhạc trước khi aloop.
+  // Nhiều track (vd Scott Buckley "Felicity") fade tắt dần ở cuối → nếu để nguyên,
+  // mỗi mốc lặp rơi vào đoạn im → tiếng nhạc "hụt". Ở giữa video bị giọng che nên
+  // không nhận ra, nhưng ĐUÔI (giọng đã im) sẽ lộ ~2s dead-air nếu voiceDur trùng
+  // mốc lặp. areverse→silenceremove(đầu)→areverse = cắt đuôi im, lặp mới liền.
   const bgmChain = [
+    "areverse",
+    "silenceremove=start_periods=1:start_silence=0:start_threshold=-40dB",
+    "areverse",
     "aloop=loop=-1:size=2147483647",
     "aformat=channel_layouts=stereo",
     "highpass=f=120",

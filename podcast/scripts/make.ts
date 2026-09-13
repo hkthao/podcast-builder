@@ -362,11 +362,13 @@ async function main() {
         const bgmAbs = path.resolve(path.dirname(args.audioPath), episode.bgm);
         if (fs.existsSync(bgmAbs)) {
           console.log(`[make] mix nhạc nền (ducking): ${episode.bgm}`);
-          // Cửa sổ nhạc đầu = intro + hook + ~5s (khớp timeline overlay video).
+          // "headtail" → nhạc chỉ ở đầu (intro+hook+5s) + đuôi; "full" → suốt video.
           const headMusicSec =
-            (episode.showIntro ? INTRO_SECONDS : 0) +
-            (episode.hook ? HOOK_SECONDS : 0) +
-            HEAD_MUSIC_EXTRA_SECONDS;
+            episode.bgmMode === "headtail"
+              ? (episode.showIntro ? INTRO_SECONDS : 0) +
+                (episode.hook ? HOOK_SECONDS : 0) +
+                HEAD_MUSIC_EXTRA_SECONDS
+              : undefined;
           const mixed = await mixBgmIntoVoice({
             voicePath: renderWav,
             bgmPath: bgmAbs,
