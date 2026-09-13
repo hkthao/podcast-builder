@@ -32,3 +32,23 @@ __pycache__/
 .venv/
 .env
 models/
+
+# Build artifacts
+*.tsbuildinfo
+# Local Claude settings (skills ARE committed, personal settings are not)
+.claude/settings.local.json
+# Reel media / generated output (keep .md/.json/.ts source only)
+reel/episodes/*/audio*.wav
+reel/episodes/*/audio*.m4a
+reel/episodes/*/footage/
+reel/episodes/*/out/
+reel/assets/.cache/
+reel/assets/music/
+reel/episodes/*/work/
+reel/**/*.wav
+reel/**/*.mp4
+reel/**/*.m4a
+reel/**/*.mp3
+reel/**/*.ogg
+reel/**/*.jpg
+reel/**/*.jpeg

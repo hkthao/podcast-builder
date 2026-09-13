@@ -37,10 +37,13 @@ export type EpisodeConfig = {
   hook: string | null;
   episodeNumber: number;
   moodOverride: string | null;
+  accentColor: string | null;
   bgm: string | null;
   bgmVolumeDb: number;
   showIntro: boolean;
   showOutro: boolean;
+  showEditorial: boolean;
+  footage: string[];
   sceneOverrides: unknown;
   essayId: string | null;
   coverImage: string | null;
@@ -50,6 +53,11 @@ export type EpisodeConfig = {
   publishedAt: string | null;
   publishCaption: string | null;
   publishHashtags: string[];
+  aiAssisted: boolean;
+  scriptCredit: string | null;
+  musicCredit: string | null;
+  footageCredit: string | null;
+  sources: string[];
 };
 
 export type EpisodeSummary = {
@@ -134,6 +142,54 @@ export type ScenePlanItem = {
   mood: string;
   sceneType: string;
   text: string;
+};
+
+// ─── Comp/patch take ────────────────────────────────────────────────
+export type CompTake = {
+  variant: string;
+  file: string;
+  url: string;
+  durationMs: number;
+  hasTranscript: boolean;
+  isUploaded: boolean;
+};
+
+export type CompSentence = {
+  id: number;
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
+export type CompAlignCandidate = {
+  variant: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  score: number;
+};
+
+export type CompAlignRow = CompSentence & { candidates: CompAlignCandidate[] };
+
+export type CompPatch = {
+  baseStartMs: number;
+  baseEndMs: number;
+  variant: string;
+  startMs: number;
+  endMs: number;
+};
+
+export type CompJob = {
+  id: string;
+  slug: string;
+  kind: "transcribe" | "build";
+  status: "running" | "done" | "error";
+  percent: number;
+  message: string;
+  result: unknown;
+  error: string | null;
+  startedAt: number;
+  finishedAt: number | null;
 };
 
 export type PlanPayload = {
@@ -846,6 +902,84 @@ export const api = {
       { method: "POST" },
     ),
 
+  // ─── Comp/patch take (ghép & vá audio NotebookLM) ────────────────────
+  listTakes: (name: string) =>
+    jsonFetch<{ takes: CompTake[] }>(
+      `/api/comp/${encodeURIComponent(name)}/takes`,
+    ),
+
+  transcribeTakes: (name: string, variants?: string[]) =>
+    jsonFetch<{ jobId: string }>(
+      `/api/comp/${encodeURIComponent(name)}/takes/transcribe`,
+      { method: "POST", body: JSON.stringify({ variants }) },
+    ),
+
+  getCompJob: (name: string, jobId: string) =>
+    jsonFetch<CompJob>(
+      `/api/comp/${encodeURIComponent(name)}/jobs/${encodeURIComponent(jobId)}`,
+    ),
+
+  alignTakes: (name: string, base: string) =>
+    jsonFetch<{
+      base: string;
+      candidateVariants: string[];
+      rows: CompAlignRow[];
+    }>(
+      `/api/comp/${encodeURIComponent(name)}/align?base=${encodeURIComponent(base)}`,
+    ),
+
+  buildComp: (name: string, base: string, patches: CompPatch[]) =>
+    jsonFetch<{ jobId: string }>(
+      `/api/comp/${encodeURIComponent(name)}/build`,
+      { method: "POST", body: JSON.stringify({ base, patches }) },
+    ),
+
+  /** Sửa chính tả 1 câu trong bản nền (ghi vào corrected.json của take). */
+  editCompSentence: (
+    name: string,
+    base: string,
+    startMs: number,
+    endMs: number,
+    text: string,
+  ) =>
+    jsonFetch<{ ok: true; rows: CompSentence[] }>(
+      `/api/comp/${encodeURIComponent(name)}/edit-sentence`,
+      { method: "POST", body: JSON.stringify({ base, startMs, endMs, text }) },
+    ),
+
+  promoteComp: (name: string) =>
+    jsonFetch<{ ok: boolean; primary: string }>(
+      `/api/comp/${encodeURIComponent(name)}/promote`,
+      { method: "POST" },
+    ),
+
+  uploadCompTake: async (
+    name: string,
+    file: File,
+  ): Promise<{ variant: string; url: string; durationMs: number }> => {
+    const form = new FormData();
+    form.append("audio", file);
+    const res = await fetch(
+      `/api/comp/${encodeURIComponent(name)}/upload-take`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as {
+      variant: string;
+      url: string;
+      durationMs: number;
+    };
+  },
+
+  deleteCompTake: (name: string, variant: string) =>
+    jsonFetch<{ ok: boolean }>(
+      `/api/comp/${encodeURIComponent(name)}/take/${encodeURIComponent(variant)}`,
+      { method: "DELETE" },
+    ),
+
   listRenderJobs: () =>
     jsonFetch<{ jobs: RenderJob[] }>("/api/render/jobs"),
 
@@ -914,7 +1048,7 @@ export const api = {
     episodeName: string,
     input: { provider: LLMProvider; model: string },
   ) =>
-    jsonFetch<{ prompt: string }>(
+    jsonFetch<{ prompt: string; themeColor: string | null }>(
       `/api/episodes/${encodeURIComponent(episodeName)}/cover-prompt`,
       { method: "POST", body: JSON.stringify(input) },
     ),
@@ -1189,6 +1323,166 @@ export type ApiKeyStatus = {
   hasKey: boolean;
   source: "db" | "env" | "none";
   keyHint: string | null;
+};
+
+// ─── Reel pipeline (video reel dọc 9:16) ─────────────────────────────────
+
+export type ReelBeatInfo = {
+  count: number;
+  durationMs: number;
+  alignedPct?: number;
+};
+
+export type ReelEpisodeStatus = {
+  slug: string;
+  hasScript: boolean;
+  hasShotList: boolean;
+  audioParts: string[];
+  footageCount: number;
+  footage: string[];
+  hasBeats: boolean;
+  beats: ReelBeatInfo | null;
+  hasCaption: boolean;
+  output: string[];
+  finalAudio: string[];
+};
+
+export type ReelSpeechPart = { label: string; text: string };
+
+export type ReelBlocks = {
+  scene: string;
+  sampleContext: string;
+  speaker: string;
+  speech: string;
+  speechParts: ReelSpeechPart[];
+};
+
+export type ReelPost = { caption: string; hashtags: string[] };
+
+export type ReelEpisodeDetail = ReelEpisodeStatus & {
+  blocks: ReelBlocks;
+  shotList: string;
+  /** Tiêu đề (H1 trong script.md) — cho gen caption + cover. */
+  title: string;
+  /** Bài đăng fanpage đã lưu. */
+  post: ReelPost;
+  /** Nhạc nền dùng chung mọi tập (reel/assets/music). */
+  music: string[];
+  /** Độ dài từng file (ms) để so khớp audio ↔ footage. */
+  durations: { audio: Record<string, number>; footage: Record<string, number> };
+  audioDurationMs: number;
+  footageDurationMs: number;
+};
+
+export type ReelUploadKind = "audio" | "footage" | "music";
+export type ReelBucket = "audio" | "footage" | "work" | "out" | "music";
+
+/** 1 kết quả tìm footage dọc trên Pexels (đã chọn sẵn link preview + download). */
+export type ReelPexelsVideo = {
+  id: number;
+  duration: number;
+  width: number;
+  height: number;
+  /** Ảnh poster (thumbnail). */
+  image: string;
+  /** Trang Pexels (để credit / xem gốc). */
+  url: string;
+  author: string;
+  /** Link mp4 nhỏ để xem thử trong app. */
+  preview: string;
+  /** Link mp4 để tải vào footage của tập. */
+  download: string;
+};
+
+export type ReelPexelsSearchResult = {
+  q: string;
+  page: number;
+  perPage: number;
+  total: number;
+  hasMore: boolean;
+  videos: ReelPexelsVideo[];
+};
+
+export const reelApi = {
+  list: () => jsonFetch<{ episodes: ReelEpisodeStatus[] }>("/api/reel"),
+
+  get: (slug: string) =>
+    jsonFetch<ReelEpisodeDetail>(`/api/reel/${encodeURIComponent(slug)}`),
+
+  upload: async (slug: string, kind: ReelUploadKind, files: File[]) => {
+    const fd = new FormData();
+    fd.append("kind", kind);
+    for (const f of files) fd.append("files", f);
+    const res = await fetch(`/api/reel/${encodeURIComponent(slug)}/upload`, {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return (await res.json()) as {
+      ok: boolean;
+      saved: string[];
+      status: ReelEpisodeStatus;
+    };
+  },
+
+  /** Tìm footage dọc trên Pexels ngay trong app (proxy qua server để giấu API key). */
+  searchFootage: (q: string, page = 1) =>
+    jsonFetch<ReelPexelsSearchResult>(
+      `/api/reel/footage/search?q=${encodeURIComponent(q)}&page=${page}`,
+    ),
+
+  download: (slug: string, kind: "footage" | "music", urls: string[]) =>
+    jsonFetch<{
+      ok: boolean;
+      saved: string[];
+      failed: Array<{ url: string; error: string }>;
+      status: ReelEpisodeStatus;
+    }>(`/api/reel/${encodeURIComponent(slug)}/download`, {
+      method: "POST",
+      body: JSON.stringify({ kind, urls }),
+    }),
+
+  deleteFile: (slug: string, kind: ReelUploadKind, name: string) =>
+    jsonFetch<{ ok: boolean; status: ReelEpisodeStatus }>(
+      `/api/reel/${encodeURIComponent(slug)}/file/delete`,
+      { method: "POST", body: JSON.stringify({ kind, name }) },
+    ),
+
+  reorderFootage: (slug: string, order: string[]) =>
+    jsonFetch<{ ok: boolean; status: ReelEpisodeStatus }>(
+      `/api/reel/${encodeURIComponent(slug)}/footage/reorder`,
+      { method: "POST", body: JSON.stringify({ order }) },
+    ),
+
+  reorderAudio: (slug: string, order: string[]) =>
+    jsonFetch<{ ok: boolean; status: ReelEpisodeStatus }>(
+      `/api/reel/${encodeURIComponent(slug)}/audio/reorder`,
+      { method: "POST", body: JSON.stringify({ order }) },
+    ),
+
+  savePost: (slug: string, post: ReelPost) =>
+    jsonFetch<{ ok: boolean; post: ReelPost }>(
+      `/api/reel/${encodeURIComponent(slug)}/post`,
+      { method: "POST", body: JSON.stringify(post) },
+    ),
+
+  genPost: (slug: string, input: { provider: LLMProvider; model: string }) =>
+    jsonFetch<{ caption: string; hashtags: string[] }>(
+      `/api/reel/${encodeURIComponent(slug)}/gen-post`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  fileUrl: (slug: string, bucket: ReelBucket, name: string) =>
+    `/api/reel/${encodeURIComponent(slug)}/file/${bucket}/${encodeURIComponent(name)}`,
+
+  thumbUrl: (slug: string, name: string) =>
+    `/api/reel/${encodeURIComponent(slug)}/thumb/${encodeURIComponent(name)}`,
+
+  runUrl: (slug: string, task: "align" | "assemble") =>
+    `/api/reel/run/${encodeURIComponent(slug)}/${task}`,
 };
 
 export { ApiError };

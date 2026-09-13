@@ -9,6 +9,8 @@ import {
 import { Background } from "./components/Background";
 import { BGMTrack } from "./components/BGMTrack";
 import { Captions } from "./components/Captions";
+import { EditorialOverlay } from "./components/EditorialOverlay";
+import { FootageLayer, type FootageClip } from "./components/FootageLayer";
 import { Hook, HOOK_DURATION_FRAMES } from "./components/Hook";
 import { IntroCard, INTRO_DURATION_FRAMES } from "./components/IntroCard";
 import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
@@ -23,6 +25,14 @@ export type CompProps = {
   transcriptSrc: string | null;
   planSrc: string | null;
   bgmSrc: string | null;
+  editorialSrc: string | null;
+  footageClips: FootageClip[];
+  /**
+   * Overlay mode (2-pass): render ĐỒ HOẠ trên nền TRONG SUỐT (không nền vàng,
+   * không sticker, KHÔNG FootageLayer) → ffmpeg phủ lên footage bg + audio.
+   * Tránh Remotion giải mã footage (crash trên render dài). Xem make.ts 2-pass.
+   */
+  overlayMode?: boolean;
   episode: EpisodeConfig;
 };
 
@@ -31,6 +41,9 @@ export const Video: React.FC<CompProps> = ({
   transcriptSrc,
   planSrc,
   bgmSrc,
+  editorialSrc,
+  footageClips,
+  overlayMode = false,
   episode,
 }) => {
   const frame = useCurrentFrame();
@@ -53,10 +66,24 @@ export const Video: React.FC<CompProps> = ({
 
   const inMain = frame >= mainStartFrame && frame < mainEndFrame;
   const outroStartMs = (mainEndFrame / fps) * 1000;
+  const mainStartMs = (mainStartFrame / fps) * 1000;
+
+  // Footage mode: có clip → footage làm nền động thay nền vàng + ẩn sticker.
+  // overlayMode (2-pass): footage do ffmpeg lo → tắt FootageLayer + nền + sticker.
+  const useFootage = footageClips.length > 0 && !overlayMode;
+  const hideStickers = useFootage || overlayMode;
 
   return (
-    <AbsoluteFill>
-      <Background mood={mood} scenes={scenes} />
+    <AbsoluteFill style={overlayMode ? { backgroundColor: "transparent" } : undefined}>
+      {overlayMode ? null : <Background mood={mood} scenes={scenes} />}
+      {useFootage ? (
+        <FootageLayer
+          clips={footageClips}
+          fps={fps}
+          mainStartMs={mainStartMs}
+          mainEndMs={outroStartMs}
+        />
+      ) : null}
       {audioSrc ? <Audio src={staticFile(audioSrc)} /> : null}
 
       {bgmSrc ? (
@@ -71,10 +98,17 @@ export const Video: React.FC<CompProps> = ({
 
       {audioSrc ? (
         <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
-          <SceneLayer scenes={scenes} audioSrc={audioSrc} />
-          <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} />
+          {hideStickers ? null : <SceneLayer scenes={scenes} audioSrc={audioSrc} />}
+          <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} accentColor={episode.accentColor} />
           <Captions transcriptSrc={transcriptSrc} hideRanges={captionHideRanges} />
           <Watermark episodeNumber={episode.episodeNumber} />
+          {episode.showEditorial ? (
+            <EditorialOverlay
+              editorialSrc={editorialSrc}
+              speechOffsetMs={0}
+              revealMs={(mainStartFrame / fps) * 1000}
+            />
+          ) : null}
         </AbsoluteFill>
       ) : null}
 

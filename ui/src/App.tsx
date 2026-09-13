@@ -10,6 +10,8 @@ import { VisualPage } from "./pages/Visual";
 import { ScenesPage } from "./pages/Scenes";
 import { SettingsPage } from "./pages/Settings";
 import { PromptsPage } from "./pages/Prompts";
+import { ReelList } from "./pages/ReelList";
+import { ReelEpisode } from "./pages/ReelEpisode";
 import { useEpisodesChangedSync } from "./lib/sse";
 
 export function App() {
@@ -26,6 +28,8 @@ export function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
+          <Route path="/reel" element={<ReelList />} />
+          <Route path="/reel/:slug" element={<ReelEpisode />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/prompts" element={<PromptsPage />} />
         </Routes>

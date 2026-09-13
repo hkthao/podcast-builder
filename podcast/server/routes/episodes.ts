@@ -5,6 +5,7 @@ import {
   COVER_EXTENSIONS,
   createEmptyEpisode,
   deleteCover,
+  deleteEpisode,
   deleteEpisodeBgm,
   deleteEpisodeFile,
   replaceEpisodeAudio,
@@ -290,6 +291,19 @@ episodesRoutes.delete("/:name/cover", async (c) => {
   try {
     const summary = await deleteCover(name);
     return c.json(summary);
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    const status =
+      err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
+    return c.json({ error: err.message }, status);
+  }
+});
+
+episodesRoutes.delete("/:name", async (c) => {
+  const name = c.req.param("name");
+  try {
+    const result = await deleteEpisode(name);
+    return c.json(result);
   } catch (e) {
     const err = e as Error & { code?: string };
     const status =
@@ -1051,7 +1065,15 @@ episodesRoutes.post("/:name/cover-prompt", async (c) => {
       userContent: buildCoverPromptUserContent(ep.config.title, ep.config.hook),
       temperature: 0.7,
     });
-    return c.json({ prompt: content.trim() });
+    // Tách dòng THEME_COLOR (R0) ở đầu → trả riêng themeColor (dùng cho màu sóng).
+    let text = content.trim();
+    let themeColor: string | null = null;
+    const m = text.match(/^\s*THEME_COLOR:\s*(#[0-9a-fA-F]{6})[^\n]*\n+/);
+    if (m) {
+      themeColor = m[1];
+      text = text.slice(m[0].length).trim();
+    }
+    return c.json({ prompt: text, themeColor });
   } catch (e) {
     const err = e as Error & { code?: string };
     const status = err.code === "VALIDATION" ? 400 : 500;

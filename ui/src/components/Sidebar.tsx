@@ -4,12 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Mic2,
   Home,
-  Library,
-  FileText,
-  Network,
-  Image as ImageIcon,
   Film,
-  Mic,
+  Clapperboard,
   Lightbulb,
   Star,
   CheckCircle2,
@@ -70,48 +66,26 @@ export function Sidebar() {
 
       <nav className="p-3 space-y-3">
         <div className="space-y-0.5">
-          <SectionLabel>Chung</SectionLabel>
+          <SectionLabel>Podcast</SectionLabel>
           <NavItem to="/" icon={<Home className="size-4" />} label="Tập" />
           <NavItem
-            to="/brainstorm"
-            icon={<Lightbulb className="size-4" />}
-            label="Brainstorm"
-          />
-          <NavItem
-            to="/essay"
-            icon={<FileText className="size-4" />}
-            label="Bài luận"
-          />
-        </div>
-        <div className="space-y-0.5">
-          <SectionLabel>Thư viện</SectionLabel>
-          <NavItem
-            to="/references"
-            icon={<Library className="size-4" />}
-            label="Tài liệu"
-          />
-          <NavItem
-            to="/knowledge"
-            icon={<Network className="size-4" />}
-            label="Tri thức"
-          />
-          <NavItem
-            to="/visual"
-            icon={<ImageIcon className="size-4" />}
-            label="Hình ảnh ý tưởng"
+            to="/scenes"
+            icon={<Film className="size-4" />}
+            label="Scene templates"
           />
         </div>
         <div className="space-y-0.5">
           <SectionLabel>
             <span className="inline-flex items-center gap-1.5">
-              <Mic className="size-3" />
-              Production
+              <Clapperboard className="size-3" />
+              Reel
             </span>
           </SectionLabel>
           <NavItem
-            to="/scenes"
-            icon={<Film className="size-4" />}
-            label="Scene templates"
+            to="/reel"
+            end={false}
+            icon={<Clapperboard className="size-4" />}
+            label="Tập reel"
           />
         </div>
       </nav>
@@ -230,15 +204,17 @@ function NavItem({
   to,
   icon,
   label,
+  end = true,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
+  end?: boolean;
 }) {
   return (
     <NavLink
       to={to}
-      end
+      end={end}
       className={({ isActive }) =>
         cn(
           "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",

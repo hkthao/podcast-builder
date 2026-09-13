@@ -9,16 +9,13 @@ import {
   Play,
   Download,
   FileText,
-  Settings,
   Film,
   Pencil,
   Save,
   X as XIcon,
   Loader2,
   Trash2,
-  Files,
   Volume2,
-  Lock,
   Search,
   AlertCircle,
   Sparkles,
@@ -27,11 +24,10 @@ import {
   Check,
   Send,
   Image as ImageIcon,
+  Scissors,
 } from "lucide-react";
 import {
   api,
-  type EpisodeFile,
-  type EpisodeFileKind,
   type EpisodeSummary,
   type ScenePlanItem,
   type TranscriptSegment,
@@ -47,20 +43,20 @@ import { SpellFixPanel } from "@/components/SpellFixPanel";
 import { applySpellFix } from "@/components/spell-fix-rules";
 import type { SpellFixRule } from "@/components/spell-fix-rules";
 import { PublishTab } from "@/components/PublishTab";
-import { ScriptTab } from "@/components/ScriptTab";
+import { CompTab } from "@/components/CompTab";
 import { cn } from "@/lib/utils";
 
 /**
  * 5 tab top-level (gộp từ 7): config / content / render / publish / files.
  * `content` chứa 3 sub-tab pipeline tạo: script → transcript → scenes.
  */
-type Tab = "config" | "content" | "render" | "publish" | "files";
-type ContentSubTab = "script" | "transcript" | "scenes";
+type Tab = "content" | "comp" | "render" | "publish" | "footage";
+type ContentSubTab = "transcript" | "scenes";
 
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
-  const [tab, setTab] = useState<Tab>("config");
-  const [contentSub, setContentSub] = useState<ContentSubTab>("script");
+  const [tab, setTab] = useState<Tab>("render");
+  const [contentSub, setContentSub] = useState<ContentSubTab>("transcript");
 
   const epQ = useQuery({
     queryKey: ["episode", name],
@@ -118,10 +114,6 @@ export function EpisodeEdit() {
   const ep = epQ.data;
   const planCount = planQ.data?.totalScenes ?? 0;
   const transcriptCount = transcriptQ.data?.totalSegments ?? 0;
-  const filesCount =
-    (filesQ.data?.input.length ?? 0) +
-    (filesQ.data?.output.length ?? 0) +
-    (filesQ.data?.tmp.length ?? 0);
 
   return (
     <div className="container max-w-4xl py-10">
@@ -186,14 +178,8 @@ export function EpisodeEdit() {
       <CoverPromptPanel ep={ep} />
 
 
-      {/* Tabs — 5 top-level (gộp 3 production stage thành "Nội dung") */}
+      {/* Tabs — Nội dung / Ghép take / Render (gồm Cấu hình) / Footage / Đăng */}
       <div className="mb-4 flex gap-1 border-b">
-        <TabButton
-          active={tab === "config"}
-          onClick={() => setTab("config")}
-          icon={<Settings className="size-4" />}
-          label="Cấu hình"
-        />
         <TabButton
           active={tab === "content"}
           onClick={() => setTab("content")}
@@ -205,10 +191,22 @@ export function EpisodeEdit() {
           }`}
         />
         <TabButton
+          active={tab === "comp"}
+          onClick={() => setTab("comp")}
+          icon={<Scissors className="size-4" />}
+          label="Ghép take"
+        />
+        <TabButton
           active={tab === "render"}
           onClick={() => setTab("render")}
           icon={<Play className="size-4" />}
           label={`Render${ep.hasOutput ? " ✓" : ""}`}
+        />
+        <TabButton
+          active={tab === "footage"}
+          onClick={() => setTab("footage")}
+          icon={<Film className="size-4" />}
+          label={`Footage${ep.config.footage.length > 0 ? ` (${ep.config.footage.length})` : ""}`}
         />
         <TabButton
           active={tab === "publish"}
@@ -222,28 +220,12 @@ export function EpisodeEdit() {
                 : ""
           }`}
         />
-        <TabButton
-          active={tab === "files"}
-          onClick={() => setTab("files")}
-          icon={<Files className="size-4" />}
-          label={`File${filesCount > 0 ? ` (${filesCount})` : ""}`}
-        />
       </div>
-
-      {tab === "config" && <EpisodeConfigForm ep={ep} />}
 
       {tab === "content" && (
         <>
-          {/* Sub-tabs: script (podcast only) → transcript → cảnh */}
+          {/* Sub-tabs: transcript → cảnh */}
           <div className="mb-4 flex gap-1 flex-wrap text-xs">
-            {ep.config.style === "podcast" && (
-              <SubTabButton
-                active={contentSub === "script"}
-                onClick={() => setContentSub("script")}
-                icon={<Sparkles className="size-3.5" />}
-                label="Kịch bản"
-              />
-            )}
             <SubTabButton
               active={contentSub === "transcript"}
               onClick={() => setContentSub("transcript")}
@@ -258,14 +240,6 @@ export function EpisodeEdit() {
             />
           </div>
 
-          {contentSub === "script" && ep.config.style === "podcast" && (
-            <ScriptTab ep={ep} />
-          )}
-          {contentSub === "script" && ep.config.style !== "podcast" && (
-            <p className="text-sm text-muted-foreground italic">
-              Kịch bản dialogue chỉ áp dụng cho podcast style.
-            </p>
-          )}
           {contentSub === "transcript" && (
             <TranscriptPanel
               episodeName={name}
@@ -287,29 +261,27 @@ export function EpisodeEdit() {
         </>
       )}
 
+      {tab === "comp" && <CompTab episodeName={name} />}
+
       {tab === "render" && (
-        <RenderTab
-          ep={ep}
-          files={
-            filesQ.data ?? { input: [], output: [], tmp: [] }
-          }
-          loading={filesQ.isLoading}
-          hasTranscript={transcriptCount > 0}
-          hasPlan={planCount > 0}
-        />
+        <>
+          {/* Cấu hình gộp vào Render */}
+          <EpisodeConfigForm ep={ep} />
+          <div className="my-6 border-t" />
+          <RenderTab
+            ep={ep}
+            files={filesQ.data ?? { input: [], output: [], tmp: [] }}
+            loading={filesQ.isLoading}
+            hasTranscript={transcriptCount > 0}
+            hasPlan={planCount > 0}
+          />
+        </>
       )}
+      {tab === "footage" && <FootagePanel ep={ep} />}
       {tab === "publish" && (
         <PublishTab
           ep={ep}
           files={filesQ.data ?? { input: [], output: [], tmp: [] }}
-          loading={filesQ.isLoading}
-        />
-      )}
-      {tab === "files" && (
-        <FilesPanel
-          episodeName={name}
-          input={filesQ.data?.input ?? []}
-          tmp={filesQ.data?.tmp ?? []}
           loading={filesQ.isLoading}
         />
       )}
@@ -434,7 +406,17 @@ function CoverPromptPanel({ ep }: { ep: EpisodeSummary }) {
   const [provider, setProvider] = useState<"openai" | "ollama">("openai");
   const [model, setModel] = useState<string>("gpt-4o");
   const [generated, setGenerated] = useState<string>("");
+  const [themeColor, setThemeColor] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const qc = useQueryClient();
+  const applyAccentMut = useMutation({
+    mutationFn: (hex: string) =>
+      api.saveEpisodeConfig(ep.name, { ...ep.config, accentColor: hex }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+    },
+  });
 
   useEffect(() => {
     const list = modelsQ.data?.[provider] ?? [];
@@ -445,7 +427,10 @@ function CoverPromptPanel({ ep }: { ep: EpisodeSummary }) {
 
   const genMut = useMutation({
     mutationFn: () => api.genEpisodeCoverPrompt(ep.name, { provider, model }),
-    onSuccess: (res) => setGenerated(res.prompt),
+    onSuccess: (res) => {
+      setGenerated(res.prompt);
+      setThemeColor(res.themeColor);
+    },
   });
 
   const copyPrompt = async () => {
@@ -486,6 +471,31 @@ function CoverPromptPanel({ ep }: { ep: EpisodeSummary }) {
           — bạn có thể sửa system prompt qua{" "}
           <strong>Settings → System prompts</strong>.
         </p>
+      )}
+
+      {themeColor && (
+        <div className="mt-3 flex items-center gap-2 flex-wrap text-xs">
+          <span className="text-muted-foreground">Màu chủ đề:</span>
+          <span
+            className="inline-block size-5 rounded border"
+            style={{ backgroundColor: themeColor }}
+          />
+          <code className="font-mono">{themeColor}</code>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px]"
+            disabled={
+              applyAccentMut.isPending || ep.config.accentColor === themeColor
+            }
+            onClick={() => applyAccentMut.mutate(themeColor)}
+            title="Dùng màu này làm màu sóng (visualizer) cho đồng bộ cover"
+          >
+            {ep.config.accentColor === themeColor
+              ? "Đã áp dụng cho sóng"
+              : "Áp dụng cho màu sóng"}
+          </Button>
+        </div>
       )}
 
       {genMut.isError && (
@@ -1261,7 +1271,7 @@ function TranscriptPanel({
   const [findQuery, setFindQuery] = useState("");
   const [replaceWith, setReplaceWith] = useState("");
   const [showFindBar, setShowFindBar] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [tPage, setTPage] = useState(0);
   const [copied, setCopied] = useState(false);
   const [showSpellFix, setShowSpellFix] = useState(false);
 
@@ -1400,12 +1410,14 @@ function TranscriptPanel({
     );
   }
 
-  const LIMIT = 200;
+  const T_PAGE_SIZE = 50;
   const matchCount = findQuery
     ? segments.filter((s) => s.text.includes(findQuery)).length
     : 0;
-  const shown = showAll ? segments : segments.slice(0, LIMIT);
-  const truncated = !showAll && segments.length > LIMIT;
+  const tPageCount = Math.max(1, Math.ceil(segments.length / T_PAGE_SIZE));
+  const tCur = Math.min(tPage, tPageCount - 1);
+  const tStart = tCur * T_PAGE_SIZE;
+  const shown = segments.slice(tStart, tStart + T_PAGE_SIZE);
 
   return (
     <Card className="p-0 overflow-hidden">
@@ -1425,16 +1437,6 @@ function TranscriptPanel({
           </Badge>
         </span>
         <div className="flex items-center gap-1">
-          {truncated && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAll(true)}
-              className="text-xs"
-            >
-              Hiện tất cả {segments.length}
-            </Button>
-          )}
           <Button
             variant="outline"
             size="sm"
@@ -1546,8 +1548,9 @@ function TranscriptPanel({
       )}
 
       <div className="divide-y max-h-[600px] overflow-y-auto">
-        {shown.map((s, i) =>
-          editingIdx === i ? (
+        {shown.map((s, localI) => {
+          const i = tStart + localI;
+          return editingIdx === i ? (
             <div key={i} className="px-6 py-3 bg-secondary/20">
               <div className="flex items-center gap-2 mb-2">
                 <span className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -1619,9 +1622,35 @@ function TranscriptPanel({
               />
               <Pencil className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
+      {tPageCount > 1 && (
+        <div className="px-6 py-3 border-t flex items-center justify-center gap-3 text-xs">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7"
+            disabled={tCur === 0}
+            onClick={() => setTPage(tCur - 1)}
+          >
+            ← Trước
+          </Button>
+          <span className="text-muted-foreground tabular-nums">
+            Trang {tCur + 1}/{tPageCount} · câu {tStart + 1}–
+            {Math.min(tStart + T_PAGE_SIZE, segments.length)}/{segments.length}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7"
+            disabled={tCur >= tPageCount - 1}
+            onClick={() => setTPage(tCur + 1)}
+          >
+            Sau →
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -1644,224 +1673,96 @@ function highlightMatches(text: string, query: string): string {
   );
 }
 
-function FilesPanel({
-  episodeName,
-  input,
-  tmp,
-  loading,
-}: {
-  episodeName: string;
-  input: EpisodeFile[];
-  tmp: EpisodeFile[];
-  loading: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const [deletingUrl, setDeletingUrl] = useState<string | null>(null);
+/** Tab Footage — xem trước các clip footage dùng trong tập. */
+const FOOTAGE_PAGE_SIZE = 12;
 
-  const deleteMut = useMutation({
-    mutationFn: (vars: {
-      bucket: "input" | "tmp";
-      filename: string;
-    }) => api.deleteFile(episodeName, vars.bucket, vars.filename),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["episode-files", episodeName], data);
-      queryClient.invalidateQueries({
-        queryKey: ["episode", episodeName],
-      });
-      queryClient.invalidateQueries({ queryKey: ["episodes"] });
-    },
-    onSettled: () => setDeletingUrl(null),
-  });
-
-  const confirmAndDelete = (f: EpisodeFile) => {
-    const bucket: "input" | "tmp" = f.url.startsWith("/input")
-      ? "input"
-      : "tmp";
-    const warn =
-      f.kind === "audio-original"
-        ? `XOÁ audio gốc "${f.filename}"?\n\nEpisode sẽ chuyển sang trạng thái no-audio. Phải upload lại để render.`
-        : `XOÁ "${f.filename}"?`;
-    if (!window.confirm(warn)) return;
-    setDeletingUrl(f.url);
-    deleteMut.mutate({ bucket, filename: f.filename });
-  };
-
-  if (loading) {
-    return <Card className="h-64 animate-pulse bg-muted/30" />;
-  }
-  if (input.length === 0 && tmp.length === 0) {
-    return (
-      <Card className="p-12 text-center border-dashed">
-        <Files className="mx-auto mb-3 size-10 text-muted-foreground" />
-        <p className="font-medium">Chưa có file</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Drag audio vào trang Episodes hoặc render full để có outputs.
-        </p>
-      </Card>
-    );
-  }
-
+function FootagePanel({ ep }: { ep: EpisodeSummary }) {
+  const clips = ep.config.footage ?? [];
+  const [page, setPage] = useState(0);
+  const srcOf = (clip: string) =>
+    `/footage/${clip.split("/").map(encodeURIComponent).join("/")}`;
+  const pageCount = Math.max(1, Math.ceil(clips.length / FOOTAGE_PAGE_SIZE));
+  const cur = Math.min(page, pageCount - 1);
+  const start = cur * FOOTAGE_PAGE_SIZE;
+  const pageClips = clips.slice(start, start + FOOTAGE_PAGE_SIZE);
   return (
-    <div className="space-y-6">
-      {/* Audio originals + cover image */}
-      {input.length > 0 && (
-        <FileSection
-          title="Input (audio + cover)"
-          icon={<Volume2 className="size-4" />}
-          files={input}
-          deletingUrl={deletingUrl}
-          onDelete={confirmAndDelete}
-          renderInline={(f) =>
-            f.kind === "audio-original" ? (
-              <audio
-                controls
-                src={f.url}
-                className="w-full mt-2"
-                preload="metadata"
-              />
-            ) : f.kind === "cover" ? (
-              <img
-                src={f.url}
-                alt="cover"
-                className="mt-2 max-h-48 rounded border"
-              />
-            ) : null
-          }
-        />
-      )}
-
-      {/* Tmp artifacts */}
-      {tmp.length > 0 && (
-        <FileSection
-          title={`Tmp artifacts (${tmp.length})`}
-          icon={<Lock className="size-4" />}
-          files={tmp}
-          deletingUrl={deletingUrl}
-          onDelete={confirmAndDelete}
-          collapsed
-        />
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        Episode: <code className="font-mono">{episodeName}</code>
-        {" · "}
-        Video / thumbnail / lock đã được chuyển sang tab{" "}
-        <strong>Render</strong>.
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Film className="size-4 text-accent" />
+        <h3 className="font-medium">Footage dùng trong tập</h3>
+        <Badge variant="outline" className="text-[10px] ml-auto">
+          {clips.length} clip
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Các clip nền (theo thứ tự) sẽ lấp đầy video. Bấm play để xem trước từng
+        clip. Muốn đổi: chạy lại footage-plan hoặc sửa <code>footage</code> trong
+        cấu hình.
       </p>
-    </div>
-  );
-}
-
-function FileSection({
-  title,
-  icon,
-  files,
-  renderInline,
-  onDelete,
-  deletingUrl,
-  collapsed = false,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  files: EpisodeFile[];
-  renderInline?: (f: EpisodeFile) => React.ReactNode;
-  onDelete: (f: EpisodeFile) => void;
-  deletingUrl: string | null;
-  collapsed?: boolean;
-}) {
-  const [open, setOpen] = useState(!collapsed);
-  return (
-    <Card className="p-0 overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full px-6 py-3 border-b bg-secondary/30 flex items-center gap-2 hover:bg-secondary/50 transition-colors text-left"
-      >
-        {icon}
-        <span className="font-medium">{title}</span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {files.length} file{collapsed ? (open ? " ▾" : " ▸") : ""}
-        </span>
-      </button>
-      {open && (
-        <div className="divide-y">
-          {files.map((f) => (
-            <div key={f.url} className="px-6 py-3 space-y-2">
-              <div className="flex items-center gap-3">
-                <Badge variant="outline" className="font-mono text-xs uppercase shrink-0">
-                  {kindLabel(f.kind)}
-                </Badge>
-                <code className="text-sm font-mono flex-1 truncate">
-                  {f.filename}
-                </code>
-                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                  {humanSize(f.size)}
-                </span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {timeAgo(f.mtime)}
-                </span>
-              </div>
-              {renderInline?.(f)}
-              <div className="flex justify-end gap-2 pt-1">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={f.url} download={f.filename}>
-                    <Download className="size-3.5" />
-                    Tải về
-                  </a>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => onDelete(f)}
-                  disabled={deletingUrl === f.url}
+      {clips.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">
+          Chưa gán footage cho tập này.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {pageClips.map((clip, i) => (
+              <div key={clip} className="space-y-1">
+                <div
+                  className="bg-black rounded-md overflow-hidden border"
+                  style={{ aspectRatio: "9/16" }}
                 >
-                  {deletingUrl === f.url ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-3.5" />
-                  )}
-                  Xoá
-                </Button>
+                  <video
+                    src={srcOf(clip)}
+                    className="w-full h-full object-cover"
+                    controls
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                  />
+                </div>
+                <p
+                  className="text-[10px] text-muted-foreground truncate"
+                  title={clip}
+                >
+                  {start + i + 1}. {clip.replace(/^pexels\//, "")}
+                </p>
               </div>
+            ))}
+          </div>
+          {pageCount > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-3 text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                disabled={cur === 0}
+                onClick={() => setPage(cur - 1)}
+              >
+                ← Trước
+              </Button>
+              <span className="text-muted-foreground tabular-nums">
+                Trang {cur + 1}/{pageCount} · clip {start + 1}–
+                {start + pageClips.length}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                disabled={cur >= pageCount - 1}
+                onClick={() => setPage(cur + 1)}
+              >
+                Sau →
+              </Button>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </Card>
   );
 }
 
-const kindLabel = (k: EpisodeFileKind): string =>
-  ({
-    "audio-original": "audio",
-    "audio-normalized": "wav",
-    "video-full": "mp4",
-    "video-preview": "preview",
-    thumbnail: "thumb",
-    cover: "cover",
-    lock: "lock",
-    "transcript-raw": "raw",
-    "transcript-corrected": "fixed",
-    plan: "plan",
-  })[k];
-
-function humanSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 1) return "vừa xong";
-  if (minutes < 60) return `${minutes}p trước`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h trước`;
-  const days = Math.floor(hours / 24);
-  return `${days}d trước`;
-}
 
 function Meta({
   icon,

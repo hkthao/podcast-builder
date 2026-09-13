@@ -11,8 +11,8 @@ import {
 import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
 import type { Transcript } from "../../../shared/transcribe/transcribe";
 
-/** Padding-bottom = SAFE_ZONE.bottom (380px) — FB Reels caption + user info + title đè bottom ~380px. */
-const CAPTION_PADDING_BOTTOM = SAFE_ZONE.bottom;
+/** Padding-bottom = SAFE_ZONE.bottom - 40 — dịch caption xuống ~40px cho cân bố cục (vẫn nằm trên vùng FB overlay). */
+const CAPTION_PADDING_BOTTOM = SAFE_ZONE.bottom - 40;
 
 type Props = {
   transcriptSrc: string | null;

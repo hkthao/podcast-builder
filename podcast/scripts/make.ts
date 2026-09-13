@@ -19,6 +19,10 @@ import { transcribeAudio } from "../../shared/transcribe/transcribe";
 import { getModel } from "../../shared/transcribe/whisper-config";
 import { spellFix } from "./spell-fix";
 import { planEpisode } from "./plan-episode";
+import { generateEditorial } from "./gen-editorial";
+import { stageFootageClips } from "./footage-clips";
+import { buildFootageBg, compositeChunk, muxAudio, concatVideos } from "./footage-composite";
+import { mixBgmIntoVoice } from "../../shared/audio/bgm-mix";
 
 dotenv.config();
 
@@ -34,23 +38,34 @@ type Args = {
   preview: boolean;
   noThumb: boolean;
   planOnly: boolean;
+  /** Giới hạn render N giây đầu (preview-style). null = full / 10s khi --preview. */
+  seconds: number | null;
+  /** Bắt đầu render từ giây thứ N (cửa sổ giữa video). 0 = từ đầu. */
+  fromSeconds: number;
 };
 
 const parseArgs = (argv: string[]): Args => {
   const positional = argv.filter((a) => !a.startsWith("--"));
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
+  const secondsArg = argv.find((a) => /^--seconds=\d+$/.test(a));
+  const seconds = secondsArg ? Number(secondsArg.split("=")[1]) : null;
+  const fromArg = argv.find((a) => /^--from=\d+$/.test(a));
+  const fromSeconds = fromArg ? Number(fromArg.split("=")[1]) : 0;
   const audio = positional[0];
   if (!audio) {
     console.error(
-      "Usage: tsx scripts/make.ts <audio> [--preview] [--no-thumb] [--plan-only]",
+      "Usage: tsx scripts/make.ts <audio> [--preview] [--seconds=N] [--from=N] [--no-thumb] [--plan-only]",
     );
     process.exit(1);
   }
   return {
     audioPath: path.resolve(audio),
-    preview: flags.has("--preview"),
+    // --seconds / --from ngụ ý preview-style (frame range giới hạn, bỏ thumb/lock).
+    preview: flags.has("--preview") || seconds !== null || fromSeconds > 0,
     noThumb: flags.has("--no-thumb"),
     planOnly: flags.has("--plan-only"),
+    seconds,
+    fromSeconds,
   };
 };
 
@@ -154,6 +169,17 @@ async function main() {
   copyToPublic(planJsonPath, planPublicName);
   const cleanupList = [audioPublicName, transcriptPublicName, planPublicName];
 
+  // 5.5 Editorial overlay (LLM) — lớp biên tập gốc trên màn hình.
+  // Graceful: thiếu OPENAI_API_KEY / lỗi LLM → editorial rỗng, overlay tắt.
+  let editorialPublicName: string | null = null;
+  if (episode.showEditorial) {
+    const editorialJsonPath = path.join(TMP_DIR, `${baseName}.editorial.json`);
+    await generateEditorial(transcriptSource, episode, editorialJsonPath);
+    editorialPublicName = `${baseName}.editorial.json`;
+    copyToPublic(editorialJsonPath, editorialPublicName);
+    cleanupList.push(editorialPublicName);
+  }
+
   let bgmPublicName: string | null = null;
   if (episode.bgm) {
     const bgmAbsPath = path.resolve(path.dirname(args.audioPath), episode.bgm);
@@ -165,12 +191,38 @@ async function main() {
     cleanupList.push(bgmPublicName);
   }
 
+  // Cover image — IntroCard dùng staticFile(episode.coverImage) nên file phải
+  // nằm trong public/ với ĐÚNG tên coverImage. Copy giữ nguyên tên.
+  if (episode.coverImage) {
+    const coverAbsPath = path.resolve(
+      path.dirname(args.audioPath),
+      episode.coverImage,
+    );
+    if (!fs.existsSync(coverAbsPath)) {
+      throw new Error(`Cover không tồn tại: ${coverAbsPath}`);
+    }
+    copyToPublic(coverAbsPath, episode.coverImage);
+    cleanupList.push(episode.coverImage);
+  }
+
+  // 5.7 Footage nền (nếu tập bật) — copy input/footage → public + probe.
+  const { clips: footageClips, publicNames: footagePublicNames } =
+    stageFootageClips(
+      episode,
+      path.resolve(path.dirname(args.audioPath), "footage"),
+      PUBLIC_DIR,
+      baseName,
+    );
+  cleanupList.push(...footagePublicNames);
+
   // 6. Build props (Hướng A thuần — không còn availableImages)
   const inputProps = {
     audioSrc: audioPublicName,
     transcriptSrc: transcriptPublicName,
     planSrc: planPublicName,
     bgmSrc: bgmPublicName,
+    editorialSrc: editorialPublicName,
+    footageClips,
     episode,
   };
 
@@ -201,9 +253,17 @@ async function main() {
     );
 
     if (args.preview) {
+      const previewSecs = args.seconds ?? 10;
+      const startFrame = Math.min(
+        composition.durationInFrames - 1,
+        Math.max(0, Math.round(args.fromSeconds * composition.fps)),
+      );
       const lastFrame = Math.min(
         composition.durationInFrames - 1,
-        composition.fps * 10 - 1,
+        startFrame + composition.fps * previewSecs - 1,
+      );
+      console.log(
+        `[make] preview frameRange [${startFrame}, ${lastFrame}] (${args.fromSeconds}s → +${previewSecs}s)`,
       );
       await renderMedia({
         serveUrl,
@@ -211,11 +271,97 @@ async function main() {
         codec: "h264",
         outputLocation: outputPath,
         inputProps,
-        frameRange: [0, lastFrame],
+        frameRange: [startFrame, lastFrame],
         videoBitrate: "4000K",
         audioBitrate: "128K",
         audioCodec: "aac",
       });
+    } else if (footageClips.length > 0) {
+      // 2-PASS footage — Remotion giải mã footage video CRASH trên render dài.
+      // Pass A: render ĐỒ HOẠ nền TRONG SUỐT (ProRes 4444 alpha, KHÔNG footage)
+      //         → ổn định như bản sticker. Pass B: ffmpeg dựng nền footage +
+      //         phủ lớp đồ hoạ + audio. Xem footage-composite.ts.
+      // 2-PASS footage — Remotion giải mã footage video CRASH/quá chậm trên
+      // render dài. Cách chạy: (A) render ĐỒ HOẠ nền TRONG SUỐT bằng ProRes 4444
+      // alpha (nhanh ~0.08s/frame, KHÔNG footage) THEO ĐOẠN; mỗi đoạn ghép NGAY
+      // với nền footage (ffmpeg) → chunk h264 rồi XOÁ ProRes → đỉnh đĩa nhỏ (VP8
+      // quá chậm ~0.7s/frame; ProRes 1 file ~13GB vượt đĩa → phải ghép từng đoạn).
+      // (B) nối chunk h264 + mux audio. Xem footage-composite.ts.
+      const footageBg = path.join(TMP_DIR, `${baseName}.footagebg.mp4`);
+      const workDir = path.join(TMP_DIR, `${baseName}.fchunks`);
+      fs.rmSync(workDir, { recursive: true, force: true });
+      ensureDir(workDir);
+      // RE-SELECT composition với overlay props (renderMedia KHÔNG override props
+      // qua inputProps → phải select lại để overlayMode=true + footageClips=[]).
+      const overlayInputProps = { ...inputProps, overlayMode: true, footageClips: [] };
+      const overlayComposition = await selectComposition({
+        serveUrl,
+        id: COMPOSITION_ID,
+        inputProps: overlayInputProps,
+      });
+      const durationSec = overlayComposition.durationInFrames / overlayComposition.fps;
+      const total = overlayComposition.durationInFrames;
+      // B1: dựng nền footage full (ffmpeg — decode footage native, nhanh + ổn).
+      console.log(`[make] footage 2-pass: dựng nền footage (ffmpeg)...`);
+      const footageAbs = episode.footage
+        .map((f) => path.resolve(path.dirname(args.audioPath), "footage", f))
+        .filter((f) => fs.existsSync(f));
+      buildFootageBg(footageAbs, durationSec, footageBg);
+      // B2: render ProRes alpha theo đoạn + ghép ngay + xoá ProRes.
+      const OCHUNK = Number(process.env.RENDER_OVERLAY_CHUNK ?? 1500);
+      const nOchunks = Math.ceil(total / OCHUNK);
+      console.log(
+        `[make] footage 2-pass: overlay ProRes + ghép — ${nOchunks} đoạn × ${OCHUNK} frame...`,
+      );
+      const videoChunks: string[] = [];
+      for (let start = 0, idx = 0; start < total; start += OCHUNK, idx++) {
+        const end = Math.min(total - 1, start + OCHUNK - 1);
+        const prChunk = path.join(workDir, `pr-${String(idx).padStart(3, "0")}.mov`);
+        const vChunk = path.join(workDir, `v-${String(idx).padStart(3, "0")}.mp4`);
+        const cT0 = Date.now();
+        await renderMedia({
+          serveUrl,
+          composition: overlayComposition,
+          codec: "prores",
+          proResProfile: "4444",
+          pixelFormat: "yuva444p10le",
+          imageFormat: "png",
+          outputLocation: prChunk,
+          frameRange: [start, end],
+          inputProps: overlayInputProps,
+          concurrency: Number(process.env.RENDER_OVERLAY_CONCURRENCY ?? 3),
+          timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS ?? 120000),
+        });
+        compositeChunk(footageBg, start / overlayComposition.fps, (end - start + 1) / overlayComposition.fps, prChunk, vChunk);
+        fs.rmSync(prChunk, { force: true }); // xoá ProRes nặng ngay
+        videoChunks.push(vChunk);
+        console.log(
+          `[make]   đoạn ${idx + 1}/${nOchunks} [${start},${end}] ✓ (${((Date.now() - cT0) / 1000).toFixed(0)}s)`,
+        );
+      }
+      // B3: nối chunk h264 + mux audio. Có BGM → mix nhạc nền (ducking) vào
+      // voice trước (footage path KHÔNG dùng BGMTrack của Remotion).
+      const silentVideo = path.join(workDir, `silent.mp4`);
+      concatVideos(videoChunks, silentVideo);
+      let audioForMux = renderWav;
+      if (episode.bgm) {
+        const bgmAbs = path.resolve(path.dirname(args.audioPath), episode.bgm);
+        if (fs.existsSync(bgmAbs)) {
+          console.log(`[make] mix nhạc nền (ducking): ${episode.bgm}`);
+          const mixed = await mixBgmIntoVoice({
+            voicePath: renderWav,
+            bgmPath: bgmAbs,
+            episodeName: baseName,
+            bgmVolumeDb: episode.bgmVolumeDb,
+          });
+          audioForMux = mixed.outputPath;
+        } else {
+          console.warn(`[make] BGM không tồn tại, bỏ qua: ${bgmAbs}`);
+        }
+      }
+      muxAudio(silentVideo, audioForMux, outputPath);
+      fs.rmSync(workDir, { recursive: true, force: true });
+      fs.rmSync(footageBg, { force: true });
     } else {
       await renderMedia({
         serveUrl,
@@ -226,6 +372,8 @@ async function main() {
         videoBitrate: "8000K",
         audioBitrate: "192K",
         audioCodec: "aac",
+        concurrency: Number(process.env.RENDER_CONCURRENCY ?? 3),
+        timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS ?? 120000),
       });
     }
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);

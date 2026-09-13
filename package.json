@@ -28,6 +28,7 @@
     "@remotion/media-parser": "4.0.420",
     "@remotion/media-utils": "4.0.420",
     "@remotion/renderer": "4.0.420",
+    "@resvg/resvg-js": "^2.6.2",
     "better-sqlite3": "^12.10.0",
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.2",

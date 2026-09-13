@@ -6,6 +6,7 @@ import {
   type EpisodeConfig,
 } from "../../src/episode";
 import { PATHS } from "../../../shared/studio-core/paths";
+import { deleteAllScriptTurnAudio } from "../../../shared/studio-core/podcast-script-tts";
 import { getEssay } from "./essay-store";
 import { getSession as getBrainstormSession } from "./brainstorm-store";
 
@@ -207,10 +208,13 @@ const buildTemplate = (
   hook: null,
   episodeNumber: 1,
   moodOverride: null,
+  accentColor: null,
   bgm: null,
   bgmVolumeDb: -28,
   showIntro: true,
   showOutro: true,
+  showEditorial: true,
+  footage: [],
   sceneOverrides: null,
   essayId: null,
   coverImage: null,
@@ -220,6 +224,11 @@ const buildTemplate = (
   publishedAt: null,
   publishCaption: null,
   publishHashtags: [],
+  aiAssisted: true,
+  scriptCredit: null,
+  musicCredit: null,
+  footageCredit: null,
+  sources: [],
 });
 
 /**
@@ -849,6 +858,69 @@ export async function deleteEpisodeBgm(
   const updated = await loadSummary(name);
   if (!updated) throw new Error(`Xoá BGM OK nhưng không load lại: ${name}`);
   return updated;
+}
+
+/**
+ * Xoá TOÀN BỘ một episode: config + audio + cover + bgm + script +
+ * output (mp4/thumb/lock) + tmp (transcript/plan/normalized) + cache audio
+ * TTS từng turn. Idempotent với từng file (bỏ qua ENOENT) nhưng throw
+ * NOT_FOUND nếu config không tồn tại ngay từ đầu.
+ */
+export async function deleteEpisode(
+  name: string,
+): Promise<{ deleted: boolean }> {
+  const configPath = path.join(INPUT_DIR, `${name}.json`);
+  try {
+    await fs.stat(configPath);
+  } catch {
+    const err = new Error(`Episode không tồn tại: ${name}`);
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+
+  const unlink = (p: string) =>
+    fs.unlink(p).catch(() => {
+      /* ignore ENOENT & các lỗi xoá khác — best effort */
+    });
+
+  // input/ — config, script sidecar, audio, cover, bgm
+  const inputFiles = [
+    `${name}.json`,
+    `${name}.script.json`,
+    ...AUDIO_EXTS.map((ext) => `${name}.${ext}`),
+    ...COVER_EXTS.map((ext) => `${name}.cover.${ext}`),
+    ...BGM_EXTS.map((ext) => `${name}.bgm.${ext}`),
+  ];
+  // output/ — video full/preview, thumbnail, lock
+  const outputFiles = [
+    `${name}.mp4`,
+    `${name}.preview.mp4`,
+    `${name}.thumb.jpg`,
+    `${name}.lock.json`,
+  ];
+  // tmp/ — transcript raw/corrected, plan, normalized audio
+  const tmpFiles = [
+    `${name}.normalized.48k.wav`,
+    `${name}.normalized.16k.wav`,
+    `${name}.json`,
+    `${name}.corrected.json`,
+    `${name}.plan.json`,
+  ];
+
+  await Promise.all([
+    ...inputFiles.map((fn) => unlink(path.join(INPUT_DIR, fn))),
+    ...outputFiles.map((fn) => unlink(path.join(OUTPUT_DIR, fn))),
+    ...tmpFiles.map((fn) => unlink(path.join(TMP_DIR, fn))),
+  ]);
+
+  // Cache audio TTS từng turn (tmp/<name>.turn-*.{pcm,aac}) — best effort
+  try {
+    await deleteAllScriptTurnAudio(name);
+  } catch {
+    /* ignore */
+  }
+
+  return { deleted: true };
 }
 
 export type EpisodeFile = {

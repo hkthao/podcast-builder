@@ -19,6 +19,7 @@ import {
   Loader2,
   X as XIcon,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import {
   api,
@@ -38,6 +39,37 @@ import { cn } from "@/lib/utils";
 
 /** FB Reels best practice: 3-5 hashtags max. */
 const MAX_HASHTAGS = 5;
+
+/** Tên brand mặc định cho phần ghi công khi scriptCredit để trống. */
+const BRAND_NAME = "ByteCast Tech";
+
+/**
+ * Dựng khối "công bố AI + ghi công" chèn vào cuối mô tả khi đăng.
+ * Đáp ứng yêu cầu originality của Meta: công bố nội dung AI + ghi rõ đóng góp
+ * người thật (kịch bản gốc, biên tập, nguồn). Xem docs/originality-upgrade-plan.md §5.1.
+ */
+function buildDisclosure(opts: {
+  aiAssisted: boolean;
+  editor: string;
+  musicCredit: string;
+  footageCredit: string;
+  sources: string[];
+}): string {
+  const lines: string[] = [];
+  if (opts.aiAssisted) {
+    lines.push(
+      `Kịch bản gốc do ${opts.editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${BRAND_NAME} định hướng và biên tập.`,
+    );
+  } else {
+    lines.push(`Kịch bản gốc do ${opts.editor} biên soạn và biên tập.`);
+  }
+  if (opts.musicCredit) lines.push(`Nhạc nền: ${opts.musicCredit}.`);
+  if (opts.footageCredit) lines.push(`${opts.footageCredit}.`);
+  if (opts.sources.length) {
+    lines.push(`Nguồn tham khảo: ${opts.sources.join("; ")}.`);
+  }
+  return lines.join("\n");
+}
 
 /** Curated short list — FB ưu tiên ÍT mà RELEVANT. User add custom thêm. */
 const DEFAULT_HASHTAGS = [
@@ -113,6 +145,17 @@ export function PublishTab({
   );
   const [hashtagInput, setHashtagInput] = useState("");
 
+  // Công bố AI + ghi công (Meta originality)
+  const [aiAssisted, setAiAssisted] = useState(ep.config.aiAssisted ?? true);
+  const [scriptCredit, setScriptCredit] = useState(ep.config.scriptCredit ?? "");
+  const [musicCredit, setMusicCredit] = useState(ep.config.musicCredit ?? "");
+  const [footageCredit, setFootageCredit] = useState(
+    ep.config.footageCredit ?? "",
+  );
+  const [sourcesText, setSourcesText] = useState(
+    (ep.config.sources ?? []).join("\n"),
+  );
+
   // Sync local ↔ server when ep changes (e.g., after save)
   const lastSeenMtime = useRef(ep.mtimeMs);
   useEffect(() => {
@@ -122,8 +165,13 @@ export function PublishTab({
       if (ep.config.publishHashtags.length > 0) {
         setHashtags(ep.config.publishHashtags);
       }
+      setAiAssisted(ep.config.aiAssisted ?? true);
+      setScriptCredit(ep.config.scriptCredit ?? "");
+      setMusicCredit(ep.config.musicCredit ?? "");
+      setFootageCredit(ep.config.footageCredit ?? "");
+      setSourcesText((ep.config.sources ?? []).join("\n"));
     }
-  }, [ep.mtimeMs, ep.config.publishCaption, ep.config.publishHashtags]);
+  }, [ep.mtimeMs, ep.config]);
 
   const saveMut = useMutation({
     mutationFn: (patch: Partial<EpisodeConfig>) =>
@@ -138,27 +186,41 @@ export function PublishTab({
     },
   });
 
-  // Debounce save when caption/hashtags change
+  // Nguồn parse từ textarea (mỗi dòng 1 nguồn)
+  const sourcesArr = sourcesText
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  // Debounce save when any publish field changes
   const debounceRef = useRef<number | null>(null);
   useEffect(() => {
-    if (
+    const unchanged =
       caption === (ep.config.publishCaption ?? "") &&
-      JSON.stringify(hashtags) === JSON.stringify(ep.config.publishHashtags)
-    ) {
-      return;
-    }
+      JSON.stringify(hashtags) === JSON.stringify(ep.config.publishHashtags) &&
+      aiAssisted === (ep.config.aiAssisted ?? true) &&
+      scriptCredit === (ep.config.scriptCredit ?? "") &&
+      musicCredit === (ep.config.musicCredit ?? "") &&
+      footageCredit === (ep.config.footageCredit ?? "") &&
+      JSON.stringify(sourcesArr) === JSON.stringify(ep.config.sources ?? []);
+    if (unchanged) return;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       saveMut.mutate({
         publishCaption: caption || null,
         publishHashtags: hashtags,
+        aiAssisted,
+        scriptCredit: scriptCredit || null,
+        musicCredit: musicCredit || null,
+        footageCredit: footageCredit || null,
+        sources: sourcesArr,
       });
     }, 700);
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption, hashtags]);
+  }, [caption, hashtags, aiAssisted, scriptCredit, musicCredit, footageCredit, sourcesText]);
 
   const setStatus = (next: PublishStatus) => {
     saveMut.mutate({
@@ -228,9 +290,19 @@ export function PublishTab({
     setHashtags(hashtags.filter((x) => x !== h));
   };
 
-  const fullCaption = caption
-    ? `${caption}\n\n${hashtags.map((h) => `#${h}`).join(" ")}`.trim()
-    : hashtags.map((h) => `#${h}`).join(" ");
+  const disclosure = buildDisclosure({
+    aiAssisted,
+    editor: scriptCredit.trim() || BRAND_NAME,
+    musicCredit: musicCredit.trim(),
+    footageCredit: footageCredit.trim(),
+    sources: sourcesArr,
+  });
+  const hashtagLine = hashtags.map((h) => `#${h}`).join(" ");
+  // Mô tả cuối = caption + hashtags + khối công bố (bỏ phần rỗng).
+  const fullCaption = [caption, hashtagLine, disclosure]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .join("\n\n");
 
   if (loading) {
     return <Card className="h-64 animate-pulse bg-muted/30" />;
@@ -696,6 +768,103 @@ export function PublishTab({
             text={hashtags.map((h) => `#${h}`).join(" ")}
             label="Copy hashtags"
             disabled={hashtags.length === 0}
+          />
+        </footer>
+      </Card>
+
+      {/* Công bố AI + ghi công (Meta originality) */}
+      <Card className="p-0 overflow-hidden border-accent/30">
+        <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
+          <ShieldCheck className="size-4 text-accent" />
+          <span className="font-medium text-sm">Công bố AI + ghi công</span>
+          <Badge variant="outline" className="ml-auto text-[10px]">
+            Meta originality
+          </Badge>
+        </header>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Meta yêu cầu nội dung AI phải <strong>công bố</strong> + ghi rõ đóng
+            góp người thật (kịch bản gốc, biên tập, nguồn) mới đủ điều kiện kiếm
+            tiền. Khối này <strong>tự chèn vào cuối phần mô tả</strong> khi bấm
+            "Copy caption". Ngoài ra nhớ <strong>bật nhãn "AI" trong trình đăng
+            của Facebook</strong> khi upload.
+          </p>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={aiAssisted}
+              onChange={(e) => setAiAssisted(e.target.checked)}
+              className="size-4 accent-[var(--accent)]"
+            />
+            Video dùng giọng đọc AI (bật công bố AI)
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Người biên soạn
+              </Label>
+              <Input
+                value={scriptCredit}
+                onChange={(e) => setScriptCredit(e.target.value)}
+                placeholder={`Mặc định: ${BRAND_NAME}`}
+                className="mt-1 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Nhạc nền (ghi công)
+              </Label>
+              <Input
+                value={musicCredit}
+                onChange={(e) => setMusicCredit(e.target.value)}
+                placeholder="vd: Scott Buckley — CC BY 4.0"
+                className="mt-1 text-sm"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Footage (ghi công stock)
+              </Label>
+              <Input
+                value={footageCredit}
+                onChange={(e) => setFootageCredit(e.target.value)}
+                placeholder="vd: Footage: Şeyma Gül, Buket Ülkü (Pexels) — tự điền khi footage-plan tải Pexels"
+                className="mt-1 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Nguồn tham khảo (mỗi dòng 1 nguồn)
+            </Label>
+            <Textarea
+              value={sourcesText}
+              onChange={(e) => setSourcesText(e.target.value)}
+              placeholder={"Terror Management Theory — Wikipedia\nEpicurus — IEP\n..."}
+              rows={3}
+              className="mt-1 font-sans text-sm leading-relaxed"
+            />
+          </div>
+
+          {disclosure && (
+            <div className="rounded-md border bg-secondary/20 p-3 text-xs">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                Xem trước khối công bố
+              </div>
+              <div className="font-sans leading-relaxed whitespace-pre-wrap">
+                {disclosure}
+              </div>
+            </div>
+          )}
+        </div>
+        <footer className="px-5 py-3 border-t flex items-center justify-end gap-2">
+          <CopyButton
+            text={disclosure}
+            label="Copy khối công bố"
+            disabled={disclosure.length === 0}
           />
         </footer>
       </Card>

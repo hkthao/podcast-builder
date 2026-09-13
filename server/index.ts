@@ -13,9 +13,11 @@ import { settingsRoutes } from "../shared/studio-core/routes/settings";
 import { promptsRoutes } from "../shared/studio-core/routes/prompts";
 import { referencesRoutes } from "../podcast/server/routes/references";
 import { renderRoutes } from "../podcast/server/routes/render";
+import { compRoutes } from "../podcast/server/routes/comp";
 import { knowledgeRoutes } from "../podcast/server/routes/knowledge";
 import { scenesRoutes } from "../podcast/server/routes/scenes";
 import { visualRoutes } from "../podcast/server/routes/visual";
+import { reelRoutes } from "../reel/server/routes";
 import { startFsWatcher } from "../shared/studio-core/events";
 import { sseFromBus } from "../shared/studio-core/sse";
 import {
@@ -71,6 +73,7 @@ app.get("/api/events", (c) => sseFromBus(c));
 app.route("/api/episodes", episodesRoutes);
 app.route("/api/references", referencesRoutes);
 app.route("/api/render", renderRoutes);
+app.route("/api/comp", compRoutes);
 app.route("/api/brainstorm", brainstormRoutes);
 app.route("/api/essay", essayRoutes);
 app.route("/api/llm", llmRoutes);
@@ -80,19 +83,19 @@ app.route("/api/prompts", promptsRoutes);
 app.route("/api/knowledge", knowledgeRoutes);
 app.route("/api/visual", visualRoutes);
 app.route("/api/scenes", scenesRoutes);
+app.route("/api/reel", reelRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.
  * Range header support → video <video> streaming + audio seeking trong UI.
  * Security: chỉ allow filename không có path traversal.
  */
-const serveStatic = (rootDir: string) =>
-  async (c: import("hono").Context) => {
-    const filename = c.req.param("filename");
-    if (!filename || filename.includes("..") || filename.includes("/") || filename.startsWith(".")) {
-      return c.json({ error: "invalid filename" }, 400);
-    }
-    const filePath = path.join(rootDir, filename);
+/** Gửi 1 file với content-type + hỗ trợ range (video/audio seek). */
+const sendFile = async (
+  c: import("hono").Context,
+  filePath: string,
+  filename: string,
+) => {
     let stat;
     try {
       stat = await fs.stat(filePath);
@@ -144,12 +147,30 @@ const serveStatic = (rootDir: string) =>
         "Accept-Ranges": "bytes",
       },
     });
+};
+
+const serveStatic = (rootDir: string) =>
+  async (c: import("hono").Context) => {
+    const filename = c.req.param("filename");
+    if (!filename || filename.includes("..") || filename.includes("/") || filename.startsWith(".")) {
+      return c.json({ error: "invalid filename" }, 400);
+    }
+    return sendFile(c, path.join(rootDir, filename), filename);
   };
 
 app.get("/output/:filename", serveStatic(OUTPUT_DIR));
 app.get("/input/:filename", serveStatic(INPUT_DIR));
 app.get("/tmp/:filename", serveStatic(TMP_DIR));
 app.get("/scene-catalog/:filename", serveStatic(SCENE_CATALOG_DIR));
+
+// Footage clips (input/footage/, cho phép subdir pexels/) — preview trong tab Footage.
+app.get("/footage/*", async (c) => {
+  const rel = decodeURIComponent(c.req.path.slice("/footage/".length));
+  if (!rel || rel.includes("..") || rel.startsWith("/") || rel.startsWith(".")) {
+    return c.json({ error: "invalid path" }, 400);
+  }
+  return sendFile(c, path.join(INPUT_DIR, "footage", rel), rel);
+});
 
 startFsWatcher();
 

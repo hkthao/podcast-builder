@@ -10,9 +10,15 @@ import {
 } from "remotion";
 import type { Transcript } from "../../../shared/transcribe/transcribe";
 
-const DUCK_FACTOR = 0.35;
+const DUCK_FACTOR = 0.22;
 const DUCK_RAMP_MS = 150;
 const OUTRO_FADE_MS = 2000;
+/**
+ * Trần âm lượng nền cứng (dB). Kể cả khi episode set bgmVolumeDb cao hơn,
+ * nhạc vẫn bị kẹp ở đây để KHÔNG BAO GIỜ đè tiếng nói. Đây là chốt an toàn
+ * cho bug lịch sử "gắn nhạc là mất tiếng người".
+ */
+const MAX_BGM_DB = -18;
 
 type SpeechRange = { startMs: number; endMs: number };
 
@@ -79,7 +85,8 @@ export const BGMTrack: React.FC<Props> = ({
   );
 
   const totalMs = (durationInFrames / fps) * 1000;
-  const baseGain = dbToGain(baseVolumeDb);
+  // Kẹp trần trước khi đổi sang gain — nhạc không thể to hơn ngưỡng an toàn.
+  const baseGain = dbToGain(Math.min(baseVolumeDb, MAX_BGM_DB));
 
   const volume = (frame: number): number => {
     const t = (frame / fps) * 1000;
@@ -98,7 +105,9 @@ export const BGMTrack: React.FC<Props> = ({
           })
         : 1;
 
-    let speechGain = 1;
+    // Fallback an toàn: KHÔNG có speech ranges (transcript thiếu/fetch lỗi)
+    // → duck liên tục thay vì để nhạc phát full, tránh nuốt tiếng nói.
+    let speechGain = DUCK_FACTOR;
     if (speechRanges.length > 0) {
       const tAdj = t - speechOffsetMs;
       let nearest = 0;

@@ -22,9 +22,11 @@ type Props = {
   audioSrc: string;
   mood?: MoodKey;
   scenes?: Scene[];
+  /** Màu chủ đạo tập (hex) — override accent theo mood cho sóng đồng bộ cover. */
+  accentColor?: string | null;
 };
 
-export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scenes }) => {
+export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scenes, accentColor }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const audioData = useAudioData(staticFile(audioSrc));
@@ -70,7 +72,8 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scene
   const BAR_GAP = vis.barGap;
   const MAX_HEIGHT = vis.maxHeight;
 
-  const accent = MOOD_ACCENTS[activeMood];
+  // Ưu tiên màu chủ đạo tập (đồng bộ cover); fallback accent theo mood.
+  const accent = accentColor || MOOD_ACCENTS[activeMood];
   // Bars mirror đối xứng quanh trung tâm. Tổng 2*NUM_BANDS bars.
   const totalBars = NUM_BANDS * 2;
   const totalWidth = totalBars * BAR_WIDTH + (totalBars - 1) * BAR_GAP;

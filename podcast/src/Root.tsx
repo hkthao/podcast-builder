@@ -10,6 +10,9 @@ const defaultProps: CompProps = {
   transcriptSrc: null,
   planSrc: null,
   bgmSrc: null,
+  editorialSrc: null,
+  footageClips: [],
+  overlayMode: false,
   episode: EpisodeConfigSchema.parse(buildEpisodeTemplate("Bản nháp")),
 };
 

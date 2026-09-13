@@ -33,6 +33,17 @@ export default defineConfig({
           });
         },
       },
+      // SSE log chạy reel align/assemble.
+      "/api/reel/run": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: false,
+        ws: false,
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            proxyRes.headers["x-accel-buffering"] = "no";
+          });
+        },
+      },
     },
   },
 });

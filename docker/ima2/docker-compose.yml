@@ -1,0 +1,23 @@
+# ima2-gen — isolated container for generating podcast covers via GPT OAuth.
+# See README.md.  Cleanup: `docker compose down && rm -rf data out`.
+name: ima2-gen
+
+services:
+  ima2:
+    build:
+      context: .
+      args:
+        IMA2_VERSION: ${IMA2_VERSION:-latest}
+    image: ima2-gen-local
+    container_name: ima2-gen
+    environment:
+      IMA2_CONFIG_DIR: /data/ima2
+      CODEX_HOME: /data/codex
+      IMA2_HOST: 127.0.0.1
+    volumes:
+      - ./data:/data   # config + tokens + sqlite + generated/  → delete to clean up
+      - ./out:/out     # generated covers land here, visible on host
+    # No published ports on purpose: cover generation runs through the CLI
+    # inside the container, so the server stays bound to loopback and needs
+    # no LAN token. (To use the web UI instead, see README "Optional: web UI".)
+    restart: unless-stopped
