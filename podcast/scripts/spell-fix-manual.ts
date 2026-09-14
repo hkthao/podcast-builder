@@ -64,9 +64,41 @@ const TMP = path.resolve("tmp");
 function main() {
   const mode = process.argv[2];
   const base = process.argv[3];
-  if (!mode || !base || !["dump", "apply"].includes(mode)) {
-    throw new Error("Usage: spell-fix-manual.ts <dump|apply> <base>");
+  if (!mode || !base || !["dump", "apply", "flags"].includes(mode)) {
+    throw new Error("Usage: spell-fix-manual.ts <dump|apply|flags> <base>");
   }
+
+  // flags: in ra CÁC CÂU USER ĐÁNH DẤU LỖI trên UI (tmp/<base>.flags.json) kèm
+  // ngữ cảnh, theo ĐÚNG index segment (khớp corrected.json). Claude đọc output
+  // này rồi sửa trực tiếp các segment tương ứng trong tmp/<base>.corrected.json.
+  if (mode === "flags") {
+    const flagsPath = path.join(TMP, `${base}.flags.json`);
+    if (!fs.existsSync(flagsPath)) {
+      console.log(`[flags] Không có ${flagsPath} — user chưa đánh dấu câu nào.`);
+      return;
+    }
+    const corrPath = path.join(TMP, `${base}.corrected.json`);
+    const tPath = fs.existsSync(corrPath) ? corrPath : path.join(TMP, `${base}.json`);
+    if (!fs.existsSync(tPath)) throw new Error(`Transcript không tồn tại: ${tPath}`);
+    const t = JSON.parse(fs.readFileSync(tPath, "utf-8")) as Transcript;
+    const segs = t.transcription;
+    const ids: number[] = (JSON.parse(fs.readFileSync(flagsPath, "utf-8")).flaggedIds ?? [])
+      .filter((n: unknown): n is number => Number.isInteger(n))
+      .sort((a: number, b: number) => a - b);
+    console.log(`[flags] ${ids.length} câu user đánh dấu lỗi (nguồn: ${path.basename(tPath)}):\n`);
+    for (const i of ids) {
+      const prev = segs[i - 1]?.text?.trim();
+      const cur = segs[i]?.text?.trim();
+      const next = segs[i + 1]?.text?.trim();
+      if (prev) console.log(`   #${i - 1}  ${prev}`);
+      console.log(`>> #${i}  ${cur ?? "(không tồn tại)"}`);
+      if (next) console.log(`   #${i + 1}  ${next}`);
+      console.log("");
+    }
+    console.log(`Sửa các câu ">> #i" trong tmp/${base}.corrected.json (giữ nguyên số câu), rồi bỏ cờ trên UI.`);
+    return;
+  }
+
   const rawPath = path.join(TMP, `${base}.json`);
   if (!fs.existsSync(rawPath)) throw new Error(`Raw transcript không tồn tại: ${rawPath}`);
   const transcript = JSON.parse(fs.readFileSync(rawPath, "utf-8")) as Transcript;

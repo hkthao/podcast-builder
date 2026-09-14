@@ -336,7 +336,9 @@ export async function createEmptyEpisode(input: {
   const maxNum = all.reduce((m, e) => Math.max(m, e.config.episodeNumber), 0);
   template.episodeNumber = maxNum + 1;
 
-  await fs.writeFile(configPath, JSON.stringify(template, null, 2));
+  // Kế thừa nhạc nền user chọn gần nhất (khỏi chọn lại mỗi tập).
+  const withMusic = await applyMusicDefaults(template);
+  await fs.writeFile(configPath, JSON.stringify(withMusic, null, 2));
   const summary = await loadSummary(slug);
   if (!summary) {
     throw new Error(`Tạo OK nhưng không load lại được: ${slug}`);
@@ -582,6 +584,96 @@ export async function getTranscript(
   return { source, segments, totalSegments: segments.length };
 }
 
+/**
+ * Cờ báo lỗi chính tả do USER đánh dấu trên UI (tab Transcript). Lưu index câu
+ * (khớp thứ tự corrected.json — count cố định). AI/skill đọc file này để review
+ * ĐÚNG các câu được đánh dấu thay vì rà cả transcript. File: tmp/<slug>.flags.json
+ */
+export type TranscriptFlags = { flaggedIds: number[]; updatedAt: string | null };
+
+const flagsPath = (name: string) => path.join(TMP_DIR, `${name}.flags.json`);
+
+const normalizeIds = (ids: unknown): number[] =>
+  Array.isArray(ids)
+    ? [...new Set(ids.filter((n): n is number => Number.isInteger(n) && (n as number) >= 0))].sort(
+        (a, b) => a - b,
+      )
+    : [];
+
+export async function getTranscriptFlags(name: string): Promise<TranscriptFlags> {
+  const p = flagsPath(name);
+  if (!(await exists(p))) return { flaggedIds: [], updatedAt: null };
+  try {
+    const data = JSON.parse(await fs.readFile(p, "utf-8")) as TranscriptFlags;
+    return { flaggedIds: normalizeIds(data.flaggedIds), updatedAt: data.updatedAt ?? null };
+  } catch {
+    return { flaggedIds: [], updatedAt: null };
+  }
+}
+
+export async function saveTranscriptFlags(
+  name: string,
+  ids: number[],
+): Promise<TranscriptFlags> {
+  const payload: TranscriptFlags = {
+    flaggedIds: normalizeIds(ids),
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.mkdir(TMP_DIR, { recursive: true });
+  await fs.writeFile(flagsPath(name), JSON.stringify(payload, null, 2));
+  return payload;
+}
+
+// ─────────── Nhạc nền MẶC ĐỊNH (bản user chọn gần nhất) ───────────
+// User chốt 1 bản nhạc cho 1 tập → tự thành default cho MỌI tập mới (khỏi chọn
+// lại). Lưu file nhạc dùng chung input/_default.bgm.<ext> + cấu hình ở
+// input/_music-default.json. applyMusicDefaults() điền vào tập mới khi chưa có bgm.
+const MUSIC_DEFAULT_PATH = path.join(INPUT_DIR, "_music-default.json");
+export type MusicDefaults = {
+  bgm: string | null;
+  bgmVolumeDb: number;
+  bgmMode: "full" | "headtail";
+  musicCredit: string | null;
+};
+
+export async function getMusicDefaults(): Promise<MusicDefaults | null> {
+  if (!(await exists(MUSIC_DEFAULT_PATH))) return null;
+  try {
+    const d = JSON.parse(await fs.readFile(MUSIC_DEFAULT_PATH, "utf-8"));
+    if (!d?.bgm) return null;
+    return {
+      bgm: String(d.bgm),
+      bgmVolumeDb: typeof d.bgmVolumeDb === "number" ? d.bgmVolumeDb : -16,
+      bgmMode: d.bgmMode === "headtail" ? "headtail" : "full",
+      musicCredit: d.musicCredit ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveMusicDefaults(d: MusicDefaults): Promise<void> {
+  await fs.mkdir(INPUT_DIR, { recursive: true });
+  await fs.writeFile(MUSIC_DEFAULT_PATH, JSON.stringify(d, null, 2));
+}
+
+/** Điền nhạc mặc định (bản chọn gần nhất) vào config KHI tập chưa đặt bgm. */
+export async function applyMusicDefaults(
+  config: EpisodeConfig,
+): Promise<EpisodeConfig> {
+  if (config.bgm) return config;
+  const d = await getMusicDefaults();
+  if (!d?.bgm) return config;
+  if (!(await exists(path.join(INPUT_DIR, d.bgm)))) return config; // file mất → bỏ qua
+  return {
+    ...config,
+    bgm: d.bgm,
+    bgmVolumeDb: d.bgmVolumeDb,
+    bgmMode: d.bgmMode,
+    musicCredit: d.musicCredit,
+  };
+}
+
 export type ScenePlanItem = {
   index: number;
   startMs: number;
@@ -818,6 +910,17 @@ export async function uploadEpisodeBgm(
   const configPath = path.join(INPUT_DIR, `${name}.json`);
   const config = { ...summary.config, bgm: filename };
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+
+  // Ghi nhớ đây là NHẠC NỀN MẶC ĐỊNH mới (bản chọn gần nhất) cho các tập sau:
+  // copy sang file dùng chung + lưu cấu hình volume/mode/credit hiện tại.
+  const sharedName = `_default.bgm.${ext}`;
+  await fs.writeFile(path.join(INPUT_DIR, sharedName), buffer);
+  await saveMusicDefaults({
+    bgm: sharedName,
+    bgmVolumeDb: config.bgmVolumeDb,
+    bgmMode: config.bgmMode,
+    musicCredit: config.musicCredit,
+  });
 
   const updated = await loadSummary(name);
   if (!updated) throw new Error(`BGM OK nhưng không load lại: ${name}`);

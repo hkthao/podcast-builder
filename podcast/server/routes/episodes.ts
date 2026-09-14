@@ -13,6 +13,8 @@ import {
   getEpisode,
   getPlan,
   getTranscript,
+  getTranscriptFlags,
+  saveTranscriptFlags,
   listEpisodeFiles,
   listEpisodes,
   PLAN_OPTIONS,
@@ -358,6 +360,32 @@ episodesRoutes.put("/:name/transcript", async (c) => {
       err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
     return c.json({ error: err.message }, status);
   }
+});
+
+/**
+ * Cờ lỗi chính tả user đánh dấu (tab Transcript). GET trả { flaggedIds }.
+ */
+episodesRoutes.get("/:name/transcript/flags", async (c) => {
+  const name = c.req.param("name");
+  return c.json(await getTranscriptFlags(name));
+});
+
+/**
+ * Lưu cờ lỗi chính tả. Body: { flaggedIds: number[] } (index câu trong transcript).
+ */
+episodesRoutes.put("/:name/transcript/flags", async (c) => {
+  const name = c.req.param("name");
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const body = raw as { flaggedIds?: number[] };
+  if (!Array.isArray(body.flaggedIds)) {
+    return c.json({ error: "Body phải có field 'flaggedIds' là array" }, 400);
+  }
+  return c.json(await saveTranscriptFlags(name, body.flaggedIds));
 });
 
 /**

@@ -135,6 +135,11 @@ export type TranscriptPayload = {
   totalSegments: number;
 };
 
+export type TranscriptFlags = {
+  flaggedIds: number[];
+  updatedAt: string | null;
+};
+
 export type ScenePlanItem = {
   index: number;
   startMs: number;
@@ -555,6 +560,17 @@ export const api = {
     jsonFetch<TranscriptPayload>(
       `/api/episodes/${encodeURIComponent(name)}/transcript`,
       { method: "PUT", body: JSON.stringify({ segments }) },
+    ),
+
+  getTranscriptFlags: (name: string) =>
+    jsonFetch<TranscriptFlags>(
+      `/api/episodes/${encodeURIComponent(name)}/transcript/flags`,
+    ),
+
+  saveTranscriptFlags: (name: string, flaggedIds: number[]) =>
+    jsonFetch<TranscriptFlags>(
+      `/api/episodes/${encodeURIComponent(name)}/transcript/flags`,
+      { method: "PUT", body: JSON.stringify({ flaggedIds }) },
     ),
 
   getPlan: (name: string) =>

@@ -202,6 +202,12 @@ NotebookLM audio tiếng Việt KHÔNG ổn định: **hay lẫn giọng Nam/B�
 
    **Glossary CHUNG tái dùng mọi tập:** `input/_common-terms.txt` (lỗi Whisper hay gặp: Chuẩn/chuyển/chuyện, con→còn, trở bàn tay, tước bỏ, tên riêng Semir Zeki/Schopenhauer/Tanha/Upeksha...) — transcript-correct tự nạp. **Gặp lỗi mới → THÊM vào file này** để lần sau tự sửa.
 
+   **⭐ C) USER ĐÁNH DẤU LỖI trên UI (tab Transcript) → AI review đúng câu đó:** user bấm biểu tượng **cờ** ở đầu mỗi câu sai (lưu `tmp/<slug>.flags.json` = index câu; nút "chỉ hiện câu đánh dấu" + "copy cờ cho AI"). AI xem đúng các câu đó rồi sửa trong `tmp/<slug>.corrected.json`:
+   ```bash
+   npx tsx podcast/scripts/spell-fix-manual.ts flags <slug>   # in các câu user đánh dấu (kèm ngữ cảnh)
+   ```
+   Sửa xong → bảo user bỏ cờ trên UI. (Đây là kênh nhanh nhất để bắt lỗi user nghe thấy mà scan tự động bỏ sót.)
+
    Sau cả 2 cách: quét lỗi còn sót (`node -e` đếm `�`, câu lặp, tên riêng sai) + vá tay các lỗi confident bằng replace trong `corrected.json`. **QUAN TRỌNG:** `corrected.json` mới hơn raw → `make` full skip spell-fix và DÙNG bản đã sửa. Nếu đã render/plan trước đó → xoá `tmp/<slug>.plan.json` để regen caption ([[plan-json-cache-after-correct]]).
 4. **User nghe** xác nhận: (a) giọng Bắc nhất quán (máy khó tự bắt accent); (b) **xưng hô đúng giới tính** — host nam xưng "Tôi"/gọi nữ là "Chị", host nữ xưng "Tôi"/gọi nam là "Anh"; audio hay bị ĐẢO (nam gọi nữ là "anh", nữ gọi nam là "chị"). Cả 2 lỗi này nằm trong tiếng nói nên KHÔNG sửa được ở transcript/caption cho khớp.
 5. Đạt → Bước 8. Lỗi giọng HOẶC đảo xưng hô → quay lại Bước 5 regenerate (`nlm audio create` lại / roll bản khác), KHÔNG render.
@@ -215,6 +221,7 @@ Tạo `input/<slug>.json` (chỉ `title` + `episodeNumber` bắt buộc; còn l�
 ```
 `episodeNumber`: `grep -h '"episodeNumber"' input/*.json | grep -oE '[0-9]+' | sort -n | tail -1` rồi +1.
 **Cover:** set `"coverImage": "<tên-file>.cover.png"` (ảnh đặt trong `input/`, ~9:16). Nếu thiếu cover → video không có ảnh bìa/intro. Kiểm `ls input/*.cover.png` xem có sẵn ảnh đúng chủ đề chưa.
+**⭐ NHẠC NỀN — KẾ THỪA BẢN CHỌN GẦN NHẤT:** không phải chọn lại mỗi tập. Nhạc mặc định lưu ở `input/_music-default.json` (+ file dùng chung `input/_default.bgm.<ext>`); tập mới tự điền `bgm`/`bgmVolumeDb`/`bgmMode`/`musicCredit` từ đó (createEmptyEpisode gọi `applyMusicDefaults`). Khi user upload bgm mới cho 1 tập (UI) → tự cập nhật làm default cho các tập sau. Khi tạo config tay cho tập mới, đọc `input/_music-default.json` và điền theo (nếu có). Đổi nhạc mặc định = upload bgm mới, hoặc sửa `input/_music-default.json`.
 
 ## Bước 8.5 — Hình ảnh nâng cấp originality (footage · màu chủ đề · biên tập · công bố AI)
 

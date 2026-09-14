@@ -22,6 +22,7 @@ import {
   SpellCheck,
   Copy,
   Check,
+  Flag,
   Send,
   Image as ImageIcon,
   Scissors,
@@ -1273,7 +1274,46 @@ function TranscriptPanel({
   const [showFindBar, setShowFindBar] = useState(false);
   const [tPage, setTPage] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [copiedFlags, setCopiedFlags] = useState(false);
   const [showSpellFix, setShowSpellFix] = useState(false);
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+
+  // Cờ lỗi chính tả user đánh dấu → skill AI đọc tmp/<slug>.flags.json để sửa.
+  const flagsQ = useQuery({
+    queryKey: ["transcript-flags", episodeName],
+    queryFn: () => api.getTranscriptFlags(episodeName),
+  });
+  const flaggedSet = new Set(flagsQ.data?.flaggedIds ?? []);
+  const flagsMut = useMutation({
+    mutationFn: (ids: number[]) => api.saveTranscriptFlags(episodeName, ids),
+    onSuccess: (data) =>
+      qc.setQueryData(["transcript-flags", episodeName], data),
+  });
+  const toggleFlag = (idx: number) => {
+    const next = new Set(flagsQ.data?.flaggedIds ?? []);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    flagsMut.mutate([...next]);
+  };
+  const clearFlags = () => {
+    if (flaggedSet.size === 0) return;
+    if (window.confirm(`Bỏ đánh dấu tất cả ${flaggedSet.size} câu?`))
+      flagsMut.mutate([]);
+  };
+  // Copy các câu đã đánh dấu (kèm index) để dán cho AI review.
+  const copyFlagged = async () => {
+    const ids = [...flaggedSet].sort((a, b) => a - b);
+    const text = ids
+      .map((i) => `#${i}: ${segments[i]?.text?.trim() ?? ""}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedFlags(true);
+      setTimeout(() => setCopiedFlags(false), 1500);
+    } catch {
+      alert("Clipboard không khả dụng.");
+    }
+  };
 
   const copyFullTranscript = async () => {
     const fullText = segments
@@ -1414,10 +1454,15 @@ function TranscriptPanel({
   const matchCount = findQuery
     ? segments.filter((s) => s.text.includes(findQuery)).length
     : 0;
-  const tPageCount = Math.max(1, Math.ceil(segments.length / T_PAGE_SIZE));
+  // Danh sách hiển thị (kèm index thật) — lọc "chỉ câu đánh dấu" nếu bật.
+  const indexed = segments.map((s, i) => ({ s, i }));
+  const filtered = onlyFlagged
+    ? indexed.filter(({ i }) => flaggedSet.has(i))
+    : indexed;
+  const tPageCount = Math.max(1, Math.ceil(filtered.length / T_PAGE_SIZE));
   const tCur = Math.min(tPage, tPageCount - 1);
   const tStart = tCur * T_PAGE_SIZE;
-  const shown = segments.slice(tStart, tStart + T_PAGE_SIZE);
+  const shown = filtered.slice(tStart, tStart + T_PAGE_SIZE);
 
   return (
     <Card className="p-0 overflow-hidden">
@@ -1484,6 +1529,45 @@ function TranscriptPanel({
             <SpellCheck className="size-3.5" />
             Sửa chính tả
           </Button>
+          {flaggedSet.size > 0 && (
+            <>
+              <Button
+                variant={onlyFlagged ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setOnlyFlagged((v) => !v);
+                  setTPage(0);
+                }}
+                className="text-amber-600"
+                title="Chỉ hiện các câu đã đánh dấu lỗi"
+              >
+                <Flag className="size-3.5" fill="currentColor" />
+                {flaggedSet.size} lỗi
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={copyFlagged}
+                title="Copy các câu đã đánh dấu (kèm số câu) để gửi AI sửa"
+              >
+                {copiedFlags ? (
+                  <Check className="size-3.5 text-accent" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={clearFlags}
+                title="Bỏ tất cả đánh dấu"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </>
+          )}
           <Button
             variant={showFindBar ? "secondary" : "ghost"}
             size="sm"
@@ -1548,8 +1632,7 @@ function TranscriptPanel({
       )}
 
       <div className="divide-y max-h-[600px] overflow-y-auto">
-        {shown.map((s, localI) => {
-          const i = tStart + localI;
+        {shown.map(({ s, i }) => {
           return editingIdx === i ? (
             <div key={i} className="px-6 py-3 bg-secondary/20">
               <div className="flex items-center gap-2 mb-2">
@@ -1605,12 +1688,38 @@ function TranscriptPanel({
           ) : (
             <div
               key={i}
-              className="px-6 py-2.5 hover:bg-secondary/20 flex items-start gap-3 cursor-pointer group"
+              className={`px-6 py-2.5 flex items-start gap-3 cursor-pointer group ${
+                flaggedSet.has(i)
+                  ? "bg-amber-500/10 border-l-2 border-amber-500 hover:bg-amber-500/15"
+                  : "hover:bg-secondary/20"
+              }`}
               onClick={() => {
                 setEditingIdx(i);
                 setEditValue(s.text);
               }}
             >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFlag(i);
+                }}
+                title={
+                  flaggedSet.has(i)
+                    ? "Bỏ đánh dấu lỗi chính tả"
+                    : "Đánh dấu câu này có lỗi chính tả (để AI sửa)"
+                }
+                className={`shrink-0 mt-0.5 transition-opacity ${
+                  flaggedSet.has(i)
+                    ? "text-amber-500"
+                    : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-amber-500"
+                }`}
+              >
+                <Flag
+                  className="size-3.5"
+                  fill={flaggedSet.has(i) ? "currentColor" : "none"}
+                />
+              </button>
               <span className="font-mono text-xs text-muted-foreground shrink-0 mt-0.5 tabular-nums">
                 {formatTime(s.startMs)}
               </span>
@@ -1624,6 +1733,12 @@ function TranscriptPanel({
             </div>
           );
         })}
+        {shown.length === 0 && onlyFlagged && (
+          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+            Chưa có câu nào được đánh dấu lỗi. Bấm biểu tượng cờ ở đầu mỗi câu để
+            đánh dấu.
+          </div>
+        )}
       </div>
       {tPageCount > 1 && (
         <div className="px-6 py-3 border-t flex items-center justify-center gap-3 text-xs">
@@ -1638,7 +1753,8 @@ function TranscriptPanel({
           </Button>
           <span className="text-muted-foreground tabular-nums">
             Trang {tCur + 1}/{tPageCount} · câu {tStart + 1}–
-            {Math.min(tStart + T_PAGE_SIZE, segments.length)}/{segments.length}
+            {Math.min(tStart + T_PAGE_SIZE, filtered.length)}/{filtered.length}
+            {onlyFlagged ? " (đã đánh dấu)" : ""}
           </span>
           <Button
             size="sm"
