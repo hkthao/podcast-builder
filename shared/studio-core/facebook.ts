@@ -26,6 +26,8 @@ export type PublishReelResult = {
   /** Tên Trang (để user xác nhận đăng đúng chỗ). */
   pageName: string;
   pageId: string;
+  /** true nếu lên lịch (chưa đăng ngay) — khi đó permalink thường null. */
+  scheduled: boolean;
 };
 
 type GraphError = {
@@ -139,22 +141,28 @@ async function uploadBinary(
   }
 }
 
-/** Pha 3: chốt + publish. */
+/** Pha 3: chốt + publish (hoặc lên lịch nếu có scheduledPublishTime). */
 async function finishReel(
   token: string,
   pageId: string,
   videoId: string,
   description: string,
+  scheduledPublishTime?: number,
   signal?: AbortSignal,
 ): Promise<void> {
   const url = `${GRAPH}/${encodeURIComponent(pageId)}/video_reels`;
   const params = new URLSearchParams({
     upload_phase: "finish",
     video_id: videoId,
-    video_state: "PUBLISHED",
     description,
     access_token: token,
   });
+  if (scheduledPublishTime && scheduledPublishTime > 0) {
+    params.set("video_state", "SCHEDULED");
+    params.set("scheduled_publish_time", String(scheduledPublishTime));
+  } else {
+    params.set("video_state", "PUBLISHED");
+  }
   const res = await fetch(url, { method: "POST", body: params, signal });
   const body = (await parseJson(res)) as { success?: boolean } & GraphError;
   if (!res.ok || body.success === false || body.error) {
@@ -235,19 +243,22 @@ async function fetchPermalink(token: string, videoId: string, signal?: AbortSign
   return null;
 }
 
-/** Đăng 1 file video (mp4 dọc) lên Trang dưới dạng Reel. */
+/** Đăng 1 file video (mp4 dọc) lên Trang dưới dạng Reel (đăng ngay hoặc lên lịch). */
 export async function publishReel(opts: {
   token: string;
   pageIdOverride?: string;
   videoPath: string;
   description: string;
+  /** Unix seconds — nếu có (>0) thì LÊN LỊCH thay vì đăng ngay. */
+  scheduledPublishTime?: number;
   onProgress?: FbProgress;
   signal?: AbortSignal;
 }): Promise<PublishReelResult> {
-  const { token, pageIdOverride, videoPath, description, onProgress, signal } = opts;
+  const { token, pageIdOverride, videoPath, description, scheduledPublishTime, onProgress, signal } = opts;
   if (!fs.existsSync(videoPath)) {
     throw new Error(`Không tìm thấy video: ${videoPath} — hãy Assemble (ráp mp4) trước.`);
   }
+  const isScheduled = !!scheduledPublishTime && scheduledPublishTime > 0;
 
   onProgress?.("Đang xác định Trang từ token…");
   const page = await resolvePage(token, pageIdOverride, signal);
@@ -260,12 +271,18 @@ export async function publishReel(opts: {
   onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB)…`);
   await uploadBinary(uploadUrl, token, videoPath, signal);
 
-  onProgress?.("Đang chốt & xuất bản Reel…");
-  await finishReel(token, page.id, videoId, description, signal);
+  onProgress?.(isScheduled ? "Đang chốt & lên lịch Reel…" : "Đang chốt & xuất bản Reel…");
+  await finishReel(token, page.id, videoId, description, scheduledPublishTime, signal);
+
+  if (isScheduled) {
+    // Reel lên lịch chưa xử lý/hiển thị công khai ngay → không poll ready/permalink.
+    onProgress?.("✓ Đã lên lịch Reel thành công.");
+    return { videoId, permalink: null, pageName: page.name, pageId: page.id, scheduled: true };
+  }
 
   await waitReady(token, videoId, onProgress, signal);
 
   const permalink = await fetchPermalink(token, videoId, signal);
   onProgress?.("✓ Đã đăng Reel thành công.");
-  return { videoId, permalink, pageName: page.name, pageId: page.id };
+  return { videoId, permalink, pageName: page.name, pageId: page.id, scheduled: false };
 }

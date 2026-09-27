@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Send,
   CheckCircle2,
-  Circle,
   Clock,
   Copy,
   Check,
@@ -15,7 +13,6 @@ import {
   Hash,
   Quote,
   AlertCircle,
-  RotateCcw,
   Sparkles,
   Loader2,
   X as XIcon,
@@ -32,6 +29,7 @@ import {
   type LLMProvider,
 } from "@/lib/api";
 import { Facebook } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,31 +99,10 @@ const SUGGESTED_HASHTAGS = [
 const FB_REELS_URL =
   "https://www.facebook.com/reels/create/";
 
-type PublishStatus = EpisodeConfig["publishStatus"];
-
-const STATUS_META: Record<
-  PublishStatus,
-  { label: string; icon: React.ReactNode; color: string; description: string }
-> = {
-  draft: {
-    label: "Bản nháp",
-    icon: <Circle className="size-4" />,
-    color: "text-muted-foreground",
-    description: "Chưa review xong — soạn caption + hashtag trước khi đăng.",
-  },
-  ready: {
-    label: "Sẵn sàng đăng",
-    icon: <Clock className="size-4 text-amber-500" />,
-    color: "text-amber-600 dark:text-amber-400",
-    description: "Đã review OK — mở FB Reels Creator + paste caption.",
-  },
-  published: {
-    label: "Đã đăng",
-    icon: <CheckCircle2 className="size-4 text-accent" />,
-    color: "text-accent",
-    description: "Tập này đã lên sóng.",
-  },
-};
+const pad2 = (n: number) => String(n).padStart(2, "0");
+/** Date → giá trị cho <input type="datetime-local"> (giờ địa phương). */
+const toLocalInputValue = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
 export function PublishTab({
   ep,
@@ -224,13 +201,6 @@ export function PublishTab({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caption, hashtags, aiAssisted, scriptCredit, musicCredit, footageCredit, sourcesText]);
-
-  const setStatus = (next: PublishStatus) => {
-    saveMut.mutate({
-      publishStatus: next,
-      publishedAt: next === "published" ? new Date().toISOString() : null,
-    });
-  };
 
   // Lưu ngay caption/hashtag/công bố trước khi đăng (server dựng mô tả từ config).
   const flushPublishFields = async (): Promise<void> => {
@@ -334,101 +304,16 @@ export function PublishTab({
     : null;
   const displayCover = userCover ?? renderThumbnail;
   const isUserCover = !!userCover;
-  const status = ep.config.publishStatus;
-  const statusMeta = STATUS_META[status];
   const isReady = !!fullVideo;
 
   return (
     <div className="space-y-6">
-      {/* Status banner */}
-      <Card
-        className={cn(
-          "p-0 overflow-hidden border-l-4",
-          status === "published"
-            ? "border-l-accent"
-            : status === "ready"
-              ? "border-l-amber-500"
-              : "border-l-muted",
-        )}
-      >
-        <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-          <Send className="size-4 text-accent" />
-          <span className="font-medium text-sm">Đăng lên FB Reels</span>
-          <Badge
-            variant="outline"
-            className={cn("gap-1.5 font-mono ml-1", statusMeta.color)}
-          >
-            {statusMeta.icon}
-            {statusMeta.label}
-          </Badge>
-        </header>
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground">
-            {statusMeta.description}
-          </p>
-          {status === "published" && ep.config.publishedAt && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Đã đăng lúc:{" "}
-              <code className="font-mono">
-                {new Date(ep.config.publishedAt).toLocaleString("vi-VN")}
-              </code>
-            </p>
-          )}
-          {error && (
-            <p className="mt-3 text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="size-3" />
-              {error}
-            </p>
-          )}
-        </div>
-        <footer className="px-5 py-3 border-t flex items-center justify-end gap-2">
-          {status === "draft" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setStatus("ready")}
-              disabled={!isReady}
-              title={isReady ? "" : "Cần render video trước"}
-            >
-              <Clock className="size-3.5" />
-              Sẵn sàng đăng
-            </Button>
-          )}
-          {status === "ready" && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStatus("draft")}
-              >
-                <RotateCcw className="size-3.5" />
-                Về draft
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStatus("published")}
-              >
-                <CheckCircle2 className="size-3.5" />
-                Đánh dấu đã đăng
-              </Button>
-            </>
-          )}
-          {status === "published" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (window.confirm("Đặt lại về 'sẵn sàng đăng'?"))
-                  setStatus("ready");
-              }}
-            >
-              <RotateCcw className="size-3.5" />
-              Đăng lại
-            </Button>
-          )}
-        </footer>
-      </Card>
+      {error && (
+        <Card className="p-4 border-destructive/40 bg-destructive/5 text-sm flex items-start gap-2">
+          <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
+          <span className="text-destructive">{error}</span>
+        </Card>
+      )}
 
       {!isReady && (
         <Card className="p-4 border-amber-500/40 bg-amber-500/5 text-sm flex items-start gap-2">
@@ -513,98 +398,156 @@ export function PublishTab({
         </CollapsibleCard>
       )}
 
-      {/* Caption */}
+      {/* Caption & Hashtags */}
       <CollapsibleCard
         icon={<FileText className="size-4 text-accent" />}
-        title="Caption"
+        title="Caption & Hashtags"
         headerRight={
           <span className="text-xs text-muted-foreground tabular-nums">
-            {caption.length} ký tự
+            {caption.length} ký tự · {hashtags.length}/{MAX_HASHTAGS} tag
           </span>
         }
       >
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            <strong>FB mobile</strong> cut sau ~125 ký tự → dòng 1 nên là{" "}
-            <strong>video title</strong>, dòng 2 hook. Phần sau bị fold vào "Xem
-            thêm".
-          </p>
-
-          {/* Mobile preview — 125 chars cut indicator */}
-          {caption.length > 0 && (
-            <div className="rounded-md border bg-secondary/20 p-3 text-xs">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center justify-between">
-                <span>Preview mobile (dòng feed)</span>
-                <span className="tabular-nums">
-                  {Math.min(caption.length, 125)}/125
-                </span>
-              </div>
-              <div className="font-sans leading-relaxed whitespace-pre-wrap">
-                <span>{caption.slice(0, 125)}</span>
-                {caption.length > 125 && (
-                  <span className="text-accent font-medium">
-                    … <span className="underline">Xem thêm</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {aiGenMut.isError && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="size-3" />
-              AI gen thất bại: {String(aiGenMut.error)}
+        <div className="p-5 space-y-4">
+          {/* ── Caption ── */}
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              <strong>FB mobile</strong> cut sau ~125 ký tự → dòng 1 nên là{" "}
+              <strong>video title</strong>, dòng 2 hook. Phần sau bị fold vào "Xem thêm".
             </p>
-          )}
-          {aiGenMut.isSuccess && !aiGenMut.isPending && (
-            <p className="text-xs text-accent flex items-center gap-1">
-              <CheckCircle2 className="size-3" />
-              Đã gen caption + hashtags. Sửa thoải mái.
-            </p>
-          )}
-          <Textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder={
-              fbPostSuggestions.length > 0
-                ? "Dòng 1 nên là video title, dòng 2 hook. Hoặc bấm 'AI gen' dưới…"
-                : "Dòng 1 = title, dòng 2 = hook. Hoặc bấm 'AI gen' dưới…"
-            }
-            rows={5}
-            className="font-sans text-sm leading-relaxed"
-          />
-          {/* Auto-suggestions from essay derivatives */}
-          {fbPostSuggestions.length > 0 && (
-            <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
-                <Sparkles className="size-3" />
-                Gợi ý từ essay derivatives (FB posts)
-              </Label>
-              <div className="space-y-1.5">
-                {fbPostSuggestions.map((p, i) => (
-                  <div
-                    key={i}
-                    className="rounded-md border bg-secondary/20 p-2 text-xs space-y-1.5"
-                  >
-                    <p className="line-clamp-2 leading-relaxed">{p}</p>
-                    <div className="flex gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 text-[10px] px-2"
-                        onClick={() => setCaption(p)}
-                      >
-                        <Check className="size-3" />
-                        Dùng
-                      </Button>
-                      <CopyChip text={p} label="Copy" />
+            {caption.length > 0 && (
+              <div className="rounded-md border bg-secondary/20 p-3 text-xs">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center justify-between">
+                  <span>Preview mobile (dòng feed)</span>
+                  <span className="tabular-nums">{Math.min(caption.length, 125)}/125</span>
+                </div>
+                <div className="font-sans leading-relaxed whitespace-pre-wrap">
+                  <span>{caption.slice(0, 125)}</span>
+                  {caption.length > 125 && (
+                    <span className="text-accent font-medium"> … <span className="underline">Xem thêm</span></span>
+                  )}
+                </div>
+              </div>
+            )}
+            {aiGenMut.isError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="size-3" /> AI gen thất bại: {String(aiGenMut.error)}
+              </p>
+            )}
+            {aiGenMut.isSuccess && !aiGenMut.isPending && (
+              <p className="text-xs text-accent flex items-center gap-1">
+                <CheckCircle2 className="size-3" /> Đã gen caption + hashtags. Sửa thoải mái.
+              </p>
+            )}
+            <Textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder={
+                fbPostSuggestions.length > 0
+                  ? "Dòng 1 nên là video title, dòng 2 hook. Hoặc bấm 'AI gen' dưới…"
+                  : "Dòng 1 = title, dòng 2 = hook. Hoặc bấm 'AI gen' dưới…"
+              }
+              rows={5}
+              className="font-sans text-sm leading-relaxed"
+            />
+            {fbPostSuggestions.length > 0 && (
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Sparkles className="size-3" /> Gợi ý từ essay derivatives (FB posts)
+                </Label>
+                <div className="space-y-1.5">
+                  {fbPostSuggestions.map((p, i) => (
+                    <div key={i} className="rounded-md border bg-secondary/20 p-2 text-xs space-y-1.5">
+                      <p className="line-clamp-2 leading-relaxed">{p}</p>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setCaption(p)}>
+                          <Check className="size-3" /> Dùng
+                        </Button>
+                        <CopyChip text={p} label="Copy" />
+                      </div>
                     </div>
-                  </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Hashtags ── */}
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <Hash className="size-3" /> Hashtags
+              </Label>
+              <span className={cn("text-xs tabular-nums", hashtags.length >= MAX_HASHTAGS ? "text-accent font-medium" : "text-muted-foreground")}>
+                {hashtags.length}/{MAX_HASHTAGS}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              FB Reels recommend tối đa <strong>5 hashtag</strong> — chọn cái relevant nhất, KHÔNG spam.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {hashtags.map((h) => (
+                <Badge key={h} variant="secondary" className="gap-1 pl-2 pr-1 py-1 text-sm">
+                  #{h}
+                  <button type="button" onClick={() => removeHashtag(h)} className="hover:text-destructive rounded p-0.5" aria-label={`Xoá ${h}`}>
+                    <XIcon className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+              {hashtags.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">Chưa có hashtag — thêm bên dưới (max {MAX_HASHTAGS}).</p>
+              )}
+            </div>
+            <div className="relative">
+              <Input
+                value={hashtagInput}
+                onChange={(e) => setHashtagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addHashtag(hashtagInput);
+                    setHashtagInput("");
+                  }
+                }}
+                placeholder={
+                  hashtags.length >= MAX_HASHTAGS
+                    ? `Đã đạt ${MAX_HASHTAGS} max — xoá bớt để add`
+                    : "Thêm hashtag (Enter để add)…"
+                }
+                disabled={hashtags.length >= MAX_HASHTAGS}
+                className="text-sm pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  addHashtag(hashtagInput);
+                  setHashtagInput("");
+                }}
+                disabled={!hashtagInput.trim() || hashtags.length >= MAX_HASHTAGS}
+                aria-label="Thêm hashtag"
+                title="Thêm hashtag"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+            {hashtags.length < MAX_HASHTAGS && (
+              <div className="flex flex-wrap gap-1.5">
+                {SUGGESTED_HASHTAGS.filter((h) => !hashtags.includes(h)).map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => addHashtag(h)}
+                    className="text-xs px-2 py-1 rounded border border-dashed text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                  >
+                    + #{h}
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
         <footer className="px-5 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
           <Button
             variant="outline"
@@ -612,22 +555,17 @@ export function PublishTab({
             onClick={() => {
               const title = ep.config.title.trim();
               if (!title) return;
-              // Prepend nếu chưa có title ở dòng 1
               const firstLine = caption.split("\n")[0]?.trim() ?? "";
               if (firstLine.toLowerCase().includes(title.toLowerCase())) return;
               setCaption(caption ? `${title}\n${caption}` : title);
             }}
             disabled={
               !ep.config.title ||
-              caption
-                .split("\n")[0]
-                ?.toLowerCase()
-                .includes(ep.config.title.toLowerCase())
+              caption.split("\n")[0]?.toLowerCase().includes(ep.config.title.toLowerCase())
             }
-            title="Chèn video title làm dòng 1 (để mobile hiển thị đúng title)"
+            title="Chèn video title làm dòng 1"
           >
-            <FileText className="size-3.5" />
-            Chèn title
+            <FileText className="size-3.5" /> Chèn title
           </Button>
           <select
             value={llmProvider}
@@ -636,28 +574,18 @@ export function PublishTab({
             className="h-8 text-xs rounded-md border border-input bg-background px-2"
             title="LLM provider"
           >
-            <option value="openai" disabled={!modelsQ.data?.openai.length}>
-              OpenAI
-            </option>
-            <option value="ollama" disabled={!modelsQ.data?.ollama.length}>
-              Ollama
-            </option>
+            <option value="openai" disabled={!modelsQ.data?.openai.length}>OpenAI</option>
+            <option value="ollama" disabled={!modelsQ.data?.ollama.length}>Ollama</option>
           </select>
           <select
             value={llmModel}
             onChange={(e) => setLlmModel(e.target.value)}
-            disabled={
-              modelsQ.isLoading ||
-              aiGenMut.isPending ||
-              (modelsQ.data?.[llmProvider]?.length ?? 0) === 0
-            }
+            disabled={modelsQ.isLoading || aiGenMut.isPending || (modelsQ.data?.[llmProvider]?.length ?? 0) === 0}
             className="h-8 text-xs rounded-md border border-input bg-background px-2 max-w-[180px]"
             title="LLM model"
           >
             {(modelsQ.data?.[llmProvider] ?? []).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
+              <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
           <Button
@@ -665,128 +593,14 @@ export function PublishTab({
             size="sm"
             onClick={() => aiGenMut.mutate()}
             disabled={aiGenMut.isPending || !ep.config.title}
-            title="LLM gen caption + hashtags từ title + hook + essay"
+            title="LLM gen caption + hashtags"
           >
-            {aiGenMut.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="size-3.5" />
-            )}
-            AI gen
+            {aiGenMut.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} AI gen
           </Button>
           <CopyButton
             text={fullCaption}
             label={`Copy caption + ${hashtags.length} hashtag`}
             disabled={fullCaption.length === 0}
-          />
-        </footer>
-      </CollapsibleCard>
-
-      {/* Hashtags */}
-      <CollapsibleCard
-        icon={<Hash className="size-4 text-accent" />}
-        title="Hashtags"
-        headerRight={
-          <span
-            className={cn(
-              "text-xs tabular-nums",
-              hashtags.length >= MAX_HASHTAGS
-                ? "text-accent font-medium"
-                : "text-muted-foreground",
-            )}
-          >
-            {hashtags.length}/{MAX_HASHTAGS}
-          </span>
-        }
-      >
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            FB Reels recommend tối đa <strong>5 hashtag</strong> — chọn cái
-            relevant nhất, KHÔNG spam (FB ranking penalize hashtag stuffing).
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {hashtags.map((h) => (
-              <Badge
-                key={h}
-                variant="secondary"
-                className="gap-1 pl-2 pr-1 py-1 text-sm"
-              >
-                #{h}
-                <button
-                  type="button"
-                  onClick={() => removeHashtag(h)}
-                  className="hover:text-destructive rounded p-0.5"
-                  aria-label={`Xoá ${h}`}
-                >
-                  <XIcon className="size-3" />
-                </button>
-              </Badge>
-            ))}
-            {hashtags.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">
-                Chưa có hashtag — thêm vài cái bên dưới (max {MAX_HASHTAGS}).
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={hashtagInput}
-              onChange={(e) => setHashtagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") {
-                  e.preventDefault();
-                  addHashtag(hashtagInput);
-                  setHashtagInput("");
-                }
-              }}
-              placeholder={
-                hashtags.length >= MAX_HASHTAGS
-                  ? `Đã đạt ${MAX_HASHTAGS} max — xoá bớt để add mới`
-                  : `Thêm hashtag (Enter để add)…`
-              }
-              disabled={hashtags.length >= MAX_HASHTAGS}
-              className="text-sm"
-            />
-          </div>
-          {hashtags.length < MAX_HASHTAGS && (
-            <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                Gợi ý nhanh ({MAX_HASHTAGS - hashtags.length} slot trống)
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {SUGGESTED_HASHTAGS.filter((h) => !hashtags.includes(h)).map(
-                  (h) => (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => addHashtag(h)}
-                      className="text-xs px-2 py-1 rounded border border-dashed text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-                    >
-                      + #{h}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        <footer className="px-5 py-3 border-t flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              addHashtag(hashtagInput);
-              setHashtagInput("");
-            }}
-            disabled={!hashtagInput.trim() || hashtags.length >= MAX_HASHTAGS}
-          >
-            <Plus className="size-3.5" />
-            Thêm hashtag
-          </Button>
-          <CopyButton
-            text={hashtags.map((h) => `#${h}`).join(" ")}
-            label="Copy hashtags"
-            disabled={hashtags.length === 0}
           />
         </footer>
       </CollapsibleCard>
@@ -974,69 +788,137 @@ function FacebookPublishCard({
   const [playlistId, setPlaylistId] = useState(ep.config.fbPlaylistId ?? "");
   const selectedPlaylist = playlistsQ.data?.playlists.find((p) => p.id === playlistId);
 
+  // Lên lịch (scheduler FB)
+  const [scheduleOn, setScheduleOn] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState("");
+  const minSchedule = toLocalInputValue(new Date(Date.now() + 11 * 60_000));
+
+  // Trạng thái đăng trực tiếp (live)
+  const [statusKind, setStatusKind] = useState<
+    null | "publishing" | "success" | "scheduled" | "error"
+  >(null);
+  const [statusText, setStatusText] = useState("");
+
   const publishedAt = ep.config.publishedAt;
   const permalink = ep.config.fbPermalink;
 
   const publish = async () => {
+    let scheduledAtIso: string | undefined;
+    if (scheduleOn) {
+      if (!scheduleAt) return;
+      const ms = new Date(scheduleAt).getTime();
+      if (Number.isNaN(ms) || ms < Date.now() + 10 * 60_000) {
+        setStatusKind("error");
+        setStatusText("Lên lịch phải cách hiện tại ít nhất 10 phút.");
+        return;
+      }
+      scheduledAtIso = new Date(ms).toISOString();
+    }
+
     esRef.current?.close();
     setLines([]);
     setPublishing(true);
+    setStatusKind("publishing");
+    setStatusText(scheduledAtIso ? "Đang lên lịch…" : "Đang chuẩn bị…");
     try {
       await onBeforePublish();
     } catch {
       /* lưu lỗi vẫn cho đăng — server đọc config gần nhất */
     }
     const es = new EventSource(
-      api.publishEpisodeUrl(
-        ep.name,
-        selectedPlaylist ? { id: selectedPlaylist.id, title: selectedPlaylist.title } : undefined,
-      ),
+      api.publishEpisodeUrl(ep.name, {
+        playlist: selectedPlaylist ? { id: selectedPlaylist.id, title: selectedPlaylist.title } : undefined,
+        scheduledAt: scheduledAtIso,
+      }),
     );
     esRef.current = es;
     const push = (text: string, cls?: string) =>
       setLines((prev) => [...prev, { text, cls }]);
 
-    es.addEventListener("log", (e) => push(JSON.parse((e as MessageEvent).data).line));
+    es.addEventListener("log", (e) => {
+      const line = JSON.parse((e as MessageEvent).data).line as string;
+      push(line);
+      setStatusText(line);
+    });
     es.addEventListener("error", (e) => {
       try {
-        push("⚠ " + JSON.parse((e as MessageEvent).data).message, "text-destructive");
+        const msg = JSON.parse((e as MessageEvent).data).message as string;
+        push("⚠ " + msg, "text-destructive");
+        setStatusKind("error");
+        setStatusText(msg);
       } catch {
         /* connection error */
       }
     });
     es.addEventListener("published", (e) => {
-      const d = JSON.parse((e as MessageEvent).data) as { permalink?: string };
-      push(d.permalink ? `✓ Đã đăng: ${d.permalink}` : "✓ Đã đăng Reel.", "text-accent");
+      const d = JSON.parse((e as MessageEvent).data) as {
+        permalink?: string;
+        scheduled?: boolean;
+        scheduledAt?: string | null;
+      };
+      if (d.scheduled) {
+        setStatusKind("scheduled");
+        setStatusText(
+          d.scheduledAt
+            ? `Đã lên lịch lúc ${new Date(d.scheduledAt).toLocaleString("vi-VN")}`
+            : "Đã lên lịch",
+        );
+        push("✓ Đã lên lịch Reel.", "text-accent");
+      } else {
+        setStatusKind("success");
+        setStatusText("Đã đăng");
+        push(d.permalink ? `✓ Đã đăng: ${d.permalink}` : "✓ Đã đăng Reel.", "text-accent");
+      }
       qc.invalidateQueries({ queryKey: ["episode", ep.name] });
       qc.invalidateQueries({ queryKey: ["episodes"] });
     });
     es.addEventListener("done", (e) => {
       const code = JSON.parse((e as MessageEvent).data).code;
-      if (code !== 0) push(`✗ Đăng thất bại (mã ${code})`, "text-destructive");
+      if (code !== 0) {
+        push(`✗ Thất bại (mã ${code})`, "text-destructive");
+        setStatusKind((k) => (k === "publishing" ? "error" : k));
+      }
       es.close();
       setPublishing(false);
     });
     es.onerror = () => {
       es.close();
       setPublishing(false);
+      setStatusKind((k) => (k === "publishing" ? "error" : k));
     };
   };
+
+  // Badge trạng thái ở header: ưu tiên trạng thái live, fallback config đã lưu.
+  const headerBadge = (() => {
+    const kind =
+      statusKind ??
+      (ep.config.publishStatus === "scheduled"
+        ? "scheduled"
+        : publishedAt
+          ? "success"
+          : null);
+    if (!kind) return null;
+    if (kind === "publishing")
+      return { cls: "border-blue-500/40 text-blue-700 dark:text-blue-400 bg-blue-500/5", icon: <Loader2 className="size-3 animate-spin" />, label: "Đang đăng…" };
+    if (kind === "scheduled")
+      return { cls: "border-blue-500/40 text-blue-700 dark:text-blue-400 bg-blue-500/5", icon: <Clock className="size-3" />, label: "Đã lên lịch" };
+    if (kind === "error")
+      return { cls: "border-destructive/40 text-destructive bg-destructive/5", icon: <AlertCircle className="size-3" />, label: "Lỗi" };
+    return { cls: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5", icon: <CheckCircle2 className="size-3" />, label: "Đã đăng" };
+  })();
 
   return (
     <Card className="p-0 overflow-hidden border-primary/30">
       <header className="px-5 py-3 border-b bg-primary/10 flex items-center gap-2">
         <Facebook className="size-4 text-primary" />
         <span className="font-medium text-sm">Đăng thẳng lên Facebook Reel</span>
-        {publishedAt && (
-          <Badge
-            variant="outline"
-            className="ml-auto gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5"
-          >
-            <CheckCircle2 className="size-3" /> Đã đăng
+        {headerBadge && (
+          <Badge variant="outline" className={cn("ml-auto gap-1", headerBadge.cls)}>
+            {headerBadge.icon} {headerBadge.label}
           </Badge>
         )}
       </header>
-      <div className="p-5 space-y-3">
+      <div className="p-5 space-y-4">
         {!hasToken && (
           <p className="text-sm text-muted-foreground">
             Chưa có Page Access Token.{" "}
@@ -1047,40 +929,99 @@ function FacebookPublishCard({
           </p>
         )}
         {hasToken && !isReady && (
-          <p className="text-sm text-muted-foreground">
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">
             Chưa có video render — sang tab <strong>Render</strong> bấm "Render full" trước.
           </p>
         )}
 
         {hasToken && (
-          <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Playlist (tuỳ chọn)
-            </Label>
-            <select
-              value={playlistId}
-              onChange={(e) => setPlaylistId(e.target.value)}
-              disabled={publishing || playlistsQ.isLoading}
-              className="mt-1 h-9 w-full max-w-md rounded-md border border-input bg-background px-2 text-sm"
-            >
-              <option value="">— Không thêm playlist —</option>
-              {playlistsQ.data?.playlists.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title} ({p.videosCount})
-                </option>
-              ))}
-            </select>
-            {playlistsQ.isError && (
-              <p className="mt-1 text-xs text-destructive">
-                Không tải được playlist: {String(playlistsQ.error)}
-              </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Playlist */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Playlist (tuỳ chọn)
+              </Label>
+              <select
+                value={playlistId}
+                onChange={(e) => setPlaylistId(e.target.value)}
+                disabled={publishing || playlistsQ.isLoading}
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+              >
+                <option value="">— Không thêm playlist —</option>
+                {playlistsQ.data?.playlists.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} ({p.videosCount})
+                  </option>
+                ))}
+              </select>
+              {playlistsQ.isError ? (
+                <p className="text-[11px] text-destructive">
+                  Không tải được playlist: {String(playlistsQ.error)}
+                </p>
+              ) : selectedPlaylist ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  FB không cho tự thêm vào playlist qua API — app sẽ nhắc thêm tay sau khi đăng.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Chọn để được nhắc thêm Reel vào playlist sau khi đăng.
+                </p>
+              )}
+            </div>
+
+            {/* Lịch đăng */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Lịch đăng
+                </Label>
+                <Switch
+                  checked={scheduleOn}
+                  onCheckedChange={(v) => {
+                    setScheduleOn(v);
+                    if (v && !scheduleAt) {
+                      setScheduleAt(toLocalInputValue(new Date(Date.now() + 60 * 60_000)));
+                    }
+                  }}
+                  disabled={publishing}
+                />
+              </div>
+              {scheduleOn ? (
+                <>
+                  <input
+                    type="datetime-local"
+                    value={scheduleAt}
+                    min={minSchedule}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    disabled={publishing}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    FB cho lên lịch 10 phút – 75 ngày kể từ bây giờ.
+                  </p>
+                </>
+              ) : (
+                <p className="flex h-9 items-center text-[11px] text-muted-foreground">
+                  Tắt = đăng ngay khi bấm nút.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {statusText && (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs",
+              statusKind === "error"
+                ? "border-destructive/40 bg-destructive/5 text-destructive"
+                : statusKind === "success" || statusKind === "scheduled"
+                  ? "border-accent/40 bg-accent/5 text-accent"
+                  : "border-border bg-secondary/30 text-muted-foreground",
             )}
-            {selectedPlaylist && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Facebook không cho tự thêm Reel vào playlist qua API — sau khi đăng,
-                app sẽ nhắc bạn mở Reel và thêm tay vào "{selectedPlaylist.title}".
-              </p>
-            )}
+          >
+            {publishing && <Loader2 className="size-3 shrink-0 animate-spin" />}
+            <span className="truncate">{statusText}</span>
           </div>
         )}
 
@@ -1125,15 +1066,21 @@ function FacebookPublishCard({
         <Button
           size="sm"
           className="gap-1.5"
-          disabled={!hasToken || !isReady || publishing}
+          disabled={!hasToken || !isReady || publishing || (scheduleOn && !scheduleAt)}
           onClick={publish}
         >
           {publishing ? (
             <Loader2 className="size-3.5 animate-spin" />
+          ) : scheduleOn ? (
+            <Clock className="size-3.5" />
           ) : (
             <Facebook className="size-3.5" />
           )}
-          {publishedAt ? "Đăng lại Reel" : "Đăng lên Facebook Reel"}
+          {scheduleOn
+            ? "Lên lịch đăng"
+            : publishedAt
+              ? "Đăng lại Reel"
+              : "Đăng lên Facebook Reel"}
         </Button>
       </footer>
     </Card>

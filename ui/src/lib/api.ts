@@ -49,8 +49,9 @@ export type EpisodeConfig = {
   coverImage: string | null;
   coverFit: "cover" | "contain";
   coverPosition: "top" | "center" | "bottom";
-  publishStatus: "draft" | "ready" | "published";
+  publishStatus: "draft" | "ready" | "scheduled" | "published";
   publishedAt: string | null;
+  scheduledPublishTime: string | null;
   publishCaption: string | null;
   publishHashtags: string[];
   aiAssisted: boolean;
@@ -1328,15 +1329,23 @@ export const api = {
     jsonFetch<{ pageId: string; pageName: string; playlists: FbPlaylist[] }>(
       "/api/episodes/_/facebook-playlists",
     ),
-  /** URL SSE để đăng video render lên Facebook Reel (dùng với EventSource). */
-  publishEpisodeUrl: (name: string, playlist?: { id: string; title: string }) => {
+  /**
+   * URL SSE để đăng video render lên Facebook Reel (dùng với EventSource).
+   * scheduledAt (ISO) → lên lịch thay vì đăng ngay.
+   */
+  publishEpisodeUrl: (
+    name: string,
+    opts?: { playlist?: { id: string; title: string }; scheduledAt?: string },
+  ) => {
     const base = `/api/episodes/${encodeURIComponent(name)}/publish`;
-    if (!playlist?.id) return base;
-    const qs = new URLSearchParams({
-      playlistId: playlist.id,
-      playlistName: playlist.title,
-    });
-    return `${base}?${qs.toString()}`;
+    const qs = new URLSearchParams();
+    if (opts?.playlist?.id) {
+      qs.set("playlistId", opts.playlist.id);
+      qs.set("playlistName", opts.playlist.title);
+    }
+    if (opts?.scheduledAt) qs.set("scheduledAt", opts.scheduledAt);
+    const s = qs.toString();
+    return s ? `${base}?${s}` : base;
   },
 };
 

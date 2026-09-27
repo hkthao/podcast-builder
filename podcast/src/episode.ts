@@ -75,10 +75,12 @@ export const EpisodeConfigSchema = z.object({
    */
   coverPosition: z.enum(["top", "center", "bottom"]).default("center"),
   // ────── Publishing workflow (tab "Đăng") ──────
-  /** Trạng thái publish: draft (chưa review), ready (sẵn đăng), published (đã đăng). */
-  publishStatus: z.enum(["draft", "ready", "published"]).default("draft"),
+  /** Trạng thái publish: draft, ready, scheduled (đã lên lịch FB), published (đã đăng). */
+  publishStatus: z.enum(["draft", "ready", "scheduled", "published"]).default("draft"),
   /** ISO timestamp khi user mark published. Null khi chưa published. */
   publishedAt: z.string().nullable().default(null),
+  /** ISO thời điểm lên lịch đăng (FB scheduler). Null khi đăng ngay/chưa lên lịch. */
+  scheduledPublishTime: z.string().nullable().default(null),
   /** Caption để đăng lên FB Reels — user edit hoặc auto-fill từ essay derivatives. */
   publishCaption: z.string().nullable().default(null),
   /** Hashtags để dán sau caption (mảng riêng để dễ edit như chip). */
@@ -148,6 +150,7 @@ export const buildEpisodeTemplate = (
   coverPosition: "center",
   publishStatus: "draft",
   publishedAt: null,
+  scheduledPublishTime: null,
   publishCaption: null,
   publishHashtags: [],
   aiAssisted: true,

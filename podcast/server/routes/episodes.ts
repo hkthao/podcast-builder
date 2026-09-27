@@ -554,6 +554,32 @@ episodesRoutes.get("/:name/publish", (c) => {
     const playlistId = c.req.query("playlistId")?.trim() || undefined;
     const playlistName = c.req.query("playlistName")?.trim() || undefined;
 
+    // Lên lịch (scheduler FB): scheduledAt là ISO. FB yêu cầu 10 phút–75 ngày.
+    let scheduledPublishTime: number | undefined;
+    let scheduledIso: string | undefined;
+    const scheduledAt = c.req.query("scheduledAt")?.trim();
+    if (scheduledAt) {
+      const ms = Date.parse(scheduledAt);
+      if (Number.isNaN(ms)) {
+        await send("error", { message: "Thời điểm lên lịch không hợp lệ." });
+        await send("done", { code: 1 });
+        return;
+      }
+      const now = Date.now();
+      if (ms < now + 10 * 60_000) {
+        await send("error", { message: "Lên lịch phải cách hiện tại ít nhất 10 phút (yêu cầu của Facebook)." });
+        await send("done", { code: 1 });
+        return;
+      }
+      if (ms > now + 75 * 24 * 3600_000) {
+        await send("error", { message: "Lên lịch tối đa 75 ngày kể từ bây giờ (yêu cầu của Facebook)." });
+        await send("done", { code: 1 });
+        return;
+      }
+      scheduledPublishTime = Math.floor(ms / 1000);
+      scheduledIso = new Date(ms).toISOString();
+    }
+
     // Bridge onProgress (sync) → SSE (async) qua queue + wake.
     const queue: string[] = [];
     let resume: (() => void) | null = null;
@@ -563,7 +589,11 @@ episodesRoutes.get("/:name/publish", (c) => {
     const ac = new AbortController();
     stream.onAbort(() => ac.abort());
 
-    await send("log", { line: `Đăng "${name}.mp4" lên Facebook Reel…` });
+    await send("log", {
+      line: scheduledIso
+        ? `Lên lịch "${name}.mp4" đăng lúc ${new Date(scheduledIso).toLocaleString("vi-VN")}…`
+        : `Đăng "${name}.mp4" lên Facebook Reel…`,
+    });
 
     const holder: {
       done: boolean;
@@ -575,6 +605,7 @@ episodesRoutes.get("/:name/publish", (c) => {
       pageIdOverride: process.env.FB_PAGE_ID,
       videoPath,
       description,
+      scheduledPublishTime,
       onProgress,
       signal: ac.signal,
     })
@@ -601,8 +632,9 @@ episodesRoutes.get("/:name/publish", (c) => {
       const r = holder.result;
       const updated: EpisodeConfig = {
         ...summary.config,
-        publishStatus: "published",
-        publishedAt: new Date().toISOString(),
+        publishStatus: r.scheduled ? "scheduled" : "published",
+        publishedAt: r.scheduled ? summary.config.publishedAt : new Date().toISOString(),
+        scheduledPublishTime: r.scheduled ? (scheduledIso ?? null) : null,
         fbReelId: r.videoId,
         fbPermalink: r.permalink,
         ...(playlistId ? { fbPlaylistId: playlistId } : {}),
@@ -622,6 +654,8 @@ episodesRoutes.get("/:name/publish", (c) => {
         videoId: r.videoId,
         permalink: r.permalink,
         pageName: r.pageName,
+        scheduled: r.scheduled,
+        scheduledAt: r.scheduled ? (scheduledIso ?? null) : null,
         playlistName: playlistName ?? null,
       });
     }

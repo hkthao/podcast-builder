@@ -224,6 +224,7 @@ const buildTemplate = (
   coverPosition: "center",
   publishStatus: "draft",
   publishedAt: null,
+  scheduledPublishTime: null,
   publishCaption: null,
   publishHashtags: [],
   aiAssisted: true,
