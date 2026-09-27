@@ -1329,6 +1329,18 @@ export const api = {
     jsonFetch<{ pageId: string; pageName: string; playlists: FbPlaylist[] }>(
       "/api/episodes/_/facebook-playlists",
     ),
+  /** Gợi ý playlist bằng AI: dùng lại playlist nào, hay nên tạo mới. */
+  suggestPlaylist: (name: string, input: { provider: LLMProvider; model: string }) =>
+    jsonFetch<{
+      mode: "reuse" | "new";
+      playlistId: string | null;
+      playlistTitle: string;
+      reason: string;
+      confidence: "cao" | "vừa" | "thấp" | null;
+    }>(`/api/episodes/${encodeURIComponent(name)}/playlist-suggestion`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   /**
    * URL SSE để đăng video render lên Facebook Reel (dùng với EventSource).
    * scheduledAt (ISO) → lên lịch thay vì đăng ngay.

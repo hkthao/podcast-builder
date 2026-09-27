@@ -741,6 +741,8 @@ export function PublishTab({
         ep={ep}
         isReady={isReady}
         onBeforePublish={flushPublishFields}
+        llmProvider={llmProvider}
+        llmModel={llmModel}
       />
     </div>
   );
@@ -755,10 +757,14 @@ function FacebookPublishCard({
   ep,
   isReady,
   onBeforePublish,
+  llmProvider,
+  llmModel,
 }: {
   ep: EpisodeSummary;
   isReady: boolean;
   onBeforePublish: () => Promise<void>;
+  llmProvider: LLMProvider;
+  llmModel: string;
 }) {
   const qc = useQueryClient();
   const [lines, setLines] = useState<Array<{ text: string; cls?: string }>>([]);
@@ -787,6 +793,12 @@ function FacebookPublishCard({
   });
   const [playlistId, setPlaylistId] = useState(ep.config.fbPlaylistId ?? "");
   const selectedPlaylist = playlistsQ.data?.playlists.find((p) => p.id === playlistId);
+
+  // Gợi ý playlist bằng AI (dùng lại / tạo mới)
+  const suggestMut = useMutation({
+    mutationFn: () => api.suggestPlaylist(ep.name, { provider: llmProvider, model: llmModel }),
+  });
+  const suggestion = suggestMut.data;
 
   // Lên lịch (scheduler FB)
   const [scheduleOn, setScheduleOn] = useState(false);
@@ -938,9 +950,25 @@ function FacebookPublishCard({
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Playlist */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Playlist (tuỳ chọn)
-              </Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Playlist (tuỳ chọn)
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => suggestMut.mutate()}
+                  disabled={suggestMut.isPending || playlistsQ.isLoading}
+                  className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline disabled:opacity-50"
+                  title="Dùng AI gợi ý playlist theo chủ đề tập"
+                >
+                  {suggestMut.isPending ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3" />
+                  )}
+                  Gợi ý AI
+                </button>
+              </div>
               <select
                 value={playlistId}
                 onChange={(e) => setPlaylistId(e.target.value)}
@@ -954,18 +982,67 @@ function FacebookPublishCard({
                   </option>
                 ))}
               </select>
-              {playlistsQ.isError ? (
+
+              {suggestMut.isError && (
                 <p className="text-[11px] text-destructive">
-                  Không tải được playlist: {String(playlistsQ.error)}
+                  Gợi ý lỗi: {String(suggestMut.error)}
                 </p>
-              ) : selectedPlaylist ? (
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  FB không cho tự thêm vào playlist qua API — app sẽ nhắc thêm tay sau khi đăng.
-                </p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  Chọn để được nhắc thêm Reel vào playlist sau khi đăng.
-                </p>
+              )}
+              {suggestion && (
+                <div className="rounded-md border border-accent/40 bg-accent/5 p-2 text-[11px] leading-relaxed">
+                  {suggestion.mode === "reuse" ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Sparkles className="size-3 text-accent" />
+                      <span>
+                        Nên dùng: <strong>{suggestion.playlistTitle}</strong>
+                        {suggestion.confidence ? ` (độ tin ${suggestion.confidence})` : ""}
+                      </span>
+                      {suggestion.playlistId && suggestion.playlistId !== playlistId && (
+                        <button
+                          type="button"
+                          onClick={() => setPlaylistId(suggestion.playlistId!)}
+                          className="rounded border border-accent/50 px-1.5 py-0.5 text-accent hover:bg-accent/10"
+                        >
+                          Dùng
+                        </button>
+                      )}
+                      {suggestion.playlistId === playlistId && (
+                        <span className="inline-flex items-center gap-0.5 text-accent">
+                          <Check className="size-3" /> đã chọn
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-1.5">
+                      <Plus className="size-3 mt-0.5 text-accent" />
+                      <span>
+                        Nên <strong>tạo playlist mới</strong>: "{suggestion.playlistTitle}"
+                        {suggestion.confidence ? ` (độ tin ${suggestion.confidence})` : ""}. Tạo
+                        trên Facebook rồi thêm vào{" "}
+                        <code className="font-mono">input/_fb-playlists.json</code>.
+                      </span>
+                    </div>
+                  )}
+                  {suggestion.reason && (
+                    <p className="mt-1 text-muted-foreground">{suggestion.reason}</p>
+                  )}
+                </div>
+              )}
+
+              {!suggestion && !suggestMut.isError && (
+                playlistsQ.isError ? (
+                  <p className="text-[11px] text-destructive">
+                    Không tải được playlist: {String(playlistsQ.error)}
+                  </p>
+                ) : selectedPlaylist ? (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    FB không cho tự thêm vào playlist qua API — app sẽ nhắc thêm tay sau khi đăng.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Chọn thủ công hoặc bấm "Gợi ý AI" để chọn theo chủ đề.
+                  </p>
+                )
               )}
             </div>
 

@@ -217,9 +217,12 @@ Tạo `input/<slug>.json` (chỉ `title` + `episodeNumber` bắt buộc; còn l�
 ```json
 { "style": "podcast", "title": "...", "hook": "...", "episodeNumber": <max+1>,
   "bgm": null, "coverImage": null, "showIntro": true, "showOutro": true,
-  "publishStatus": "draft", "publishCaption": "...", "publishHashtags": ["bytecast"] }
+  "publishStatus": "draft", "publishCaption": "...", "publishHashtags": ["bytecast"],
+  "fbPlaylistId": "P0X", "fbPlaylistName": "<tên playlist khớp>" }
 ```
 `episodeNumber`: `grep -h '"episodeNumber"' input/*.json | grep -oE '[0-9]+' | sort -n | tail -1` rồi +1.
+
+**⭐ CHỌN PLAYLIST — CLAUDE TỰ CHỌN, KHÔNG GỌI OPENAI (miễn phí):** khi chạy qua skill này, ĐỪNG dùng nút "Gợi ý AI" trên UI (nút đó gọi OpenAI, tốn phí). Thay vào đó **Claude tự đọc `input/_fb-playlists.json`** (mỗi playlist có `id`/`title`/`desc`) + tiêu đề/hook/bài luận của tập, rồi tự chọn playlist KHỚP chủ đề nhất và **điền `fbPlaylistId` + `fbPlaylistName`** vào config trên. Nếu không playlist nào khớp → để trống 2 field đó và **báo user nên tạo playlist mới** (đề xuất tên), rồi thêm vào `input/_fb-playlists.json`. Đã điền sẵn trong config thì tab Đăng tự chọn đúng playlist — user chỉ việc đăng. (⚠️ Nhắc lại: Graph API không tự thêm Reel vào playlist → vẫn phải thêm tay sau khi đăng.)
 > **UI (EpisodeEdit) — tab đã sắp lại:** panel **Audio / Nhạc nền / Cover** gom vào tab **"Âm thanh & Ảnh"** (tập chưa có audio thì tự mở tab này). Tab **"Ghép take"** đã gỡ khỏi UI. Các tab còn lại: Âm thanh & Ảnh · Nội dung · Render · Footage · Đăng.
 **Cover:** set `"coverImage": "<tên-file>.cover.png"` (ảnh đặt trong `input/`, ~9:16). Nếu thiếu cover → video không có ảnh bìa/intro. Kiểm `ls input/*.cover.png` xem có sẵn ảnh đúng chủ đề chưa.
 **⭐ NHẠC NỀN — KẾ THỪA BẢN CHỌN GẦN NHẤT:** không phải chọn lại mỗi tập. Nhạc mặc định lưu ở `input/_music-default.json` (+ file dùng chung `input/_default.bgm.<ext>`); tập mới tự điền `bgm`/`bgmVolumeDb`/`bgmMode`/`musicCredit` từ đó (createEmptyEpisode gọi `applyMusicDefaults`). Khi user upload bgm mới cho 1 tập (UI) → tự cập nhật làm default cho các tập sau. Khi tạo config tay cho tập mới, đọc `input/_music-default.json` và điền theo (nếu có). Đổi nhạc mặc định = upload bgm mới, hoặc sửa `input/_music-default.json`.
@@ -279,7 +282,10 @@ Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — 
 
 **Đăng:** tab **Đăng** của tập → card **"Đăng thẳng lên Facebook Reel"**:
 - Soạn / AI-gen caption + hashtag ở card **"Caption & Hashtags"** (app tự lưu vào config). Mô tả đăng = caption + hashtag + **khối công bố AI** do server tự dựng lại từ config → không cần truyền tay.
-- **Playlist (tuỳ chọn):** danh sách lấy từ file chuẩn `input/_fb-playlists.json` (nguồn của kênh; sửa file này khi thêm/đổi playlist). Route ưu tiên file, fallback Graph API (`video_lists`). ⚠️ **Graph API KHÔNG cho tự thêm Reel vào playlist** → app chỉ **nhắc thêm tay** sau khi đăng (mở Reel → ⋯ → Thêm vào playlist).
+- **Playlist (tuỳ chọn):** danh sách lấy từ file chuẩn `input/_fb-playlists.json` (nguồn của kênh, có `title` + `desc` mỗi playlist; sửa file này khi thêm/đổi playlist). Route ưu tiên file, fallback Graph API (`video_lists`).
+  - **Chạy qua skill → Claude đã tự chọn ở Bước 8 (miễn phí)**, `fbPlaylistId`/`fbPlaylistName` điền sẵn trong config → dropdown tự chọn đúng, khỏi bấm gì.
+  - Nút **"Gợi ý AI"** cạnh dropdown chỉ dành cho thao tác TAY trên UI — nút này **gọi OpenAI (tốn phí)**; khi đã dùng skill thì KHÔNG cần bấm.
+  - ⚠️ **Graph API KHÔNG cho tự thêm Reel vào playlist** → app chỉ **nhắc thêm tay** sau khi đăng (mở Reel → ⋯ → Thêm vào playlist); playlist mới phải tự tạo trên FB + thêm vào `input/_fb-playlists.json`.
 - **Lên lịch (scheduler FB):** bật toggle **"Lịch đăng"** + chọn thời điểm (**10 phút – 75 ngày** kể từ hiện tại) → đăng dạng `SCHEDULED`, FB tự đăng đúng giờ. Trạng thái tập thành **"Đã lên lịch"** (`publishStatus=scheduled`, lưu `scheduledPublishTime`). Bỏ trống toggle = đăng ngay.
 - Bấm **Đăng lên Facebook Reel** / **Lên lịch đăng** → stream tiến trình (xác định Trang → tải video → chốt → xử lý) + **badge trạng thái live** (Đang đăng…/Đã lên lịch/Đã đăng/Lỗi). Xong: hiện link "Xem Reel" + lưu `fbReelId`/`fbPermalink`/`publishStatus` vào config. Trạng thái do luồng đăng TỰ set — không còn nút mark-published thủ công.
 
@@ -288,4 +294,4 @@ Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — 
 **Điều kiện:** phải có video render (`output/<slug>.mp4`) — chưa render thì nút bị khoá, sang Bước 9 trước. Backend: `GET /api/episodes/:name/publish` (SSE) + `GET /api/episodes/_/facebook-playlists`; lib `shared/studio-core/facebook.ts` (resumable start → upload → finish, poll ready trừ khi lên lịch).
 
 ## Tóm tắt 1 dòng mỗi bước
-research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + user nghe) → viết `input/<slug>.json` → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động) → **đăng FB Reel** ở tab Đăng (token ở Settings; caption+công bố tự dựng; chọn playlist từ `_fb-playlists.json`; đăng ngay hoặc **lên lịch**).
+research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + user nghe) → viết `input/<slug>.json` → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động) → **đăng FB Reel** ở tab Đăng (token ở Settings; caption+công bố tự dựng; **Claude tự chọn playlist** từ `_fb-playlists.json` điền sẵn config — KHÔNG gọi OpenAI; đăng ngay hoặc **lên lịch**).

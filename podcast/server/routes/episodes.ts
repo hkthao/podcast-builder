@@ -49,6 +49,7 @@ import {
 } from "../../../shared/studio-core/podcast-script-tts";
 import { buildCoverPromptUserContent } from "../lib/cover-prompt-store";
 import { chat } from "../../../shared/studio-core/llm-providers";
+import { safeParseJson } from "../../../shared/lib/safe-json";
 import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
 import {
   ALL_VOICES,
@@ -470,20 +471,23 @@ episodesRoutes.delete("/:name/files", async (c) => {
 /** File playlist chuẩn của kênh (nguồn user tự maintain). */
 const FB_PLAYLISTS_FILE = path.join(PATHS.INPUT_DIR, "_fb-playlists.json");
 
+type LocalPlaylist = { id: string; title: string; videosCount: number; desc?: string };
+
 /** Đọc playlist từ file chuẩn; null nếu không có/hỏng. */
-const readLocalPlaylists = async (): Promise<
-  Array<{ id: string; title: string; videosCount: number }> | null
-> => {
+const readLocalPlaylists = async (): Promise<LocalPlaylist[] | null> => {
   try {
     const j = JSON.parse(await fs.readFile(FB_PLAYLISTS_FILE, "utf-8"));
     if (!Array.isArray(j.playlists)) return null;
     return j.playlists
-      .filter((p: unknown): p is { id: string; title?: string; videosCount?: number } =>
-        typeof p === "object" && p !== null && typeof (p as { id?: unknown }).id === "string")
-      .map((p: { id: string; title?: string; videosCount?: number }) => ({
+      .filter(
+        (p: unknown): p is { id: string; title?: string; videosCount?: number; desc?: string } =>
+          typeof p === "object" && p !== null && typeof (p as { id?: unknown }).id === "string",
+      )
+      .map((p: { id: string; title?: string; videosCount?: number; desc?: string }) => ({
         id: p.id,
         title: p.title ?? p.id,
         videosCount: typeof p.videosCount === "number" ? p.videosCount : 0,
+        ...(typeof p.desc === "string" ? { desc: p.desc } : {}),
       }));
   } catch {
     return null;
@@ -509,6 +513,101 @@ episodesRoutes.get("/_/facebook-playlists", async (c) => {
     return c.json({ ...r, source: "api" });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+const PLAYLIST_SUGGEST_SYSTEM = `Bạn là biên tập viên nội dung của kênh podcast/Reels tiếng Việt (chủ đề triết học, tâm lý học, xã hội học, đời sống). Nhiệm vụ: cho DANH SÁCH playlist hiện có + thông tin 1 tập, quyết định nên XẾP tập vào playlist nào cho ĐÚNG chủ đề.
+
+Nguyên tắc:
+- Chọn playlist khớp chủ đề NHẤT (dựa vào tiêu đề + mô tả playlist vs nội dung tập). Nếu có playlist rõ ràng phù hợp → mode "reuse".
+- ĐỪNG ép tập vào playlist lệch chủ đề. Nếu KHÔNG playlist nào đủ khớp (chủ đề mới/khác hẳn) → mode "new" và ĐỀ XUẤT tên playlist mới ngắn gọn, đúng phong cách các playlist hiện có.
+- reason: 1-2 câu tiếng Việt giải thích vì sao.
+- confidence: "cao" | "vừa" | "thấp".
+
+CHỈ trả về JSON object dạng:
+{"mode":"reuse","playlistId":"P08","playlistTitle":"<tên playlist đó>","reason":"...","confidence":"cao"}
+hoặc
+{"mode":"new","playlistId":null,"playlistTitle":"<tên playlist mới đề xuất>","reason":"...","confidence":"vừa"}
+Không thêm markdown, không lời mở đầu.`;
+
+/** Gợi ý playlist bằng AI: nên dùng lại playlist nào, hay tạo mới. */
+episodesRoutes.post("/:name/playlist-suggestion", async (c) => {
+  const name = c.req.param("name");
+  const summary = await getEpisode(name);
+  if (!summary) return c.json({ error: `Không tìm thấy tập "${name}".` }, 404);
+
+  let body: { provider?: LLMProvider; model?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
+  }
+  const { provider, model } = body;
+  if (!provider || !model) return c.json({ error: "thiếu provider/model" }, 400);
+
+  const playlists = await readLocalPlaylists();
+  if (!playlists || !playlists.length) {
+    return c.json(
+      { error: "Chưa có danh sách playlist (input/_fb-playlists.json) để gợi ý." },
+      400,
+    );
+  }
+
+  const cfg = summary.config;
+  const listStr = playlists
+    .map((p) => `- ${p.id}: ${p.title}${p.desc ? ` — ${p.desc}` : ""}`)
+    .join("\n");
+  const epStr = [
+    `Tiêu đề: ${cfg.title}`,
+    cfg.hook ? `Hook: ${cfg.hook}` : "",
+    cfg.publishCaption ? `Caption: ${cfg.publishCaption.slice(0, 800)}` : "",
+    cfg.publishHashtags?.length ? `Hashtag: ${cfg.publishHashtags.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const raw = await chat({
+      provider,
+      model,
+      systemPrompt: PLAYLIST_SUGGEST_SYSTEM,
+      userContent: `PLAYLIST HIỆN CÓ:\n${listStr}\n\nTẬP CẦN XẾP:\n${epStr}\n\nTrả JSON.`,
+      temperature: 0.3,
+      jsonMode: true,
+    });
+    const parsed = safeParseJson<{
+      mode?: string;
+      playlistId?: string | null;
+      playlistTitle?: string;
+      reason?: string;
+      confidence?: string;
+    }>(raw);
+
+    let mode = parsed.mode === "new" ? "new" : "reuse";
+    let playlistId = typeof parsed.playlistId === "string" ? parsed.playlistId : null;
+    // Nếu reuse nhưng id không có trong danh sách → coi như tạo mới (chống bịa id).
+    const match = playlistId ? playlists.find((p) => p.id === playlistId) : undefined;
+    if (mode === "reuse" && !match) {
+      mode = "new";
+      playlistId = null;
+    }
+    const playlistTitle =
+      mode === "reuse" && match
+        ? match.title
+        : typeof parsed.playlistTitle === "string"
+          ? parsed.playlistTitle.trim()
+          : "";
+    return c.json({
+      mode,
+      playlistId,
+      playlistTitle,
+      reason: typeof parsed.reason === "string" ? parsed.reason.trim() : "",
+      confidence: ["cao", "vừa", "thấp"].includes(parsed.confidence ?? "")
+        ? parsed.confidence
+        : null,
+    });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
 
