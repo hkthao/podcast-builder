@@ -225,6 +225,35 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_gallery_assets_kind
       ON gallery_assets(kind);
   `);
+
+  // Facebook Page comments — thu thập để AI gợi ý trả lời + user approve đăng rep.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_comments (
+      comment_id TEXT PRIMARY KEY,
+      post_id TEXT,
+      post_excerpt TEXT,
+      post_permalink TEXT,
+      from_name TEXT,
+      message TEXT,
+      created_time TEXT,
+      suggested_reply TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      replied_at TEXT,
+      reacted_at TEXT,
+      fetched_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fb_comments_status
+      ON fb_comments(status);
+    CREATE INDEX IF NOT EXISTS idx_fb_comments_created
+      ON fb_comments(created_time DESC);
+  `);
+  // Migration cho DB cũ (bảng đã tạo trước khi có reacted_at).
+  const fbCols = db
+    .prepare("PRAGMA table_info(fb_comments)")
+    .all() as Array<{ name: string }>;
+  if (!fbCols.some((c) => c.name === "reacted_at")) {
+    db.exec("ALTER TABLE fb_comments ADD COLUMN reacted_at TEXT");
+  }
 }
 
 export function getDbPath(): string {

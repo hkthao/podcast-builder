@@ -6,6 +6,7 @@ import {
   Home,
   Film,
   Clapperboard,
+  MessageSquare,
   Lightbulb,
   Star,
   CheckCircle2,
@@ -86,6 +87,14 @@ export function Sidebar() {
             end={false}
             icon={<Clapperboard className="size-4" />}
             label="Tập reel"
+          />
+        </div>
+        <div className="space-y-0.5">
+          <SectionLabel>Facebook</SectionLabel>
+          <NavItem
+            to="/comments"
+            icon={<MessageSquare className="size-4" />}
+            label="Trả lời comment"
           />
         </div>
       </nav>

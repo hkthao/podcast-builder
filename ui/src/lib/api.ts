@@ -1548,4 +1548,83 @@ export const reelApi = {
     `/api/reel/run/${encodeURIComponent(slug)}/${task}`,
 };
 
+// ─── Facebook comment management ─────────────────────────────────────────
+
+export type FbCommentRow = {
+  comment_id: string;
+  post_id: string | null;
+  post_excerpt: string | null;
+  post_permalink: string | null;
+  from_name: string | null;
+  message: string | null;
+  created_time: string | null;
+  suggested_reply: string | null;
+  /** pending | replied | skipped | liked */
+  status: string;
+  replied_at: string | null;
+  reacted_at: string | null;
+  fetched_at: string;
+};
+
+export const commentsApi = {
+  /** Kéo comment mới từ FB, lưu DB, trả list pending. */
+  collect: (postLimit = 25) =>
+    jsonFetch<{
+      pageName: string;
+      fetched: number;
+      added: number;
+      comments: FbCommentRow[];
+    }>(`/api/comments/collect?postLimit=${postLimit}`, { method: "POST" }),
+
+  list: (status?: string, limit = 20, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (status) qs.set("status", status);
+    return jsonFetch<{
+      comments: FbCommentRow[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/api/comments?${qs.toString()}`);
+  },
+
+  generate: (commentId: string, input: { provider: LLMProvider; model: string }) =>
+    jsonFetch<{ reply: string }>(
+      `/api/comments/${encodeURIComponent(commentId)}/generate`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  /** Gom nhiều comment → 1 request LLM (tiết kiệm chi phí). */
+  generateBatch: (
+    input: { provider: LLMProvider; model: string; commentIds?: string[] },
+  ) =>
+    jsonFetch<{ requested: number; saved: number }>(`/api/comments/generate-batch`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  saveDraft: (commentId: string, message: string) =>
+    jsonFetch<{ ok: boolean }>(
+      `/api/comments/${encodeURIComponent(commentId)}/draft`,
+      { method: "PUT", body: JSON.stringify({ message }) },
+    ),
+
+  reply: (commentId: string, message: string) =>
+    jsonFetch<{ ok: boolean; replyId: string; comment: FbCommentRow }>(
+      `/api/comments/${encodeURIComponent(commentId)}/reply`,
+      { method: "POST", body: JSON.stringify({ message }) },
+    ),
+
+  skip: (commentId: string) =>
+    jsonFetch<{ ok: boolean }>(
+      `/api/comments/${encodeURIComponent(commentId)}/skip`,
+      { method: "POST" },
+    ),
+
+  like: (commentId: string) =>
+    jsonFetch<{ ok: boolean; comment: FbCommentRow }>(
+      `/api/comments/${encodeURIComponent(commentId)}/like`,
+      { method: "POST" },
+    ),
+};
+
 export { ApiError };

@@ -18,6 +18,7 @@ import { knowledgeRoutes } from "../podcast/server/routes/knowledge";
 import { scenesRoutes } from "../podcast/server/routes/scenes";
 import { visualRoutes } from "../podcast/server/routes/visual";
 import { reelRoutes } from "../reel/server/routes";
+import { commentsRoutes } from "../podcast/server/routes/comments";
 import { startFsWatcher } from "../shared/studio-core/events";
 import { sseFromBus } from "../shared/studio-core/sse";
 import {
@@ -84,6 +85,7 @@ app.route("/api/knowledge", knowledgeRoutes);
 app.route("/api/visual", visualRoutes);
 app.route("/api/scenes", scenesRoutes);
 app.route("/api/reel", reelRoutes);
+app.route("/api/comments", commentsRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.

@@ -155,6 +155,106 @@ export async function listPlaylists(
   return { pageId: page.id, pageName: page.name, playlists };
 }
 
+// ─── Comment management ───────────────────────────────────────────────────
+
+export type FbComment = {
+  commentId: string;
+  postId: string;
+  postExcerpt: string;
+  postPermalink: string;
+  fromName: string;
+  message: string;
+  createdTime: string;
+};
+
+/**
+ * Thu thập comment top-level trên các bài GẦN ĐÂY của Page cần trả lời:
+ * bỏ comment do chính Page viết + comment Page ĐÃ trả lời. Cần quyền
+ * pages_read_engagement. postLimit = số bài quét (mặc định 25).
+ */
+export async function listPageComments(
+  token: string,
+  pageIdOverride?: string,
+  opts?: { postLimit?: number },
+  signal?: AbortSignal,
+): Promise<{ pageId: string; pageName: string; comments: FbComment[] }> {
+  const enc = encodeURIComponent;
+  const page = await resolvePage(token, pageIdOverride, signal);
+  const postLimit = Math.max(1, Math.min(100, opts?.postLimit ?? 25));
+  const fields =
+    "id,message,created_time,permalink_url,attachments{title,description}," +
+    "comments.limit(100){id,message,created_time,from,comments.limit(50){from}}";
+  const url = `${GRAPH}/${enc(page.id)}/feed?fields=${enc(fields)}&limit=${postLimit}&access_token=${enc(page.token)}`;
+  const { res, body } = await graphGet(url, signal);
+  if (!res.ok || !Array.isArray(body?.data)) {
+    throwGraphError(body, `Không lấy được bài/comment của Trang (HTTP ${res.status})`);
+  }
+
+  const comments: FbComment[] = [];
+  for (const post of body.data as any[]) {
+    const att = post.attachments?.data?.[0];
+    const postMsg: string = post.message || att?.title || att?.description || "(bài không có mô tả)";
+    const postComments = post.comments?.data ?? [];
+    for (const cm of postComments) {
+      if (!cm?.id) continue;
+      if (cm.from?.id && cm.from.id === page.id) continue; // comment của chính Page
+      const replies = cm.comments?.data ?? [];
+      const repliedByPage = replies.some((r: any) => r?.from?.id === page.id);
+      if (repliedByPage) continue; // Page đã trả lời
+      comments.push({
+        commentId: cm.id,
+        postId: post.id ?? "",
+        postExcerpt: String(postMsg).slice(0, 400),
+        postPermalink: post.permalink_url ?? "",
+        fromName: cm.from?.name ?? "Người dùng Facebook",
+        message: cm.message ?? "",
+        createdTime: cm.created_time ?? "",
+      });
+    }
+  }
+  return { pageId: page.id, pageName: page.name, comments };
+}
+
+/**
+ * Page thả "Like" (👍) lên 1 comment. Cần quyền pages_manage_engagement.
+ * LƯU Ý: Graph API chỉ hỗ trợ Like — KHÔNG set được reaction tim/love/haha…
+ */
+export async function likeComment(
+  token: string,
+  pageIdOverride: string | undefined,
+  commentId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean }> {
+  const page = await resolvePage(token, pageIdOverride, signal);
+  const url = `${GRAPH}/${encodeURIComponent(commentId)}/likes`;
+  const params = new URLSearchParams({ access_token: page.token });
+  const res = await fetch(url, { method: "POST", body: params, signal });
+  const body = (await parseJson(res)) as { success?: boolean } & GraphError;
+  if (!res.ok || body.error) {
+    throwGraphError(body, `Thả like thất bại (HTTP ${res.status})`);
+  }
+  return { ok: true };
+}
+
+/** Trả lời (rep) 1 comment. Cần quyền pages_manage_engagement. */
+export async function replyToComment(
+  token: string,
+  pageIdOverride: string | undefined,
+  commentId: string,
+  message: string,
+  signal?: AbortSignal,
+): Promise<{ id: string }> {
+  const page = await resolvePage(token, pageIdOverride, signal);
+  const url = `${GRAPH}/${encodeURIComponent(commentId)}/comments`;
+  const params = new URLSearchParams({ message, access_token: page.token });
+  const res = await fetch(url, { method: "POST", body: params, signal });
+  const body = (await parseJson(res)) as { id?: string } & GraphError;
+  if (!res.ok || !body.id) {
+    throwGraphError(body, `Trả lời comment thất bại (HTTP ${res.status})`);
+  }
+  return { id: body.id! };
+}
+
 /** Pha 1: khởi tạo phiên upload Reel. */
 async function startReel(
   token: string,
