@@ -19,11 +19,52 @@ import {
   listPageComments,
   replyToComment,
   likeComment,
+  unlikeComment,
+  likeCommentsBatch,
 } from "../../../shared/studio-core/facebook";
 import { chat, type LLMProvider } from "../../../shared/studio-core/llm-providers";
 import { safeParseJson } from "../../../shared/lib/safe-json";
+import path from "node:path";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
 
 export const commentsRoutes = new Hono();
+
+/** Folder lưu ảnh/sticker của comment — gitignore (input/*), dễ dọn dẹp về sau. */
+const MEDIA_DIR = path.resolve("input", "fb-comment-media");
+const safeName = (s: string) => (s && !s.includes("/") && !s.includes("..") ? s : null);
+
+const extFromContentType = (ct: string): string => {
+  const t = ct.toLowerCase();
+  return t.includes("png") ? "png"
+    : t.includes("gif") ? "gif"
+    : t.includes("webp") ? "webp"
+    : t.includes("mp4") ? "mp4"
+    : t.includes("jpeg") || t.includes("jpg") ? "jpg"
+    : "bin";
+};
+
+/** Tải media của comment về MEDIA_DIR, trả tên file (null nếu lỗi). */
+const downloadCommentMedia = async (commentId: string, url: string): Promise<string | null> => {
+  try {
+    if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 20_000);
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: ac.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) return null;
+    const ext = extFromContentType(res.headers.get("content-type") ?? "");
+    const name = `${commentId.replace(/[^A-Za-z0-9_]/g, "_")}.${ext}`;
+    await fsp.writeFile(path.join(MEDIA_DIR, name), Buffer.from(await res.arrayBuffer()));
+    return name;
+  } catch {
+    return null;
+  }
+};
 
 type CommentRow = {
   comment_id: string;
@@ -37,18 +78,35 @@ type CommentRow = {
   status: string;
   replied_at: string | null;
   reacted_at: string | null;
+  attachment_type: string | null;
+  media_url: string | null;
+  media_local: string | null;
+  kind: string | null;
   fetched_at: string;
 };
 
-/** List có phân trang. Trả rows + total (để UI tính số trang). */
-const listRows = (
-  status: string | undefined,
-  limit: number,
-  offset: number,
-): { rows: CommentRow[]; total: number } => {
+/** List có phân trang + lọc trạng thái/loại. Trả rows + total. */
+const listRows = (opts: {
+  status?: string;
+  type?: string; // text | sticker
+  limit: number;
+  offset: number;
+}): { rows: CommentRow[]; total: number } => {
   const db = getDb();
-  const where = status ? "WHERE status = ?" : "";
-  const args = status ? [status] : [];
+  const conds: string[] = [];
+  const args: unknown[] = [];
+  // "liked" = đã thả tim, độc lập với trạng thái xử lý (dùng reacted_at).
+  if (opts.status === "liked") {
+    conds.push("reacted_at IS NOT NULL");
+  } else if (opts.status) {
+    conds.push("status = ?");
+    args.push(opts.status);
+  }
+  if (opts.type) {
+    conds.push("kind = ?");
+    args.push(opts.type);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const total = (
     db.prepare(`SELECT COUNT(*) AS n FROM fb_comments ${where}`).get(...args) as {
       n: number;
@@ -58,7 +116,7 @@ const listRows = (
     .prepare(
       `SELECT * FROM fb_comments ${where} ORDER BY created_time DESC LIMIT ? OFFSET ?`,
     )
-    .all(...args, limit, offset) as CommentRow[];
+    .all(...args, opts.limit, opts.offset) as CommentRow[];
   return { rows, total };
 };
 
@@ -83,25 +141,46 @@ commentsRoutes.post("/collect", async (c) => {
 
   const db = getDb();
   const now = new Date().toISOString();
+
+  // Map các row đã có (để đếm "mới" + tái dùng media đã tải).
+  const existingRows = db
+    .prepare("SELECT comment_id, media_local FROM fb_comments")
+    .all() as Array<{ comment_id: string; media_local: string | null }>;
+  const existing = new Set(existingRows.map((r) => r.comment_id));
+  const existingMedia = new Map(existingRows.map((r) => [r.comment_id, r.media_local]));
+
+  // Tải media (sticker/ảnh) TRƯỚC transaction (bất đồng bộ). Tái dùng file cũ nếu còn.
+  const mediaLocal = new Map<string, string | null>();
+  for (const cm of fetched.comments) {
+    if (!cm.mediaUrl) continue;
+    const prev = existingMedia.get(cm.commentId);
+    if (prev && fs.existsSync(path.join(MEDIA_DIR, prev))) {
+      mediaLocal.set(cm.commentId, prev);
+      continue;
+    }
+    mediaLocal.set(cm.commentId, await downloadCommentMedia(cm.commentId, cm.mediaUrl));
+  }
+
   const insert = db.prepare(`
     INSERT INTO fb_comments
-      (comment_id, post_id, post_excerpt, post_permalink, from_name, message, created_time, status, fetched_at)
+      (comment_id, post_id, post_excerpt, post_permalink, from_name, message, created_time,
+       attachment_type, media_url, media_local, kind, status, fetched_at)
     VALUES
-      (@comment_id, @post_id, @post_excerpt, @post_permalink, @from_name, @message, @created_time, 'pending', @fetched_at)
+      (@comment_id, @post_id, @post_excerpt, @post_permalink, @from_name, @message, @created_time,
+       @attachment_type, @media_url, @media_local, @kind, 'pending', @fetched_at)
     ON CONFLICT(comment_id) DO UPDATE SET
       post_excerpt  = excluded.post_excerpt,
       post_permalink = excluded.post_permalink,
       from_name     = excluded.from_name,
       message       = excluded.message,
       created_time  = excluded.created_time,
+      attachment_type = excluded.attachment_type,
+      media_url     = excluded.media_url,
+      media_local   = COALESCE(excluded.media_local, fb_comments.media_local),
+      kind          = excluded.kind,
       fetched_at    = excluded.fetched_at
   `);
   let added = 0;
-  const existing = new Set(
-    (db.prepare("SELECT comment_id FROM fb_comments").all() as Array<{ comment_id: string }>).map(
-      (r) => r.comment_id,
-    ),
-  );
   const tx = db.transaction((rows: typeof fetched.comments) => {
     for (const cm of rows) {
       if (!existing.has(cm.commentId)) added++;
@@ -113,6 +192,10 @@ commentsRoutes.post("/collect", async (c) => {
         from_name: cm.fromName,
         message: cm.message,
         created_time: cm.createdTime,
+        attachment_type: cm.attachmentType || null,
+        media_url: cm.mediaUrl || null,
+        media_local: mediaLocal.get(cm.commentId) ?? null,
+        kind: cm.kind || null,
         fetched_at: now,
       });
     }
@@ -126,23 +209,70 @@ commentsRoutes.post("/collect", async (c) => {
   });
 });
 
+/** Serve ảnh/sticker đã tải của comment. */
+commentsRoutes.get("/media/:file", async (c) => {
+  const file = safeName(c.req.param("file"));
+  if (!file) return c.json({ error: "invalid" }, 400);
+  const p = path.join(MEDIA_DIR, file);
+  try {
+    const buf = await fsp.readFile(p);
+    const ext = file.split(".").pop()?.toLowerCase();
+    const ct = ext === "png" ? "image/png"
+      : ext === "gif" ? "image/gif"
+      : ext === "webp" ? "image/webp"
+      : ext === "mp4" ? "video/mp4"
+      : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+      : "application/octet-stream";
+    return new Response(buf as unknown as BodyInit, {
+      headers: { "Content-Type": ct, "Cache-Control": "max-age=86400" },
+    });
+  } catch {
+    return c.json({ error: "not found" }, 404);
+  }
+});
+
+/** Dọn dẹp: xoá toàn bộ file media đã tải + clear media_local trong DB. */
+commentsRoutes.post("/media/cleanup", async (c) => {
+  let removed = 0;
+  try {
+    if (fs.existsSync(MEDIA_DIR)) {
+      for (const f of await fsp.readdir(MEDIA_DIR)) {
+        await fsp.unlink(path.join(MEDIA_DIR, f)).then(() => removed++).catch(() => {});
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  getDb().prepare("UPDATE fb_comments SET media_local = NULL").run();
+  return c.json({ ok: true, removed });
+});
+
 commentsRoutes.get("/", (c) => {
   const status = c.req.query("status") || undefined;
+  const type = c.req.query("type") || undefined;
   const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "20") || 20));
   const offset = Math.max(0, Number(c.req.query("offset") ?? "0") || 0);
-  const { rows, total } = listRows(status, limit, offset);
+  const { rows, total } = listRows({ status, type, limit, offset });
   return c.json({ comments: rows, total, limit, offset });
 });
 
-const REPLY_SYSTEM = `Bạn là quản trị viên fanpage tiếng Việt, trả lời bình luận NGẮN GỌN, SÚC TÍCH, TRUNG LẬP.
+/** Mô tả Page — cho AI hiểu bối cảnh/chất giọng kênh khi trả lời comment. */
+const PAGE_DESC =
+  "ByteCast Tech khám phá những câu hỏi lớn của thời đại AI, nơi công nghệ giao thoa với triết học, tâm lý học và xã hội học để giúp chúng ta hiểu rõ hơn về con người, ý nghĩa và tương lai.";
+
+const REPLY_SYSTEM = `Bạn là người quản lý fanpage "ByteCast Tech". VỀ TRANG: ${PAGE_DESC}
+Trả lời comment đúng tinh thần đó (chiêm nghiệm, gần gũi, tôn trọng người xem).
+
+Bạn trả lời bình luận fanpage NHƯ MỘT NGƯỜI THẬT — tự nhiên, gần gũi, BÁM SÁT nội dung từng bình luận.
 
 Nguyên tắc:
-- RẤT ngắn: 1-2 câu, đi thẳng vào ý, KHÔNG dài dòng, KHÔNG sáo rỗng, KHÔNG lan man.
-- Giọng TRUNG LẬP, điềm đạm, lịch sự — không nịnh, không cảm thán quá mức, tối đa 0-1 emoji (thường là không).
-- Hỏi → trả lời thẳng, gọn. Khen → cảm ơn ngắn. Góp ý → ghi nhận ngắn gọn, trung tính.
-- TIÊU CỰC / BẤT LỊCH SỰ / khiêu khích → GIỮ TRUNG LẬP tuyệt đối: bình tĩnh, không đôi co, không phòng thủ, không xin lỗi rối rít, không hứa hẹn, không kích động, không mỉa mai. Chỉ phản hồi trung tính/nhã nhặn 1 câu (hoặc cảm ơn góp ý một cách trung lập), KHÔNG emoji.
-- Tiếng Việt tự nhiên. KHÔNG bịa thông tin ngoài bài. KHÔNG hashtag. KHÔNG chào kiểu "Kính gửi".
-- CHỈ trả về đúng nội dung câu trả lời (không giải thích, không ngoặc kép).`;
+- Trả lời ĐÚNG điều người ta nói: nhắc lại/hưởng ứng ý cụ thể của họ, hoặc trả lời thẳng câu họ hỏi. KHÔNG trả lời chung chung.
+- TUYỆT ĐỐI TRÁNH các câu mẫu robot lặp đi lặp lại như "Cảm ơn bạn đã chia sẻ suy nghĩ của mình", "Cảm ơn bạn đã theo dõi". Mỗi câu trả lời phải RIÊNG, tươi, khác nhau, không rập khuôn.
+- Ngắn (1-2 câu), giọng nói đời thường, có cảm xúc thật; có thể hỏi lại nhẹ hoặc nối thêm một ý để giống trò chuyện.
+- Khen → hưởng ứng đúng điều họ khen. Kể chuyện/tâm sự → đồng cảm đúng chỗ. Bình luận ngắn/emoji/nhãn dán → đáp lại ấm áp, tự nhiên (có thể dí dỏm nhẹ), vẫn khác nhau mỗi câu.
+- TIÊU CỰC / BẤT LỊCH SỰ / khiêu khích → BÌNH TĨNH, lịch sự, không đôi co, không phòng thủ, không mỉa mai, không hứa hẹn; phản hồi ngắn chân thành, vẫn giống người thật.
+- Tiếng Việt tự nhiên, xưng "mình"/"kênh". Tối đa 0-1 emoji. KHÔNG hashtag, KHÔNG bịa thông tin ngoài bài, KHÔNG chào kiểu "Kính gửi".
+- CHỈ trả về đúng câu trả lời (không giải thích, không ngoặc kép).`;
 
 commentsRoutes.post("/:commentId/generate", async (c) => {
   const id = c.req.param("commentId");
@@ -163,7 +293,7 @@ commentsRoutes.post("/:commentId/generate", async (c) => {
       model,
       systemPrompt: REPLY_SYSTEM,
       userContent: `NGỮ CẢNH BÀI POST:\n${row.post_excerpt ?? "(không rõ)"}\n\nBÌNH LUẬN của ${row.from_name ?? "người xem"}:\n"${row.message ?? ""}"\n\nViết câu trả lời của fanpage cho bình luận này.`,
-      temperature: 0.7,
+      temperature: 0.9,
     });
     const reply = raw.trim().replace(/^["']|["']$/g, "");
     getDb()
@@ -175,9 +305,16 @@ commentsRoutes.post("/:commentId/generate", async (c) => {
   }
 });
 
-const REPLY_BATCH_SYSTEM = `Bạn là quản trị viên fanpage tiếng Việt. Bạn nhận NHIỀU bình luận (kèm ngữ cảnh bài post) và viết câu trả lời cho TỪNG cái trong MỘT lần.
+const REPLY_BATCH_SYSTEM = `Bạn là người quản lý fanpage "ByteCast Tech". VỀ TRANG: ${PAGE_DESC}
+Trả lời đúng tinh thần đó (chiêm nghiệm, gần gũi, tôn trọng người xem).
 
-Mỗi câu trả lời: NGẮN GỌN, SÚC TÍCH, TRUNG LẬP (1-2 câu), đúng ngữ cảnh bài + nội dung bình luận. Hỏi → trả lời thẳng gọn; khen → cảm ơn ngắn; góp ý → ghi nhận trung tính. TIÊU CỰC/BẤT LỊCH SỰ/khiêu khích → GIỮ TRUNG LẬP: bình tĩnh, không đôi co, không xin lỗi rối rít, không hứa hẹn, không kích động, không mỉa mai; chỉ 1 câu nhã nhặn/trung tính, không emoji. Điềm đạm, tối đa 0-1 emoji, KHÔNG hashtag, KHÔNG bịa.
+Bạn trả lời NHIỀU bình luận fanpage (kèm ngữ cảnh bài) trong MỘT lần, mỗi câu NHƯ MỘT NGƯỜI THẬT.
+
+- Mỗi câu BÁM SÁT nội dung CỤ THỂ của bình luận tương ứng (nhắc lại/trả lời đúng điều họ nói). KHÔNG trả lời chung chung.
+- MỖI CÂU PHẢI KHÁC NHAU — TUYỆT ĐỐI KHÔNG dùng cùng một mẫu (vd "Cảm ơn bạn đã chia sẻ suy nghĩ") cho nhiều comment. Đa dạng cách mở đầu, tự nhiên như trò chuyện.
+- Ngắn (1-2 câu), giọng đời thường, có cảm xúc thật; có thể hỏi lại nhẹ. Khen → hưởng ứng đúng ý; tâm sự → đồng cảm; comment ngắn/emoji/nhãn dán → đáp ấm áp, tự nhiên.
+- Tiêu cực/bất lịch sự → bình tĩnh, lịch sự, không đôi co/mỉa mai/hứa hẹn, vẫn giống người.
+- Xưng "mình"/"kênh", tối đa 0-1 emoji, KHÔNG hashtag, KHÔNG bịa.
 
 Đầu vào là danh sách, mỗi mục có id. Trả về ĐÚNG JSON:
 {"replies":[{"id":"<id>","reply":"<câu trả lời>"}, ...]}
@@ -224,7 +361,7 @@ commentsRoutes.post("/generate-batch", async (c) => {
       model,
       systemPrompt: REPLY_BATCH_SYSTEM,
       userContent: `Viết câu trả lời cho từng bình luận sau (giữ đúng id):\n\n${listStr}\n\nTrả JSON {"replies":[...]}.`,
-      temperature: 0.7,
+      temperature: 0.9,
       jsonMode: true,
     });
     const parsed = safeParseJson<{ replies?: Array<{ id?: string; reply?: string }> }>(raw);
@@ -284,7 +421,7 @@ commentsRoutes.post("/:commentId/reply", async (c) => {
   }
 });
 
-/** Thả like (👍) lên comment + đánh dấu đã xử lý (status 'liked'). */
+/** Thả like (👍) lên comment. KHÔNG đổi status → vẫn có thể trả lời sau. */
 commentsRoutes.post("/:commentId/like", async (c) => {
   const id = c.req.param("commentId");
   if (!getRow(id)) return c.json({ error: "Không thấy comment" }, 404);
@@ -293,10 +430,69 @@ commentsRoutes.post("/:commentId/like", async (c) => {
   try {
     await likeComment(token, process.env.FB_PAGE_ID, id);
     getDb()
-      .prepare(
-        "UPDATE fb_comments SET status = 'liked', reacted_at = ? WHERE comment_id = ?",
-      )
+      .prepare("UPDATE fb_comments SET reacted_at = ? WHERE comment_id = ?")
       .run(new Date().toISOString(), id);
+    return c.json({ ok: true, comment: getRow(id) });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/** Comment "phản hồi ngắn" (nhãn dán/GIF/emoji) — thao tác hàng loạt. */
+const REACTION_KINDS = "'sticker','gif','emoji'";
+
+/** Thả like cho TẤT CẢ comment nhãn dán/GIF/emoji chưa like. */
+commentsRoutes.post("/like-stickers", async (c) => {
+  const token = getApiKey("facebook");
+  if (!token) return c.json({ error: "Chưa có Facebook Page Access Token." }, 400);
+  const ids = (
+    getDb()
+      .prepare(
+        `SELECT comment_id FROM fb_comments WHERE kind IN (${REACTION_KINDS}) AND reacted_at IS NULL LIMIT 200`,
+      )
+      .all() as Array<{ comment_id: string }>
+  ).map((r) => r.comment_id);
+  if (!ids.length) return c.json({ ok: true, liked: 0, failed: 0 });
+
+  try {
+    const r = await likeCommentsBatch(token, process.env.FB_PAGE_ID, ids);
+    if (r.liked.length) {
+      const now = new Date().toISOString();
+      const upd = getDb().prepare(
+        "UPDATE fb_comments SET reacted_at = ? WHERE comment_id = ?",
+      );
+      const tx = getDb().transaction((list: string[]) => {
+        for (const id of list) upd.run(now, id);
+      });
+      tx(r.liked);
+    }
+    return c.json({ ok: true, liked: r.liked.length, failed: r.failed.length });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/** Bỏ qua (đóng) tất cả comment nhãn dán/GIF/emoji ĐÃ like còn đang chờ. Chỉ đổi DB. */
+commentsRoutes.post("/skip-liked-stickers", (c) => {
+  const r = getDb()
+    .prepare(
+      `UPDATE fb_comments SET status = 'skipped' WHERE kind IN (${REACTION_KINDS}) AND reacted_at IS NOT NULL AND status = 'pending'`,
+    )
+    .run();
+  return c.json({ ok: true, skipped: r.changes });
+});
+
+/** Bỏ like (👍) khỏi comment. */
+commentsRoutes.post("/:commentId/unlike", async (c) => {
+  const id = c.req.param("commentId");
+  if (!getRow(id)) return c.json({ error: "Không thấy comment" }, 404);
+  const token = getApiKey("facebook");
+  if (!token) return c.json({ error: "Chưa có Facebook Page Access Token." }, 400);
+  try {
+    await unlikeComment(token, process.env.FB_PAGE_ID, id);
+    getDb()
+      .prepare("UPDATE fb_comments SET reacted_at = NULL WHERE comment_id = ?")
+      .run(id);
     return c.json({ ok: true, comment: getRow(id) });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
@@ -308,4 +504,14 @@ commentsRoutes.post("/:commentId/skip", (c) => {
   if (!getRow(id)) return c.json({ error: "Không thấy comment" }, 404);
   getDb().prepare("UPDATE fb_comments SET status = 'skipped' WHERE comment_id = ?").run(id);
   return c.json({ ok: true });
+});
+
+/** Đưa comment về 'pending' (khi lỡ bỏ qua / lỡ like). */
+commentsRoutes.post("/:commentId/reopen", (c) => {
+  const id = c.req.param("commentId");
+  if (!getRow(id)) return c.json({ error: "Không thấy comment" }, 404);
+  getDb()
+    .prepare("UPDATE fb_comments SET status = 'pending' WHERE comment_id = ?")
+    .run(id);
+  return c.json({ ok: true, comment: getRow(id) });
 });

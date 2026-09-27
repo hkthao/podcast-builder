@@ -1563,6 +1563,11 @@ export type FbCommentRow = {
   status: string;
   replied_at: string | null;
   reacted_at: string | null;
+  attachment_type: string | null;
+  media_url: string | null;
+  media_local: string | null;
+  /** text | emoji | sticker | gif | photo | video | other */
+  kind: string | null;
   fetched_at: string;
 };
 
@@ -1576,9 +1581,10 @@ export const commentsApi = {
       comments: FbCommentRow[];
     }>(`/api/comments/collect?postLimit=${postLimit}`, { method: "POST" }),
 
-  list: (status?: string, limit = 20, offset = 0) => {
+  list: (status?: string, type?: string, limit = 20, offset = 0) => {
     const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (status) qs.set("status", status);
+    if (type) qs.set("type", type);
     return jsonFetch<{
       comments: FbCommentRow[];
       total: number;
@@ -1625,6 +1631,42 @@ export const commentsApi = {
       `/api/comments/${encodeURIComponent(commentId)}/like`,
       { method: "POST" },
     ),
+
+  unlike: (commentId: string) =>
+    jsonFetch<{ ok: boolean; comment: FbCommentRow }>(
+      `/api/comments/${encodeURIComponent(commentId)}/unlike`,
+      { method: "POST" },
+    ),
+
+  /** Thả like cho tất cả comment là nhãn dán (sticker) chưa like. */
+  likeStickers: () =>
+    jsonFetch<{ ok: boolean; liked: number; failed: number }>(
+      `/api/comments/like-stickers`,
+      { method: "POST" },
+    ),
+
+  /** Bỏ qua tất cả comment nhãn dán đã like còn đang chờ. */
+  skipLikedStickers: () =>
+    jsonFetch<{ ok: boolean; skipped: number }>(
+      `/api/comments/skip-liked-stickers`,
+      { method: "POST" },
+    ),
+
+  /** Đưa comment về 'chờ trả lời' (khi lỡ bỏ qua / lỡ like). */
+  reopen: (commentId: string) =>
+    jsonFetch<{ ok: boolean; comment: FbCommentRow }>(
+      `/api/comments/${encodeURIComponent(commentId)}/reopen`,
+      { method: "POST" },
+    ),
+
+  /** URL ảnh/sticker đã tải của comment. */
+  mediaUrl: (file: string) => `/api/comments/media/${encodeURIComponent(file)}`,
+
+  /** Xoá toàn bộ ảnh/sticker đã tải (dọn dẹp). */
+  cleanupMedia: () =>
+    jsonFetch<{ ok: boolean; removed: number }>(`/api/comments/media/cleanup`, {
+      method: "POST",
+    }),
 };
 
 export { ApiError };

@@ -165,6 +165,12 @@ export type FbComment = {
   fromName: string;
   message: string;
   createdTime: string;
+  /** Loại đính kèm (sticker/photo/animated_image_share/video_inline…), "" nếu không có. */
+  attachmentType: string;
+  /** URL ảnh/media của comment (sticker/ảnh/GIF), "" nếu không có. */
+  mediaUrl: string;
+  /** Phân loại gọn: text | emoji | sticker | gif | photo | video | other. */
+  kind: string;
 };
 
 /**
@@ -183,7 +189,7 @@ export async function listPageComments(
   const postLimit = Math.max(1, Math.min(100, opts?.postLimit ?? 25));
   const fields =
     "id,message,created_time,permalink_url,attachments{title,description}," +
-    "comments.limit(100){id,message,created_time,from,comments.limit(50){from}}";
+    "comments.limit(100){id,message,created_time,from,attachment{type,media{image{src},source},url},comments.limit(50){from}}";
   const url = `${GRAPH}/${enc(page.id)}/feed?fields=${enc(fields)}&limit=${postLimit}&access_token=${enc(page.token)}`;
   const { res, body } = await graphGet(url, signal);
   if (!res.ok || !Array.isArray(body?.data)) {
@@ -201,14 +207,43 @@ export async function listPageComments(
       const replies = cm.comments?.data ?? [];
       const repliedByPage = replies.some((r: any) => r?.from?.id === page.id);
       if (repliedByPage) continue; // Page đã trả lời
+      // Comment không có text (sticker/ảnh/GIF/video) → ghi nhãn loại đính kèm.
+      const attType = String(cm.attachment?.type ?? "");
+      let msg: string = cm.message ?? "";
+      if (!msg.trim() && attType) {
+        msg = attType === "sticker"
+          ? "[Nhãn dán]"
+          : attType === "photo"
+            ? "[Ảnh]"
+            : attType.includes("animated")
+              ? "[Ảnh động/GIF]"
+              : attType.includes("video")
+                ? "[Video]"
+                : "[Đính kèm]";
+      }
+      const mediaUrl: string =
+        cm.attachment?.media?.image?.src || cm.attachment?.media?.source || "";
+      // Phân loại gọn cho filter + thao tác hàng loạt.
+      const origMsg = (cm.message ?? "").trim();
+      const kind =
+        attType === "sticker" ? "sticker"
+        : attType.includes("animated") ? "gif"
+        : attType.includes("photo") ? "photo"
+        : attType.includes("video") ? "video"
+        : attType ? "other"
+        : origMsg && !/[\p{L}\p{N}]/u.test(origMsg) ? "emoji" // chỉ emoji/ký hiệu, không chữ/số
+        : "text";
       comments.push({
         commentId: cm.id,
         postId: post.id ?? "",
         postExcerpt: String(postMsg).slice(0, 400),
         postPermalink: post.permalink_url ?? "",
         fromName: cm.from?.name ?? "Người dùng Facebook",
-        message: cm.message ?? "",
+        message: msg,
         createdTime: cm.created_time ?? "",
+        attachmentType: attType,
+        mediaUrl,
+        kind,
       });
     }
   }
@@ -232,6 +267,56 @@ export async function likeComment(
   const body = (await parseJson(res)) as { success?: boolean } & GraphError;
   if (!res.ok || body.error) {
     throwGraphError(body, `Thả like thất bại (HTTP ${res.status})`);
+  }
+  return { ok: true };
+}
+
+/**
+ * Thả like nhiều comment 1 lượt (resolve Page 1 lần, tiết kiệm request).
+ * Trả về danh sách id like thành công + id lỗi.
+ */
+export async function likeCommentsBatch(
+  token: string,
+  pageIdOverride: string | undefined,
+  commentIds: string[],
+  signal?: AbortSignal,
+): Promise<{ liked: string[]; failed: Array<{ id: string; error: string }> }> {
+  const page = await resolvePage(token, pageIdOverride, signal);
+  const liked: string[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+  for (const id of commentIds) {
+    try {
+      const url = `${GRAPH}/${encodeURIComponent(id)}/likes`;
+      const res = await fetch(url, {
+        method: "POST",
+        body: new URLSearchParams({ access_token: page.token }),
+        signal,
+      });
+      const body = (await parseJson(res)) as { success?: boolean } & GraphError;
+      if (!res.ok || body.error) {
+        throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+      }
+      liked.push(id);
+    } catch (e) {
+      failed.push({ id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { liked, failed };
+}
+
+/** Bỏ like (👍) khỏi comment. */
+export async function unlikeComment(
+  token: string,
+  pageIdOverride: string | undefined,
+  commentId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean }> {
+  const page = await resolvePage(token, pageIdOverride, signal);
+  const url = `${GRAPH}/${encodeURIComponent(commentId)}/likes?access_token=${encodeURIComponent(page.token)}`;
+  const res = await fetch(url, { method: "DELETE", signal });
+  const body = (await parseJson(res)) as { success?: boolean } & GraphError;
+  if (!res.ok || body.error) {
+    throwGraphError(body, `Bỏ like thất bại (HTTP ${res.status})`);
   }
   return { ok: true };
 }

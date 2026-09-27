@@ -19,6 +19,8 @@ import {
   ThumbsUp,
   ChevronLeft,
   ChevronRight,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import {
   api,
@@ -51,6 +53,7 @@ const fmtTime = (t: string | null) => {
 export function CommentsPage() {
   const qc = useQueryClient();
   const [status, setStatus] = useState("pending");
+  const [typeFilter, setTypeFilter] = useState(""); // "" | text | sticker
   const [page, setPage] = useState(0);
 
   const modelsQ = useQuery({
@@ -62,9 +65,14 @@ export function CommentsPage() {
   const [model, setModel] = useState("gpt-4o-mini");
 
   const listQ = useQuery({
-    queryKey: ["fb-comments", status, page],
+    queryKey: ["fb-comments", status, typeFilter, page],
     queryFn: () =>
-      commentsApi.list(status === "all" ? undefined : status, PAGE_SIZE, page * PAGE_SIZE),
+      commentsApi.list(
+        status === "all" ? undefined : status,
+        typeFilter || undefined,
+        PAGE_SIZE,
+        page * PAGE_SIZE,
+      ),
   });
 
   const collectMut = useMutation({
@@ -92,6 +100,18 @@ export function CommentsPage() {
     mutationFn: () => commentsApi.generateBatch({ provider, model, commentIds: pendingIds }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
   });
+  const cleanupMut = useMutation({
+    mutationFn: () => commentsApi.cleanupMedia(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
+  });
+  const likeStickersMut = useMutation({
+    mutationFn: () => commentsApi.likeStickers(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
+  });
+  const skipStickersMut = useMutation({
+    mutationFn: () => commentsApi.skipLikedStickers(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
+  });
 
   return (
     <div className="container max-w-3xl py-10">
@@ -106,8 +126,8 @@ export function CommentsPage() {
         </p>
       </header>
 
-      {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/* Toolbar — hàng 1: hành động chính + AI */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <Button
           onClick={() => collectMut.mutate()}
           disabled={collectMut.isPending}
@@ -118,7 +138,7 @@ export function CommentsPage() {
           ) : (
             <RefreshCw className="size-4" />
           )}
-          Thu thập comment
+          Thu thập
         </Button>
         <Button
           variant="outline"
@@ -147,13 +167,66 @@ export function CommentsPage() {
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="h-8 max-w-[170px] rounded-md border border-input bg-background px-2"
+            className="h-8 max-w-[160px] rounded-md border border-input bg-background px-2"
           >
             {(modelsQ.data?.[provider] ?? []).map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Toolbar — hàng 2: thao tác hàng loạt nhãn dán + dọn ảnh */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Nhãn dán/GIF/emoji:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => likeStickersMut.mutate()}
+          disabled={likeStickersMut.isPending}
+          className="gap-1.5"
+          title="Thả like 👍 cho tất cả comment nhãn dán/GIF/emoji chưa like"
+        >
+          {likeStickersMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ThumbsUp className="size-3.5" />
+          )}
+          Like tất cả
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => skipStickersMut.mutate()}
+          disabled={skipStickersMut.isPending}
+          className="gap-1.5 text-muted-foreground"
+          title="Bỏ qua (đóng) tất cả comment nhãn dán/GIF/emoji đã like"
+        >
+          {skipStickersMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <XIcon className="size-3.5" />
+          )}
+          Bỏ qua đã like
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (window.confirm("Xoá toàn bộ ảnh/sticker đã tải về (input/fb-comment-media)?"))
+              cleanupMut.mutate();
+          }}
+          disabled={cleanupMut.isPending}
+          className="ml-auto gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          title="Xoá ảnh/sticker đã tải để dọn ổ đĩa"
+        >
+          {cleanupMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="size-3.5" />
+          )}
+          Dọn ảnh
+        </Button>
       </div>
 
       {collectMut.isError && (
@@ -175,23 +248,56 @@ export function CommentsPage() {
           Đã gợi ý {batchMut.data.saved}/{batchMut.data.requested} comment trong 1 request.
         </p>
       )}
+      {likeStickersMut.isError && (
+        <p className="mb-3 text-sm text-destructive">Like nhãn dán lỗi: {String(likeStickersMut.error)}</p>
+      )}
+      {likeStickersMut.isSuccess && !likeStickersMut.isPending && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Đã like {likeStickersMut.data.liked} comment nhãn dán/GIF/emoji
+          {likeStickersMut.data.failed ? ` (${likeStickersMut.data.failed} lỗi)` : ""}.
+        </p>
+      )}
+      {skipStickersMut.isSuccess && !skipStickersMut.isPending && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Đã bỏ qua {skipStickersMut.data.skipped} comment nhãn dán/GIF/emoji đã like.
+        </p>
+      )}
 
-      {/* Status tabs */}
-      <div className="mb-4 flex flex-wrap gap-1 border-b">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => changeStatus(t.value)}
-            className={cn(
-              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-              status === t.value
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Status tabs + lọc loại */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b">
+        <div className="flex flex-wrap gap-1">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => changeStatus(t.value)}
+              className={cn(
+                "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                status === t.value
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value);
+            setPage(0);
+          }}
+          className="ml-auto mb-1 h-8 rounded-md border border-input bg-background px-2 text-xs"
+          title="Lọc theo loại comment"
+        >
+          <option value="">Mọi loại</option>
+          <option value="text">Text</option>
+          <option value="emoji">Emoji</option>
+          <option value="sticker">Nhãn dán</option>
+          <option value="gif">GIF/ảnh động</option>
+          <option value="photo">Ảnh</option>
+          <option value="video">Video</option>
+        </select>
       </div>
 
       {listQ.isLoading && (
@@ -287,7 +393,11 @@ function CommentCard({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
   });
   const likeMut = useMutation({
-    mutationFn: () => commentsApi.like(c.comment_id),
+    mutationFn: () => (c.reacted_at ? commentsApi.unlike(c.comment_id) : commentsApi.like(c.comment_id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
+  });
+  const reopenMut = useMutation({
+    mutationFn: () => commentsApi.reopen(c.comment_id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
   });
 
@@ -298,9 +408,10 @@ function CommentCard({
   };
 
   const done = c.status === "replied";
-  const liked = c.status === "liked";
   const skipped = c.status === "skipped";
-  const closed = done || liked || skipped;
+  const reacted = !!c.reacted_at; // đã thả like (độc lập trạng thái)
+  const closed = done || skipped; // like KHÔNG đóng comment → vẫn reply được
+  const media = c.media_local ? commentsApi.mediaUrl(c.media_local) : c.media_url || "";
 
   return (
     <Card className={cn("p-0 overflow-hidden", closed && "opacity-80")}>
@@ -327,23 +438,36 @@ function CommentCard({
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <span className="font-medium text-foreground">{c.from_name}</span>
             <span>{fmtTime(c.created_time)}</span>
-            {done && (
-              <Badge variant="outline" className="ml-auto gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
-                <CheckCircle2 className="size-3" /> Đã trả lời
-              </Badge>
-            )}
-            {liked && (
-              <Badge variant="outline" className="ml-auto gap-1 border-blue-500/40 text-blue-700 dark:text-blue-400 bg-blue-500/5">
-                <ThumbsUp className="size-3" /> Đã like
-              </Badge>
-            )}
-            {skipped && (
-              <Badge variant="outline" className="ml-auto">Đã bỏ qua</Badge>
-            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              {reacted && (
+                <Badge variant="outline" className="gap-1 border-blue-500/40 text-blue-700 dark:text-blue-400 bg-blue-500/5">
+                  <ThumbsUp className="size-3" /> Đã thích
+                </Badge>
+              )}
+              {done && (
+                <Badge variant="outline" className="gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
+                  <CheckCircle2 className="size-3" /> Đã trả lời
+                </Badge>
+              )}
+              {skipped && <Badge variant="outline">Đã bỏ qua</Badge>}
+            </div>
           </div>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap rounded-md bg-foreground/5 p-3">
-            {c.message || "(không có nội dung)"}
-          </p>
+          <div className="rounded-md bg-foreground/5 p-3 space-y-2">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {c.message || "(không có nội dung)"}
+            </p>
+            {media &&
+              (c.attachment_type?.includes("video") ? (
+                <video src={media} controls className="max-h-40 rounded" />
+              ) : (
+                <img
+                  src={media}
+                  alt={c.attachment_type ?? "ảnh"}
+                  className="max-h-32 rounded object-contain"
+                  loading="lazy"
+                />
+              ))}
+          </div>
         </div>
 
         {/* Reply */}
@@ -385,20 +509,20 @@ function CommentCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1"
+                  className={cn("gap-1", reacted && "border-blue-500/40 text-blue-600 dark:text-blue-400")}
                   disabled={likeMut.isPending}
                   onClick={() => likeMut.mutate()}
-                  title="Thả like 👍 (API FB không set được tim/love)"
+                  title={reacted ? "Bỏ like" : "Thả like 👍 (API FB không set được tim/love)"}
                 >
                   {likeMut.isPending ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <ThumbsUp className="size-3.5" />
+                    <ThumbsUp className={cn("size-3.5", reacted && "fill-current")} />
                   )}
-                  Thả like
+                  {reacted ? "Đã thích" : "Thả like"}
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   className="gap-1 text-muted-foreground"
                   disabled={skipMut.isPending}
@@ -430,6 +554,27 @@ function CommentCard({
             <p className="whitespace-pre-wrap rounded-md border border-accent/30 bg-accent/5 p-3">
               {c.suggested_reply}
             </p>
+          </div>
+        )}
+
+        {/* Đưa về chờ trả lời (khi lỡ bỏ qua) */}
+        {skipped && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              disabled={reopenMut.isPending}
+              onClick={() => reopenMut.mutate()}
+              title="Chuyển lại về 'Chờ trả lời'"
+            >
+              {reopenMut.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="size-3.5" />
+              )}
+              Đưa về chờ trả lời
+            </Button>
           </div>
         )}
       </div>
