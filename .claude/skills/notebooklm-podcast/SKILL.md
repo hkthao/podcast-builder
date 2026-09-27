@@ -1,6 +1,6 @@
 ---
 name: notebooklm-podcast
-description: Tạo video podcast từ NotebookLM Audio Overview. Dùng khi user muốn biến một bài luận/chủ đề thành podcast tiếng Việt qua NotebookLM rồi render thành video bằng pipeline repo này. Quy trình: tìm nguồn → upload notebook → gen audio (giọng Bắc) → QC → render. Bao gồm cú pháp `nlm` CLI và các bẫy đã biết.
+description: Tạo video podcast từ NotebookLM Audio Overview. Dùng khi user muốn biến một bài luận/chủ đề thành podcast tiếng Việt qua NotebookLM rồi render thành video bằng pipeline repo này. Quy trình: tìm nguồn → upload notebook → gen audio (giọng Bắc) → QC → render → đăng thẳng lên Facebook Reel (có lên lịch). Bao gồm cú pháp `nlm` CLI và các bẫy đã biết.
 ---
 
 # NotebookLM → Video Podcast
@@ -157,7 +157,7 @@ TRANSITIONS: Seamlessly bridge segments using organic Vietnamese transitions: "N
 - **⚠️ NGÔN NGỮ — LƯU Ý PHÂN KỲ với hướng dẫn NotebookLM phổ thông:** tài liệu chung khuyên "dịch source sang tiếng Anh / cho host thảo luận bằng tiếng Anh để mượt". **KHÔNG áp dụng ở đây** — sản phẩm của ta BẮT BUỘC là audio TIẾNG VIỆT giọng Bắc, nên source cứ viết tiếng Việt và gen `--language vi`. Ta chỉ mượn insight đó ở đúng một chỗ: **prompt `--focus` viết bằng tiếng Anh** (NotebookLM hiểu chỉ thị Anh tốt hơn) — còn nội dung đọc vẫn thuần Việt. Nuốt chữ tiếng Việt xử lý bằng: source sạch (Bước 4) + roll bản khác + sửa transcript ở Bước 7, KHÔNG bằng cách chuyển sang tiếng Anh.
 - **⭐ TÊN NƯỚC NGOÀI: KHÔNG PHIÊN ÂM TRONG FOCUS (mặc định).** NotebookLM đọc tên tiếng Anh rất tốt sẵn — chỉ cần **bài luận source ghi đúng tên tiếng Anh** là host đọc chuẩn. KHÔNG khai bảng phiên âm ở directive 2, KHÔNG "Cite <Phiên-âm> (<Tên gốc>)" trong từng Part. Việc whisper chép sai tên là chuyện của Bước 7 → vá bằng `input/<slug>.terms.txt` (map `sai => đúng`), KHÔNG phải việc của focus. ([[foreign-names-keep-english-default]])
   - **Ngoại lệ HIẾM:** chỉ khi nghe QC thấy một tên cụ thể bị host đọc chệch hẳn thì mới thêm một gợi ý phiên âm cho RIÊNG tên đó ở lần gen sau. Khi buộc phải phiên âm, **bám sát âm tên GỐC** — bài học kinh điển: `Marcus Aurelius -> "Mác-cô Au-rê-li-ô"` đọc lên thành **"Marco Aurelio"** (biến thể tiếng Ý); phải là "Mác-cút Au-rê-li-út" (giữ đủ "-cus/-us"). Đọc to chuỗi phiên âm lên, nếu ra một cái tên KHÁC thì sai. Nhưng đây là ngoại lệ — mặc định vẫn là để nguyên tên tiếng Anh, không phiên âm.
-- **⚠️ GIỌNG NAM/BẮC KHÔNG ĐIỀU KHIỂN ĐƯỢC BẰNG PROMPT.** Đã thử nghiệm: focus ép giọng Bắc cực mạnh bằng tiếng Anh (`[TAG]` + "FORBIDDEN Southern" + linguistic anchors) VẪN ra audio giọng Nam 100%. NotebookLM **tự gán voice** cho mỗi lần gen — prompt chỉ chi phối nội dung/nhịp/phiên âm, KHÔNG chi phối vùng giọng. Lever thật sự để được giọng Bắc: **ACCOUNT + roll lại** — có account hay ra giọng Bắc (vd thao.hk90 từng cho giọng Bắc), có account hay ra giọng Nam (acct2/plus có hôm toàn Nam). Khi 1 account ra giọng Nam → **đổi account khác + tạo notebook mới + gen lại**, lặp tới khi được giọng Bắc. Nuốt chữ cũng là roll ngẫu nhiên. → BẮT BUỘC user nghe xác nhận giọng (Bước 7), đừng render mù.
+- **⚠️ GIỌNG NAM/BẮC KHÔNG ĐIỀU KHIỂN ĐƯỢC BẰNG PROMPT.** Đã thử nghiệm: focus ép giọng Bắc cực mạnh bằng tiếng Anh (`[TAG]` + "FORBIDDEN Southern" + linguistic anchors) VẪN ra audio giọng Nam 100%. NotebookLM **tự gán voice** cho mỗi lần gen — prompt chỉ chi phối nội dung/nhịp/phiên âm, KHÔNG chi phối vùng giọng. Lever thật sự để được giọng Bắc: **ACCOUNT + roll lại** — có account hay ra giọng Bắc (account chính thường cho giọng Bắc), có account hay ra giọng Nam (profile phụ/plus có hôm toàn Nam). Khi 1 account ra giọng Nam → **đổi account khác + tạo notebook mới + gen lại**, lặp tới khi được giọng Bắc. Nuốt chữ cũng là roll ngẫu nhiên. → BẮT BUỘC user nghe xác nhận giọng (Bước 7), đừng render mù.
 - **⭐ THỜI LƯỢNG BẮT BUỘC 12–18 PHÚT — cổng chặn cứng.** Audio dưới 12' hoặc trên 18' đều KHÔNG đạt, phải roll lại. `--length` KHÔNG đáng tin để canh: tiếng Việt chỉ có `default`, cùng `default` từng ra 9.8 / 12.6 / 13.6 / 16.1 / 21 phút (random mỗi lần gen). Cách làm: ghi `target 15-18 minute` trong focus + source đủ dày (bài luận ~1800–2200 chữ), rồi gen nhiều bản A/B trên CÙNG notebook (`nlm audio create` lặp lại → nhiều artifact, tải từng bản bằng `--id`), **chọn bản rơi vào 12–18'**. Bản <12' thường do nuốt phần → bỏ. KHÔNG dùng `long` (xem cảnh báo Bước 5 — `long` không tồn tại cho tiếng Việt, gây lỗi giả "rate limited").
 
 ## Bước 6 — Chờ + tải audio
@@ -220,6 +220,7 @@ Tạo `input/<slug>.json` (chỉ `title` + `episodeNumber` bắt buộc; còn l�
   "publishStatus": "draft", "publishCaption": "...", "publishHashtags": ["bytecast"] }
 ```
 `episodeNumber`: `grep -h '"episodeNumber"' input/*.json | grep -oE '[0-9]+' | sort -n | tail -1` rồi +1.
+> **UI (EpisodeEdit) — tab đã sắp lại:** panel **Audio / Nhạc nền / Cover** gom vào tab **"Âm thanh & Ảnh"** (tập chưa có audio thì tự mở tab này). Tab **"Ghép take"** đã gỡ khỏi UI. Các tab còn lại: Âm thanh & Ảnh · Nội dung · Render · Footage · Đăng.
 **Cover:** set `"coverImage": "<tên-file>.cover.png"` (ảnh đặt trong `input/`, ~9:16). Nếu thiếu cover → video không có ảnh bìa/intro. Kiểm `ls input/*.cover.png` xem có sẵn ảnh đúng chủ đề chưa.
 **⭐ NHẠC NỀN — KẾ THỪA BẢN CHỌN GẦN NHẤT:** không phải chọn lại mỗi tập. Nhạc mặc định lưu ở `input/_music-default.json` (+ file dùng chung `input/_default.bgm.<ext>`); tập mới tự điền `bgm`/`bgmVolumeDb`/`bgmMode`/`musicCredit` từ đó (createEmptyEpisode gọi `applyMusicDefaults`). Khi user upload bgm mới cho 1 tập (UI) → tự cập nhật làm default cho các tập sau. Khi tạo config tay cho tập mới, đọc `input/_music-default.json` và điền theo (nếu có). Đổi nhạc mặc định = upload bgm mới, hoặc sửa `input/_music-default.json`.
 
@@ -246,7 +247,7 @@ npx tsx podcast/scripts/footage-plan.ts <slug> --apply --all-pexels
 `gen-editorial.ts` (chạy tự động trong make.ts khi `showEditorial=true`, mặc định gpt-4o) → tiêu đề chương + thẻ trích dẫn "tên nhà tư tưởng — khái niệm" hiện trên video. Meta xếp "chỉ phụ đề" là đóng góp yếu → lớp này là tín hiệu biên tập gốc. [[editorial-overlay-feature]].
 
 ### ⭐ CÔNG BỐ AI + GHI CÔNG
-Tab **Đăng** tự nối khối công bố (kịch bản gốc do người biên soạn + lời dẫn AI + ghi công nhạc/footage/nguồn) vào cuối caption khi copy. Khi đăng FB nhớ **bật nhãn AI**. [[fb-monetization-originality-project]].
+Tab **Đăng** tự dựng khối công bố (kịch bản gốc do người biên soạn + lời dẫn AI + ghi công nhạc/footage/nguồn) từ config — nối vào cuối mô tả cả khi Copy caption LẪN khi đăng thẳng qua API (server dựng lại từ config, xem Bước 10). Khi đăng nhớ **bật nhãn AI** (chỉ bật được khi upload tay qua FB Reels Creator — xem cảnh báo Bước 10). [[fb-monetization-originality-project]].
 
 ## Bước 9 — Render
 
@@ -270,5 +271,21 @@ npm run make -- input/<slug>.m4a --preview
 - **Bẫy theo dõi:** đừng `npm run make ... | tail -N` (buffer hết output tới khi xong) — ghi log ra file rồi `tail -f`.
 Yêu cầu: ffmpeg, whisper `whisper.cpp/ggml-medium.bin`, `OPENAI_API_KEY` + `PEXELS_API_KEY` trong `.env`.
 
+## Bước 10 — Đăng lên Facebook Reel (tab Đăng)
+
+Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — không cần copy-paste tay. [[fb-reel-publish-feature]].
+
+**Chuẩn bị token (1 lần):** Settings (`/settings`) → **Facebook (Page Access Token)** → dán **Page Access Token DÀI HẠN** (cần quyền `pages_manage_posts` + `pages_read_engagement`). Token lưu DB (hoặc `.env` `FACEBOOK_PAGE_ACCESS_TOKEN`). Token gắn với 1 TRANG; nếu là user-token quản nhiều trang thì đặt thêm `FB_PAGE_ID` trong `.env`.
+
+**Đăng:** tab **Đăng** của tập → card **"Đăng thẳng lên Facebook Reel"**:
+- Soạn / AI-gen caption + hashtag ở card **"Caption & Hashtags"** (app tự lưu vào config). Mô tả đăng = caption + hashtag + **khối công bố AI** do server tự dựng lại từ config → không cần truyền tay.
+- **Playlist (tuỳ chọn):** danh sách lấy từ file chuẩn `input/_fb-playlists.json` (nguồn của kênh; sửa file này khi thêm/đổi playlist). Route ưu tiên file, fallback Graph API (`video_lists`). ⚠️ **Graph API KHÔNG cho tự thêm Reel vào playlist** → app chỉ **nhắc thêm tay** sau khi đăng (mở Reel → ⋯ → Thêm vào playlist).
+- **Lên lịch (scheduler FB):** bật toggle **"Lịch đăng"** + chọn thời điểm (**10 phút – 75 ngày** kể từ hiện tại) → đăng dạng `SCHEDULED`, FB tự đăng đúng giờ. Trạng thái tập thành **"Đã lên lịch"** (`publishStatus=scheduled`, lưu `scheduledPublishTime`). Bỏ trống toggle = đăng ngay.
+- Bấm **Đăng lên Facebook Reel** / **Lên lịch đăng** → stream tiến trình (xác định Trang → tải video → chốt → xử lý) + **badge trạng thái live** (Đang đăng…/Đã lên lịch/Đã đăng/Lỗi). Xong: hiện link "Xem Reel" + lưu `fbReelId`/`fbPermalink`/`publishStatus` vào config. Trạng thái do luồng đăng TỰ set — không còn nút mark-published thủ công.
+
+**⚠️ Nhãn "AI" của Meta:** đăng qua API **KHÔNG bật được công tắc "AI label"** trong trình đăng FB (không có param). Khối công bố AI vẫn nằm trong mô tả (text). Muốn bật đúng công tắc AI-label của Meta → dùng nút **"Mở FB Reels Creator (thủ công)"** trong card rồi tải video + upload tay.
+
+**Điều kiện:** phải có video render (`output/<slug>.mp4`) — chưa render thì nút bị khoá, sang Bước 9 trước. Backend: `GET /api/episodes/:name/publish` (SSE) + `GET /api/episodes/_/facebook-playlists`; lib `shared/studio-core/facebook.ts` (resumable start → upload → finish, poll ready trừ khi lên lịch).
+
 ## Tóm tắt 1 dòng mỗi bước
-research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + user nghe) → viết `input/<slug>.json` → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động).
+research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + user nghe) → viết `input/<slug>.json` → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động) → **đăng FB Reel** ở tab Đăng (token ở Settings; caption+công bố tự dựng; chọn playlist từ `_fb-playlists.json`; đăng ngay hoặc **lên lịch**).
