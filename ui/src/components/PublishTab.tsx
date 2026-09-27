@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Send,
@@ -20,6 +21,7 @@ import {
   X as XIcon,
   Plus,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 import {
   api,
@@ -29,6 +31,7 @@ import {
   type EpisodeSummary,
   type LLMProvider,
 } from "@/lib/api";
+import { Facebook } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -229,6 +232,19 @@ export function PublishTab({
     });
   };
 
+  // Lưu ngay caption/hashtag/công bố trước khi đăng (server dựng mô tả từ config).
+  const flushPublishFields = async (): Promise<void> => {
+    await saveMut.mutateAsync({
+      publishCaption: caption || null,
+      publishHashtags: hashtags,
+      aiAssisted,
+      scriptCredit: scriptCredit || null,
+      musicCredit: musicCredit || null,
+      footageCredit: footageCredit || null,
+      sources: sourcesArr,
+    });
+  };
+
   // Fetch linked essay for derivatives (fbPosts, quotes)
   const essayQ = useQuery({
     queryKey: ["essay", ep.config.essayId],
@@ -426,14 +442,15 @@ export function PublishTab({
 
       {/* Video & thumbnail block */}
       {isReady && fullVideo && (
-        <Card className="p-0 overflow-hidden">
-          <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-            <ImageIcon className="size-4 text-accent" />
-            <span className="font-medium text-sm">Asset cần upload</span>
-            <code className="ml-auto text-xs text-muted-foreground font-mono truncate max-w-[280px]">
+        <CollapsibleCard
+          icon={<ImageIcon className="size-4 text-accent" />}
+          title="Asset cần upload"
+          headerRight={
+            <code className="text-xs text-muted-foreground font-mono truncate max-w-[220px]">
               {fullVideo.filename}
             </code>
-          </header>
+          }
+        >
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-4 p-5">
             <div>
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -493,18 +510,19 @@ export function PublishTab({
               </a>
             </Button>
           </footer>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Caption */}
-      <Card className="p-0 overflow-hidden">
-        <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-          <FileText className="size-4 text-accent" />
-          <span className="font-medium text-sm">Caption</span>
-          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+      <CollapsibleCard
+        icon={<FileText className="size-4 text-accent" />}
+        title="Caption"
+        headerRight={
+          <span className="text-xs text-muted-foreground tabular-nums">
             {caption.length} ký tự
           </span>
-        </header>
+        }
+      >
         <div className="p-5 space-y-3">
           <p className="text-xs text-muted-foreground">
             <strong>FB mobile</strong> cut sau ~125 ký tự → dòng 1 nên là{" "}
@@ -662,16 +680,16 @@ export function PublishTab({
             disabled={fullCaption.length === 0}
           />
         </footer>
-      </Card>
+      </CollapsibleCard>
 
       {/* Hashtags */}
-      <Card className="p-0 overflow-hidden">
-        <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-          <Hash className="size-4 text-accent" />
-          <span className="font-medium text-sm">Hashtags</span>
+      <CollapsibleCard
+        icon={<Hash className="size-4 text-accent" />}
+        title="Hashtags"
+        headerRight={
           <span
             className={cn(
-              "ml-auto text-xs tabular-nums",
+              "text-xs tabular-nums",
               hashtags.length >= MAX_HASHTAGS
                 ? "text-accent font-medium"
                 : "text-muted-foreground",
@@ -679,7 +697,8 @@ export function PublishTab({
           >
             {hashtags.length}/{MAX_HASHTAGS}
           </span>
-        </header>
+        }
+      >
         <div className="p-5 space-y-3">
           <p className="text-xs text-muted-foreground">
             FB Reels recommend tối đa <strong>5 hashtag</strong> — chọn cái
@@ -770,17 +789,20 @@ export function PublishTab({
             disabled={hashtags.length === 0}
           />
         </footer>
-      </Card>
+      </CollapsibleCard>
 
       {/* Công bố AI + ghi công (Meta originality) */}
-      <Card className="p-0 overflow-hidden border-accent/30">
-        <header className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-          <ShieldCheck className="size-4 text-accent" />
-          <span className="font-medium text-sm">Công bố AI + ghi công</span>
-          <Badge variant="outline" className="ml-auto text-[10px]">
+      <CollapsibleCard
+        cardClassName="border-accent/30"
+        defaultOpen={false}
+        icon={<ShieldCheck className="size-4 text-accent" />}
+        title="Công bố AI + ghi công"
+        headerRight={
+          <Badge variant="outline" className="text-[10px]">
             Meta originality
           </Badge>
-        </header>
+        }
+      >
         <div className="p-5 space-y-3">
           <p className="text-xs text-muted-foreground">
             Meta yêu cầu nội dung AI phải <strong>công bố</strong> + ghi rõ đóng
@@ -867,20 +889,20 @@ export function PublishTab({
             disabled={disclosure.length === 0}
           />
         </footer>
-      </Card>
+      </CollapsibleCard>
 
       {/* Quotes — for pinned comment */}
       {quoteSuggestions.length > 0 && (
-        <Card className="p-0 overflow-hidden">
-          <div className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
-            <Quote className="size-4 text-accent" />
-            <span className="font-medium text-sm">
-              Quote cho first-comment (engagement bait)
-            </span>
-            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+        <CollapsibleCard
+          defaultOpen={false}
+          icon={<Quote className="size-4 text-accent" />}
+          title="Quote cho first-comment (engagement bait)"
+          headerRight={
+            <span className="text-xs text-muted-foreground tabular-nums">
               {quoteSuggestions.length}
             </span>
-          </div>
+          }
+        >
           <div className="divide-y">
             {quoteSuggestions.map((q, i) => (
               <div
@@ -897,31 +919,273 @@ export function PublishTab({
               </div>
             ))}
           </div>
-        </Card>
+        </CollapsibleCard>
       )}
 
-      {/* Open FB Reels CTA */}
-      <Card className="p-0 overflow-hidden border-primary/30">
-        <header className="px-5 py-3 border-b bg-primary/10 flex items-center gap-2">
-          <ExternalLink className="size-4 text-primary" />
-          <span className="font-medium text-sm">Bước cuối — mở FB Reels</span>
-        </header>
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground">
-            Upload .mp4 + .jpg cover, paste caption (đã có hashtag), paste
-            quote vào comment đầu.
-          </p>
-        </div>
-        <footer className="px-5 py-3 border-t flex items-center justify-end gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={FB_REELS_URL} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-3.5" />
-              Mở FB Reels Creator
-            </a>
-          </Button>
-        </footer>
-      </Card>
+      {/* Đăng thẳng lên Facebook Reel + fallback thủ công */}
+      <FacebookPublishCard
+        ep={ep}
+        isReady={isReady}
+        onBeforePublish={flushPublishFields}
+      />
     </div>
+  );
+}
+
+/**
+ * Đăng video render lên Trang Facebook dạng Reel (SSE). Mô tả = fullCaption đã
+ * dựng ở PublishTab (server dựng lại từ config đã lưu). Playlist chỉ để nhắc
+ * thêm tay — Graph API không cho tự thêm Reel vào playlist.
+ */
+function FacebookPublishCard({
+  ep,
+  isReady,
+  onBeforePublish,
+}: {
+  ep: EpisodeSummary;
+  isReady: boolean;
+  onBeforePublish: () => Promise<void>;
+}) {
+  const qc = useQueryClient();
+  const [lines, setLines] = useState<Array<{ text: string; cls?: string }>>([]);
+  const [publishing, setPublishing] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => () => esRef.current?.close(), []);
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [lines]);
+
+  const keysQ = useQuery({
+    queryKey: ["api-keys"],
+    queryFn: () => api.listApiKeys(),
+    staleTime: 30_000,
+  });
+  const hasToken = !!keysQ.data?.keys.find((k) => k.provider === "facebook")?.hasKey;
+
+  const playlistsQ = useQuery({
+    queryKey: ["fb-playlists"],
+    queryFn: () => api.fbPlaylists(),
+    enabled: hasToken,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const [playlistId, setPlaylistId] = useState(ep.config.fbPlaylistId ?? "");
+  const selectedPlaylist = playlistsQ.data?.playlists.find((p) => p.id === playlistId);
+
+  const publishedAt = ep.config.publishedAt;
+  const permalink = ep.config.fbPermalink;
+
+  const publish = async () => {
+    esRef.current?.close();
+    setLines([]);
+    setPublishing(true);
+    try {
+      await onBeforePublish();
+    } catch {
+      /* lưu lỗi vẫn cho đăng — server đọc config gần nhất */
+    }
+    const es = new EventSource(
+      api.publishEpisodeUrl(
+        ep.name,
+        selectedPlaylist ? { id: selectedPlaylist.id, title: selectedPlaylist.title } : undefined,
+      ),
+    );
+    esRef.current = es;
+    const push = (text: string, cls?: string) =>
+      setLines((prev) => [...prev, { text, cls }]);
+
+    es.addEventListener("log", (e) => push(JSON.parse((e as MessageEvent).data).line));
+    es.addEventListener("error", (e) => {
+      try {
+        push("⚠ " + JSON.parse((e as MessageEvent).data).message, "text-destructive");
+      } catch {
+        /* connection error */
+      }
+    });
+    es.addEventListener("published", (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as { permalink?: string };
+      push(d.permalink ? `✓ Đã đăng: ${d.permalink}` : "✓ Đã đăng Reel.", "text-accent");
+      qc.invalidateQueries({ queryKey: ["episode", ep.name] });
+      qc.invalidateQueries({ queryKey: ["episodes"] });
+    });
+    es.addEventListener("done", (e) => {
+      const code = JSON.parse((e as MessageEvent).data).code;
+      if (code !== 0) push(`✗ Đăng thất bại (mã ${code})`, "text-destructive");
+      es.close();
+      setPublishing(false);
+    });
+    es.onerror = () => {
+      es.close();
+      setPublishing(false);
+    };
+  };
+
+  return (
+    <Card className="p-0 overflow-hidden border-primary/30">
+      <header className="px-5 py-3 border-b bg-primary/10 flex items-center gap-2">
+        <Facebook className="size-4 text-primary" />
+        <span className="font-medium text-sm">Đăng thẳng lên Facebook Reel</span>
+        {publishedAt && (
+          <Badge
+            variant="outline"
+            className="ml-auto gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5"
+          >
+            <CheckCircle2 className="size-3" /> Đã đăng
+          </Badge>
+        )}
+      </header>
+      <div className="p-5 space-y-3">
+        {!hasToken && (
+          <p className="text-sm text-muted-foreground">
+            Chưa có Page Access Token.{" "}
+            <Link to="/settings" className="text-accent hover:underline">
+              Vào Settings để nhập
+            </Link>
+            .
+          </p>
+        )}
+        {hasToken && !isReady && (
+          <p className="text-sm text-muted-foreground">
+            Chưa có video render — sang tab <strong>Render</strong> bấm "Render full" trước.
+          </p>
+        )}
+
+        {hasToken && (
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Playlist (tuỳ chọn)
+            </Label>
+            <select
+              value={playlistId}
+              onChange={(e) => setPlaylistId(e.target.value)}
+              disabled={publishing || playlistsQ.isLoading}
+              className="mt-1 h-9 w-full max-w-md rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="">— Không thêm playlist —</option>
+              {playlistsQ.data?.playlists.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title} ({p.videosCount})
+                </option>
+              ))}
+            </select>
+            {playlistsQ.isError && (
+              <p className="mt-1 text-xs text-destructive">
+                Không tải được playlist: {String(playlistsQ.error)}
+              </p>
+            )}
+            {selectedPlaylist && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Facebook không cho tự thêm Reel vào playlist qua API — sau khi đăng,
+                app sẽ nhắc bạn mở Reel và thêm tay vào "{selectedPlaylist.title}".
+              </p>
+            )}
+          </div>
+        )}
+
+        {permalink && publishedAt && (
+          <div className="text-sm">
+            <a
+              href={permalink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-accent hover:underline"
+            >
+              Xem Reel đã đăng <ExternalLink className="size-3" />
+            </a>
+            {ep.config.fbPlaylistName && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Nhớ thêm vào playlist "{ep.config.fbPlaylistName}" (mở Reel → ⋯ → Thêm vào playlist).
+              </p>
+            )}
+          </div>
+        )}
+
+        {lines.length > 0 && (
+          <div
+            ref={logRef}
+            className="h-40 overflow-auto whitespace-pre-wrap rounded-md bg-foreground/5 p-3 font-mono text-xs leading-relaxed"
+          >
+            {lines.map((l, i) => (
+              <div key={i} className={cn("text-muted-foreground", l.cls)}>
+                {l.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <footer className="px-5 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
+        <Button variant="outline" size="sm" asChild>
+          <a href={FB_REELS_URL} target="_blank" rel="noreferrer">
+            <ExternalLink className="size-3.5" />
+            Mở FB Reels Creator (thủ công)
+          </a>
+        </Button>
+        <Button
+          size="sm"
+          className="gap-1.5"
+          disabled={!hasToken || !isReady || publishing}
+          onClick={publish}
+        >
+          {publishing ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Facebook className="size-3.5" />
+          )}
+          {publishedAt ? "Đăng lại Reel" : "Đăng lên Facebook Reel"}
+        </Button>
+      </footer>
+    </Card>
+  );
+}
+
+/**
+ * Card có nút thu gọn/mở rộng. Header khớp style các card trong PublishTab
+ * (icon + title + phần phải), bấm header để toggle. Nội dung + footer bọc trong
+ * children — ẩn khi thu gọn.
+ */
+function CollapsibleCard({
+  icon,
+  title,
+  headerRight,
+  defaultOpen = true,
+  cardClassName,
+  children,
+}: {
+  icon?: React.ReactNode;
+  title: React.ReactNode;
+  headerRight?: React.ReactNode;
+  defaultOpen?: boolean;
+  cardClassName?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className={cn("p-0 overflow-hidden", cardClassName)}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={cn(
+          "w-full px-5 py-3 flex items-center gap-2 bg-secondary/30 text-left transition-colors hover:bg-secondary/50",
+          open && "border-b",
+        )}
+      >
+        {icon}
+        <span className="font-medium text-sm">{title}</span>
+        <span className="ml-auto flex items-center gap-2">
+          {headerRight}
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+        </span>
+      </button>
+      {open && children}
+    </Card>
   );
 }
 

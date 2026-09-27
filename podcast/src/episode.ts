@@ -98,6 +98,14 @@ export const EpisodeConfigSchema = z.object({
   footageCredit: z.string().nullable().default(null),
   /** Nguồn tham khảo hiển thị trong phần công bố (tên hoặc URL). */
   sources: z.array(z.string()).default([]),
+  // ────── Kết quả đăng Facebook Reel (đăng trực tiếp từ app) ──────
+  /** Video/Reel id trả về từ Graph API sau khi đăng thành công. */
+  fbReelId: z.string().nullable().default(null),
+  /** Permalink công khai của Reel đã đăng. */
+  fbPermalink: z.string().nullable().default(null),
+  /** Playlist đã chọn (chỉ lưu để nhắc thêm tay — API không cho tự thêm). */
+  fbPlaylistId: z.string().nullable().default(null),
+  fbPlaylistName: z.string().nullable().default(null),
 });
 
 export type EpisodeConfig = z.infer<typeof EpisodeConfigSchema>;
@@ -147,4 +155,8 @@ export const buildEpisodeTemplate = (
   musicCredit: null,
   footageCredit: null,
   sources: [],
+  fbReelId: null,
+  fbPermalink: null,
+  fbPlaylistId: null,
+  fbPlaylistName: null,
 });

@@ -58,13 +58,48 @@ import {
 import { GEMINI_TTS_BLOCKED_CODE } from "../../../shared/studio-core/tts-providers/gemini-tts";
 import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
 import { PATHS } from "../../../shared/studio-core/paths";
+import { getApiKey } from "../../../shared/studio-core/api-keys-store";
+import { publishReel, listPlaylists } from "../../../shared/studio-core/facebook";
+import { streamSSE } from "hono/streaming";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import crypto from "node:crypto";
 import type { LLMProvider } from "../../../shared/studio-core/llm-providers";
+import type { EpisodeConfig } from "../../src/episode";
 
 export const episodesRoutes = new Hono();
+
+/** Brand mặc định khi scriptCredit trống (khớp PublishTab UI). */
+const FB_BRAND_NAME = "ByteCast Tech";
+
+/**
+ * Dựng mô tả đầy đủ để đăng (khớp logic fullCaption + buildDisclosure ở
+ * PublishTab): caption + hashtags + khối công bố AI/ghi công. Server tự dựng
+ * từ config đã lưu (UI auto-save trước khi đăng).
+ */
+const buildEpisodeDescription = (config: EpisodeConfig): string => {
+  const caption = config.publishCaption?.trim() ?? "";
+  const hashtagLine = (config.publishHashtags ?? []).map((h) => `#${h}`).join(" ");
+  const editor = config.scriptCredit?.trim() || FB_BRAND_NAME;
+  const lines: string[] = [];
+  if (config.aiAssisted) {
+    lines.push(
+      `Kịch bản gốc do ${editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${FB_BRAND_NAME} định hướng và biên tập.`,
+    );
+  } else {
+    lines.push(`Kịch bản gốc do ${editor} biên soạn và biên tập.`);
+  }
+  if (config.musicCredit?.trim()) lines.push(`Nhạc nền: ${config.musicCredit.trim()}.`);
+  if (config.footageCredit?.trim()) lines.push(`${config.footageCredit.trim()}.`);
+  const sources = (config.sources ?? []).map((s) => s.trim()).filter(Boolean);
+  if (sources.length) lines.push(`Nguồn tham khảo: ${sources.join("; ")}.`);
+  const disclosure = lines.join("\n");
+  return [caption, hashtagLine, disclosure]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .join("\n\n");
+};
 
 episodesRoutes.get("/", async (c) => {
   const styleParam = c.req.query("style");
@@ -430,6 +465,168 @@ episodesRoutes.delete("/:name/files", async (c) => {
     const status = err.code === "VALIDATION" ? 400 : 500;
     return c.json({ error: err.message }, status);
   }
+});
+
+/** File playlist chuẩn của kênh (nguồn user tự maintain). */
+const FB_PLAYLISTS_FILE = path.join(PATHS.INPUT_DIR, "_fb-playlists.json");
+
+/** Đọc playlist từ file chuẩn; null nếu không có/hỏng. */
+const readLocalPlaylists = async (): Promise<
+  Array<{ id: string; title: string; videosCount: number }> | null
+> => {
+  try {
+    const j = JSON.parse(await fs.readFile(FB_PLAYLISTS_FILE, "utf-8"));
+    if (!Array.isArray(j.playlists)) return null;
+    return j.playlists
+      .filter((p: unknown): p is { id: string; title?: string; videosCount?: number } =>
+        typeof p === "object" && p !== null && typeof (p as { id?: unknown }).id === "string")
+      .map((p: { id: string; title?: string; videosCount?: number }) => ({
+        id: p.id,
+        title: p.title ?? p.id,
+        videosCount: typeof p.videosCount === "number" ? p.videosCount : 0,
+      }));
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Danh sách playlist cho picker khi đăng. Ưu tiên file chuẩn của kênh
+ * (input/_fb-playlists.json) — vì nhiều playlist có thể CHƯA tạo trên FB. Nếu
+ * không có file thì fallback gọi Graph API video_lists.
+ */
+episodesRoutes.get("/_/facebook-playlists", async (c) => {
+  const local = await readLocalPlaylists();
+  if (local) {
+    return c.json({ pageId: "", pageName: "", playlists: local, source: "file" });
+  }
+  const token = getApiKey("facebook");
+  if (!token) {
+    return c.json({ error: "Chưa có Facebook Page Access Token — nhập ở Settings." }, 400);
+  }
+  try {
+    const r = await listPlaylists(token, process.env.FB_PAGE_ID);
+    return c.json({ ...r, source: "api" });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/**
+ * SSE: đăng video render (output/<name>.mp4) lên Trang Facebook dạng Reel.
+ * Mô tả dựng từ config đã lưu (caption + hashtag + khối công bố). Khi xong ghi
+ * fbReelId/fbPermalink + publishStatus="published"/publishedAt vào config.
+ * Playlist (nếu chọn) chỉ lưu để nhắc thêm tay — API không cho tự thêm.
+ */
+episodesRoutes.get("/:name/publish", (c) => {
+  const name = c.req.param("name");
+  return streamSSE(c, async (stream) => {
+    let id = 0;
+    const send = (event: string, data: unknown) =>
+      stream.writeSSE({ event, data: JSON.stringify(data), id: String(++id) });
+
+    const summary = await getEpisode(name);
+    if (!summary) {
+      await send("error", { message: `Không tìm thấy tập "${name}".` });
+      await send("done", { code: 1 });
+      return;
+    }
+
+    const videoPath = path.join(PATHS.OUTPUT_DIR, `${name}.mp4`);
+    try {
+      await fs.stat(videoPath);
+    } catch {
+      await send("error", { message: "Chưa có video render (output/" + name + ".mp4) — sang tab Render bấm 'Render full' trước." });
+      await send("done", { code: 1 });
+      return;
+    }
+
+    const token = getApiKey("facebook");
+    if (!token) {
+      await send("error", {
+        message: "Chưa có Facebook Page Access Token — vào Settings để nhập (provider Facebook).",
+      });
+      await send("done", { code: 1 });
+      return;
+    }
+
+    const description = buildEpisodeDescription(summary.config);
+    const playlistId = c.req.query("playlistId")?.trim() || undefined;
+    const playlistName = c.req.query("playlistName")?.trim() || undefined;
+
+    // Bridge onProgress (sync) → SSE (async) qua queue + wake.
+    const queue: string[] = [];
+    let resume: (() => void) | null = null;
+    const wake = () => { const r = resume; resume = null; r?.(); };
+    const onProgress = (msg: string) => { queue.push(msg); wake(); };
+
+    const ac = new AbortController();
+    stream.onAbort(() => ac.abort());
+
+    await send("log", { line: `Đăng "${name}.mp4" lên Facebook Reel…` });
+
+    const holder: {
+      done: boolean;
+      result: Awaited<ReturnType<typeof publishReel>> | null;
+      error: string | null;
+    } = { done: false, result: null, error: null };
+    const task = publishReel({
+      token,
+      pageIdOverride: process.env.FB_PAGE_ID,
+      videoPath,
+      description,
+      onProgress,
+      signal: ac.signal,
+    })
+      .then((r) => { holder.result = r; })
+      .catch((e) => { holder.error = e instanceof Error ? e.message : String(e); })
+      .finally(() => { holder.done = true; wake(); });
+
+    while (!holder.done || queue.length) {
+      if (!queue.length) {
+        await new Promise<void>((r) => { resume = r; });
+        continue;
+      }
+      await send("log", { line: queue.shift()! });
+    }
+    await task;
+
+    if (holder.error) {
+      await send("error", { message: holder.error });
+      await send("done", { code: 1 });
+      return;
+    }
+
+    if (holder.result) {
+      const r = holder.result;
+      const updated: EpisodeConfig = {
+        ...summary.config,
+        publishStatus: "published",
+        publishedAt: new Date().toISOString(),
+        fbReelId: r.videoId,
+        fbPermalink: r.permalink,
+        ...(playlistId ? { fbPlaylistId: playlistId } : {}),
+        ...(playlistName ? { fbPlaylistName: playlistName } : {}),
+      };
+      try {
+        await saveEpisode(name, updated);
+      } catch {
+        /* lưu config lỗi không chặn kết quả đăng */
+      }
+      if (playlistName) {
+        await send("log", {
+          line: `Nhắc: mở Reel trên Facebook → menu (⋯) → "Thêm vào playlist" → "${playlistName}" (Facebook không cho tự thêm qua API).`,
+        });
+      }
+      await send("published", {
+        videoId: r.videoId,
+        permalink: r.permalink,
+        pageName: r.pageName,
+        playlistName: playlistName ?? null,
+      });
+    }
+    await send("done", { code: 0 });
+  });
 });
 
 /**

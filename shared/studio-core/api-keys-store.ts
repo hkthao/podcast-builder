@@ -20,6 +20,7 @@ export const KNOWN_PROVIDERS = [
   "gemini",
   "anthropic",
   "google-vertex-ai",
+  "facebook",
 ] as const;
 export type ApiKeyProvider = (typeof KNOWN_PROVIDERS)[number];
 
@@ -27,9 +28,15 @@ export type ApiKeyProvider = (typeof KNOWN_PROVIDERS)[number];
 const envVarName = (p: ApiKeyProvider): string =>
   `${p.toUpperCase().replace(/-/g, "_")}_API_KEY`;
 
-/** Special fallback: Gemini có thể đặt `GOOGLE_API_KEY` cũ. */
+/**
+ * Special fallback env names:
+ *  - Gemini có thể đặt `GOOGLE_API_KEY` cũ.
+ *  - Facebook: token là Page Access Token, quy ước env `FACEBOOK_PAGE_ACCESS_TOKEN`
+ *    (thay cho `FACEBOOK_API_KEY` mặc định) cho dễ hiểu.
+ */
 const fallbackEnvNames = (p: ApiKeyProvider): string[] => {
   if (p === "gemini") return ["GOOGLE_API_KEY"];
+  if (p === "facebook") return ["FACEBOOK_PAGE_ACCESS_TOKEN"];
   return [];
 };
 

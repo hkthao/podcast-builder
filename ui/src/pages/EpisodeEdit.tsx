@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,6 @@ import {
   Flag,
   Send,
   Image as ImageIcon,
-  Scissors,
 } from "lucide-react";
 import {
   api,
@@ -44,14 +43,13 @@ import { SpellFixPanel } from "@/components/SpellFixPanel";
 import { applySpellFix } from "@/components/spell-fix-rules";
 import type { SpellFixRule } from "@/components/spell-fix-rules";
 import { PublishTab } from "@/components/PublishTab";
-import { CompTab } from "@/components/CompTab";
 import { cn } from "@/lib/utils";
 
 /**
  * 5 tab top-level (gộp từ 7): config / content / render / publish / files.
  * `content` chứa 3 sub-tab pipeline tạo: script → transcript → scenes.
  */
-type Tab = "content" | "comp" | "render" | "publish" | "footage";
+type Tab = "assets" | "content" | "render" | "publish" | "footage";
 type ContentSubTab = "transcript" | "scenes";
 
 export function EpisodeEdit() {
@@ -80,6 +78,15 @@ export function EpisodeEdit() {
     queryFn: () => api.getFiles(name),
     enabled: !!name,
   });
+
+  // Lần load đầu: nếu tập chưa có audio → mở thẳng tab "Âm thanh & Ảnh" để
+  // thấy ngay ô upload (trước đây panel này luôn hiện trên đầu).
+  const didInitTab = useRef(false);
+  useEffect(() => {
+    if (didInitTab.current || !epQ.data) return;
+    didInitTab.current = true;
+    if (!epQ.data.audioPath) setTab("assets");
+  }, [epQ.data]);
 
   if (epQ.isLoading) {
     return (
@@ -169,18 +176,14 @@ export function EpisodeEdit() {
         </Meta>
       </div>
 
-      {/* Audio uploader — luôn hiện. Prompt mạnh nếu chưa có audio. */}
-      <AudioUploadPanel ep={ep} />
-
-      {/* BGM (nhạc nền) — luôn hiện, optional. */}
-      <BgmPanel ep={ep} />
-
-      {/* Cover prompt — gen prompt Midjourney/Flux thumbnail 9:16 */}
-      <CoverPromptPanel ep={ep} />
-
-
-      {/* Tabs — Nội dung / Ghép take / Render (gồm Cấu hình) / Footage / Đăng */}
-      <div className="mb-4 flex gap-1 border-b">
+      {/* Tabs — Âm thanh & Ảnh / Nội dung / Render (gồm Cấu hình) / Footage / Đăng */}
+      <div className="mb-4 flex flex-wrap gap-x-1 gap-y-0 border-b">
+        <TabButton
+          active={tab === "assets"}
+          onClick={() => setTab("assets")}
+          icon={<FileAudio2 className="size-4" />}
+          label={`Âm thanh & Ảnh${ep.audioPath ? " ✓" : " —"}`}
+        />
         <TabButton
           active={tab === "content"}
           onClick={() => setTab("content")}
@@ -190,12 +193,6 @@ export function EpisodeEdit() {
               ? ` (${[transcriptCount && `${transcriptCount} câu`, planCount && `${planCount} cảnh`].filter(Boolean).join(" · ")})`
               : ""
           }`}
-        />
-        <TabButton
-          active={tab === "comp"}
-          onClick={() => setTab("comp")}
-          icon={<Scissors className="size-4" />}
-          label="Ghép take"
         />
         <TabButton
           active={tab === "render"}
@@ -222,6 +219,17 @@ export function EpisodeEdit() {
           }`}
         />
       </div>
+
+      {tab === "assets" && (
+        <>
+          {/* Audio uploader — prompt mạnh nếu chưa có audio. */}
+          <AudioUploadPanel ep={ep} />
+          {/* BGM (nhạc nền) — optional. */}
+          <BgmPanel ep={ep} />
+          {/* Cover prompt — gen prompt Midjourney/Flux thumbnail 9:16 */}
+          <CoverPromptPanel ep={ep} />
+        </>
+      )}
 
       {tab === "content" && (
         <>
@@ -262,7 +270,6 @@ export function EpisodeEdit() {
         </>
       )}
 
-      {tab === "comp" && <CompTab episodeName={name} />}
 
       {tab === "render" && (
         <>
@@ -770,7 +777,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+        "flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
         active
           ? "border-primary text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",

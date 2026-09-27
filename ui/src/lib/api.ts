@@ -58,6 +58,11 @@ export type EpisodeConfig = {
   musicCredit: string | null;
   footageCredit: string | null;
   sources: string[];
+  /** Kết quả đăng Facebook Reel (đăng trực tiếp từ app). */
+  fbReelId: string | null;
+  fbPermalink: string | null;
+  fbPlaylistId: string | null;
+  fbPlaylistName: string | null;
 };
 
 export type EpisodeSummary = {
@@ -1316,6 +1321,23 @@ export const api = {
       `/api/settings/keys/${encodeURIComponent(provider)}`,
       { method: "DELETE" },
     ),
+
+  // ─── Đăng Facebook Reel trực tiếp ────────────────────────────────────
+  /** Danh sách playlist của Trang Facebook để chọn trước khi đăng. */
+  fbPlaylists: () =>
+    jsonFetch<{ pageId: string; pageName: string; playlists: FbPlaylist[] }>(
+      "/api/episodes/_/facebook-playlists",
+    ),
+  /** URL SSE để đăng video render lên Facebook Reel (dùng với EventSource). */
+  publishEpisodeUrl: (name: string, playlist?: { id: string; title: string }) => {
+    const base = `/api/episodes/${encodeURIComponent(name)}/publish`;
+    if (!playlist?.id) return base;
+    const qs = new URLSearchParams({
+      playlistId: playlist.id,
+      playlistName: playlist.title,
+    });
+    return `${base}?${qs.toString()}`;
+  },
 };
 
 export type PromptMeta = {
@@ -1332,7 +1354,8 @@ export type ApiKeyProvider =
   | "openai"
   | "gemini"
   | "anthropic"
-  | "google-vertex-ai";
+  | "google-vertex-ai"
+  | "facebook";
 
 export type ApiKeyStatus = {
   provider: ApiKeyProvider;
@@ -1374,6 +1397,9 @@ export type ReelBlocks = {
 };
 
 export type ReelPost = { caption: string; hashtags: string[] };
+
+/** Playlist (video list) của Trang Facebook — cho picker khi đăng. */
+export type FbPlaylist = { id: string; title: string; videosCount: number };
 
 export type ReelEpisodeDetail = ReelEpisodeStatus & {
   blocks: ReelBlocks;

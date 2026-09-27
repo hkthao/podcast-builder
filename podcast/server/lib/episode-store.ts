@@ -231,6 +231,10 @@ const buildTemplate = (
   musicCredit: null,
   footageCredit: null,
   sources: [],
+  fbReelId: null,
+  fbPermalink: null,
+  fbPlaylistId: null,
+  fbPlaylistName: null,
 });
 
 /**

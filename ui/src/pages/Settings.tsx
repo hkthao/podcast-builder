@@ -70,6 +70,13 @@ const PROVIDER_META: Record<
     placeholder: "sk-ant-...",
     description: "Chưa active — reserved cho roadmap.",
   },
+  facebook: {
+    label: "Facebook (Page Access Token)",
+    docsUrl: "https://developers.facebook.com/tools/explorer/",
+    placeholder: "EAAG...",
+    description:
+      "Page Access Token DÀI HẠN của Trang để đăng Reel trực tiếp từ app. Cần quyền pages_manage_posts + pages_read_engagement. Lấy tại Graph API Explorer (chọn app + Trang, cấp quyền) rồi đổi sang long-lived token. Nếu token là User token quản nhiều Trang, đặt thêm FB_PAGE_ID trong .env.",
+  },
 };
 
 export function SettingsPage() {
