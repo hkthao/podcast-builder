@@ -54,23 +54,79 @@ const parseJson = async (res: Response): Promise<unknown> => {
   }
 };
 
+/** GET 1 URL Graph → JSON đã parse. */
+const graphGet = async (url: string, signal?: AbortSignal): Promise<{ res: Response; body: any }> => {
+  const res = await fetch(url, { signal });
+  return { res, body: await parseJson(res) };
+};
+
+export type ResolvedPage = { id: string; name: string; token: string };
+
 /**
- * Xác định Trang từ token. Với Page Access Token, GET /me trả về chính Trang đó.
- * Cho phép ép pageId (env FB_PAGE_ID) khi token là User token quản nhiều trang.
+ * Xác định Trang + LẤY PAGE ACCESS TOKEN. Reels chỉ đăng được lên PAGE, không
+ * đăng lên trang cá nhân. Xử lý 3 trường hợp token user dán vào:
+ *  1) Có pageIdOverride (env FB_PAGE_ID): lấy thẳng access_token của page đó.
+ *  2) User access token: liệt kê /me/accounts → chọn page (theo FB_PAGE_ID hoặc
+ *     page duy nhất) + dùng access_token RIÊNG của page đó.
+ *  3) Page access token sẵn: /me trả về chính Page (có `category`) → dùng token đó.
+ * Nếu token chỉ là trang CÁ NHÂN (không quản page nào) → ném lỗi rõ ràng.
  */
 export async function resolvePage(
   token: string,
   pageIdOverride?: string,
   signal?: AbortSignal,
-): Promise<{ id: string; name: string }> {
-  const target = pageIdOverride?.trim() ? pageIdOverride.trim() : "me";
-  const url = `${GRAPH}/${encodeURIComponent(target)}?fields=id,name&access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url, { signal });
-  const body = (await parseJson(res)) as { id?: string; name?: string } & GraphError;
-  if (!res.ok || !body.id) {
-    throwGraphError(body, `Không lấy được thông tin Trang (HTTP ${res.status})`);
+): Promise<ResolvedPage> {
+  const enc = encodeURIComponent;
+
+  // (1) Ép page id → lấy access_token của chính page đó.
+  if (pageIdOverride?.trim()) {
+    const pid = pageIdOverride.trim();
+    const { res, body } = await graphGet(
+      `${GRAPH}/${enc(pid)}?fields=id,name,access_token&access_token=${enc(token)}`,
+      signal,
+    );
+    if (!res.ok || !body.id) {
+      throwGraphError(body, `Không truy cập được Trang id ${pid} (HTTP ${res.status})`);
+    }
+    return { id: body.id, name: body.name ?? pid, token: body.access_token ?? token };
   }
-  return { id: body.id!, name: body.name ?? body.id! };
+
+  // (2) User token → danh sách page quản lý (mỗi page có access_token riêng).
+  const acc = await graphGet(
+    `${GRAPH}/me/accounts?fields=id,name,access_token&limit=100&access_token=${enc(token)}`,
+    signal,
+  );
+  const pages: Array<{ id: string; name?: string; access_token?: string }> = Array.isArray(
+    acc.body?.data,
+  )
+    ? acc.body.data.filter((p: { id?: string }) => typeof p?.id === "string")
+    : [];
+  if (pages.length === 1) {
+    const p = pages[0];
+    return { id: p.id, name: p.name ?? p.id, token: p.access_token ?? token };
+  }
+  if (pages.length > 1) {
+    const list = pages.map((p) => `${p.name ?? "?"} (${p.id})`).join("; ");
+    throw new Error(
+      `Token quản nhiều Trang — đặt FB_PAGE_ID trong .env để chọn. Các Trang: ${list}`,
+    );
+  }
+
+  // (3) Không có page qua /me/accounts → có thể token đã là PAGE token.
+  const me = await graphGet(
+    `${GRAPH}/me?fields=id,name,category&access_token=${enc(token)}`,
+    signal,
+  );
+  if (me.res.ok && me.body?.id && me.body?.category) {
+    return { id: me.body.id, name: me.body.name ?? me.body.id, token };
+  }
+
+  // Trang cá nhân / thiếu quyền.
+  throw new Error(
+    me.body?.name
+      ? `Token đang trỏ tới trang CÁ NHÂN "${me.body.name}", không phải Facebook Page. Reels chỉ đăng được lên Page. Dùng Page Access Token, hoặc User token có quyền pages_show_list + pages_manage_posts (và đặt FB_PAGE_ID nếu quản nhiều Trang).`
+      : "Không tìm thấy Facebook Page nào từ token. Cần Page Access Token (hoặc User token có pages_show_list + pages_manage_posts).",
+  );
 }
 
 export type FbPlaylist = { id: string; title: string; videosCount: number };
@@ -85,7 +141,7 @@ export async function listPlaylists(
   signal?: AbortSignal,
 ): Promise<{ pageId: string; pageName: string; playlists: FbPlaylist[] }> {
   const page = await resolvePage(token, pageIdOverride, signal);
-  const url = `${GRAPH}/${encodeURIComponent(page.id)}/video_lists?fields=id,title,videos_count&limit=100&access_token=${encodeURIComponent(token)}`;
+  const url = `${GRAPH}/${encodeURIComponent(page.id)}/video_lists?fields=id,title,videos_count&limit=100&access_token=${encodeURIComponent(page.token)}`;
   const res = await fetch(url, { signal });
   const body = (await parseJson(res)) as {
     data?: Array<{ id?: string; title?: string; videos_count?: number }>;
@@ -263,16 +319,18 @@ export async function publishReel(opts: {
   onProgress?.("Đang xác định Trang từ token…");
   const page = await resolvePage(token, pageIdOverride, signal);
   onProgress?.(`Trang: ${page.name} (id ${page.id})`);
+  // TỪ ĐÂY dùng PAGE token (không dùng user token) cho mọi lệnh video_reels.
+  const pageToken = page.token;
 
   onProgress?.("Khởi tạo phiên upload Reel…");
-  const { videoId, uploadUrl } = await startReel(token, page.id, signal);
+  const { videoId, uploadUrl } = await startReel(pageToken, page.id, signal);
 
   const sizeMb = (fs.statSync(videoPath).size / 1024 / 1024).toFixed(1);
   onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB)…`);
-  await uploadBinary(uploadUrl, token, videoPath, signal);
+  await uploadBinary(uploadUrl, pageToken, videoPath, signal);
 
   onProgress?.(isScheduled ? "Đang chốt & lên lịch Reel…" : "Đang chốt & xuất bản Reel…");
-  await finishReel(token, page.id, videoId, description, scheduledPublishTime, signal);
+  await finishReel(pageToken, page.id, videoId, description, scheduledPublishTime, signal);
 
   if (isScheduled) {
     // Reel lên lịch chưa xử lý/hiển thị công khai ngay → không poll ready/permalink.
@@ -280,9 +338,9 @@ export async function publishReel(opts: {
     return { videoId, permalink: null, pageName: page.name, pageId: page.id, scheduled: true };
   }
 
-  await waitReady(token, videoId, onProgress, signal);
+  await waitReady(pageToken, videoId, onProgress, signal);
 
-  const permalink = await fetchPermalink(token, videoId, signal);
+  const permalink = await fetchPermalink(pageToken, videoId, signal);
   onProgress?.("✓ Đã đăng Reel thành công.");
   return { videoId, permalink, pageName: page.name, pageId: page.id, scheduled: false };
 }

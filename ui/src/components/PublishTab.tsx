@@ -741,6 +741,9 @@ export function PublishTab({
         ep={ep}
         isReady={isReady}
         onBeforePublish={flushPublishFields}
+        onSavePlaylist={(id, name) =>
+          saveMut.mutate({ fbPlaylistId: id || null, fbPlaylistName: name || null })
+        }
         llmProvider={llmProvider}
         llmModel={llmModel}
       />
@@ -757,12 +760,14 @@ function FacebookPublishCard({
   ep,
   isReady,
   onBeforePublish,
+  onSavePlaylist,
   llmProvider,
   llmModel,
 }: {
   ep: EpisodeSummary;
   isReady: boolean;
   onBeforePublish: () => Promise<void>;
+  onSavePlaylist: (id: string, name: string) => void;
   llmProvider: LLMProvider;
   llmModel: string;
 }) {
@@ -793,6 +798,14 @@ function FacebookPublishCard({
   });
   const [playlistId, setPlaylistId] = useState(ep.config.fbPlaylistId ?? "");
   const selectedPlaylist = playlistsQ.data?.playlists.find((p) => p.id === playlistId);
+  // Chọn playlist + LƯU ngay vào config để lần sau tự chọn lại (không đợi đăng).
+  const selectPlaylist = (id: string) => {
+    setPlaylistId(id);
+    const title = id
+      ? playlistsQ.data?.playlists.find((p) => p.id === id)?.title ?? id
+      : "";
+    onSavePlaylist(id, title);
+  };
 
   // Gợi ý playlist bằng AI (dùng lại / tạo mới)
   const suggestMut = useMutation({
@@ -950,7 +963,7 @@ function FacebookPublishCard({
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Playlist */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex min-h-6 items-center justify-between gap-2">
                 <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Playlist (tuỳ chọn)
                 </Label>
@@ -971,7 +984,7 @@ function FacebookPublishCard({
               </div>
               <select
                 value={playlistId}
-                onChange={(e) => setPlaylistId(e.target.value)}
+                onChange={(e) => selectPlaylist(e.target.value)}
                 disabled={publishing || playlistsQ.isLoading}
                 className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
               >
@@ -1000,7 +1013,7 @@ function FacebookPublishCard({
                       {suggestion.playlistId && suggestion.playlistId !== playlistId && (
                         <button
                           type="button"
-                          onClick={() => setPlaylistId(suggestion.playlistId!)}
+                          onClick={() => selectPlaylist(suggestion.playlistId!)}
                           className="rounded border border-accent/50 px-1.5 py-0.5 text-accent hover:bg-accent/10"
                         >
                           Dùng
@@ -1048,7 +1061,7 @@ function FacebookPublishCard({
 
             {/* Lịch đăng */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex min-h-6 items-center justify-between gap-2">
                 <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Lịch đăng
                 </Label>
