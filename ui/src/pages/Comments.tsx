@@ -92,12 +92,13 @@ export function CommentsPage() {
     setPage(0);
   };
 
-  // Batch: gom các comment "chờ trả lời" đang hiển thị → 1 request LLM.
-  const pendingIds = comments
-    .filter((c) => c.status === "pending")
+  // Batch: gợi ý cho các comment ĐANG HIỂN THỊ (theo trang + bộ lọc hiện tại),
+  // bỏ comment đã trả lời (đã đăng rồi).
+  const batchIds = comments
+    .filter((c) => c.status !== "replied")
     .map((c) => c.comment_id);
   const batchMut = useMutation({
-    mutationFn: () => commentsApi.generateBatch({ provider, model, commentIds: pendingIds }),
+    mutationFn: () => commentsApi.generateBatch({ provider, model, commentIds: batchIds }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fb-comments"] }),
   });
   const cleanupMut = useMutation({
@@ -143,16 +144,16 @@ export function CommentsPage() {
         <Button
           variant="outline"
           onClick={() => batchMut.mutate()}
-          disabled={batchMut.isPending || pendingIds.length === 0}
+          disabled={batchMut.isPending || batchIds.length === 0}
           className="gap-1.5"
-          title="Gom tất cả comment chờ trả lời trên trang này → 1 request AI (tiết kiệm chi phí)"
+          title="Gợi ý cho các comment đang hiển thị (theo trang + bộ lọc hiện tại) → 1 request AI"
         >
           {batchMut.isPending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Sparkles className="size-4" />
           )}
-          AI gợi ý tất cả ({pendingIds.length})
+          AI gợi ý ({batchIds.length})
         </Button>
         <div className="ml-auto flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground">AI:</span>

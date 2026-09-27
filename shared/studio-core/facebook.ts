@@ -113,19 +113,21 @@ export async function resolvePage(
   }
 
   // (3) Không có page qua /me/accounts → có thể token đã là PAGE token.
-  const me = await graphGet(
-    `${GRAPH}/me?fields=id,name,category&access_token=${enc(token)}`,
-    signal,
-  );
-  if (me.res.ok && me.body?.id && me.body?.category) {
-    return { id: me.body.id, name: me.body.name ?? me.body.id, token };
+  // Lấy id,name TRƯỚC (field category chỉ có trên Page → hỏi kèm trên user token
+  // sẽ làm cả call lỗi và mất tên).
+  const meBasic = await graphGet(`${GRAPH}/me?fields=id,name&access_token=${enc(token)}`, signal);
+  if (!meBasic.res.ok || !meBasic.body?.id) {
+    throwGraphError(meBasic.body, "Token không hợp lệ hoặc đã hết hạn.");
+  }
+  // `category` chỉ tồn tại trên Page → dùng để phân biệt Page vs tài khoản cá nhân.
+  const meCat = await graphGet(`${GRAPH}/me?fields=category&access_token=${enc(token)}`, signal);
+  if (meCat.res.ok && meCat.body?.category) {
+    return { id: meBasic.body.id, name: meBasic.body.name ?? meBasic.body.id, token };
   }
 
-  // Trang cá nhân / thiếu quyền.
+  // Tài khoản cá nhân / không quản Page / thiếu quyền.
   throw new Error(
-    me.body?.name
-      ? `Token đang trỏ tới trang CÁ NHÂN "${me.body.name}", không phải Facebook Page. Reels chỉ đăng được lên Page. Dùng Page Access Token, hoặc User token có quyền pages_show_list + pages_manage_posts (và đặt FB_PAGE_ID nếu quản nhiều Trang).`
-      : "Không tìm thấy Facebook Page nào từ token. Cần Page Access Token (hoặc User token có pages_show_list + pages_manage_posts).",
+    `Token đang gắn với tài khoản "${meBasic.body.name ?? meBasic.body.id}" và KHÔNG quản Facebook Page nào (hoặc thiếu quyền pages_show_list). Reels/comment chỉ chạy trên Page. Hãy: (1) đảm bảo tài khoản này là QUẢN TRỊ VIÊN của Page; (2) tạo token có quyền pages_show_list + pages_manage_posts + pages_read_engagement + pages_manage_engagement, hoặc dùng Page Access Token trực tiếp; đặt FB_PAGE_ID trong .env nếu cần chỉ định Trang.`,
   );
 }
 
