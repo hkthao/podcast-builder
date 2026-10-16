@@ -108,10 +108,18 @@ const getJson = (
       .on("error", reject);
   });
 
-/** Chọn 1 file dọc ≥ minHeight (nhỏ nhất đủ nét); fallback file dọc lớn nhất. */
-const pickPortraitFile = (v: any, minHeight: number): any => {
+/**
+ * Chọn 1 file đúng hướng (dọc: cao>rộng, ngang: rộng>cao) có chiều cao ≥
+ * minHeight (nhỏ nhất đủ nét); fallback file đúng hướng lớn nhất.
+ */
+const pickFile = (v: any, minHeight: number, orientation: Orientation = "portrait"): any => {
   const files = (v.video_files || [])
-    .filter((f: any) => f.height && f.width && f.height > f.width)
+    .filter((f: any) =>
+      f.height && f.width &&
+      (orientation === "landscape" ? f.width > f.height
+        : orientation === "square" ? f.width === f.height
+        : f.height > f.width),
+    )
     .sort((a: any, b: any) => b.height - a.height);
   const ok = files.filter((f: any) => f.height >= minHeight);
   return ok.length ? ok[ok.length - 1] : files[0];
@@ -130,8 +138,8 @@ const mapVideo = (v: any, pick: any): PexelsVideo => ({
 });
 
 /**
- * Tìm video Pexels theo query. Mặc định dọc (portrait). Trả ứng viên đã chọn
- * file ≥ minHeight. Params theo docs/pexels-api.md (/videos/search).
+ * Tìm video Pexels theo query. Mặc định dọc (portrait); "landscape" cho bản
+ * YouTube 16:9. Trả ứng viên đã chọn file đúng hướng có chiều cao ≥ minHeight. Params theo docs/pexels-api.md (/videos/search).
  */
 export async function searchPexelsVideos(
   query: string,
@@ -163,7 +171,7 @@ export async function searchPexelsVideos(
     if (isBlockedPexels(v)) continue; // tác giả/clip bị chặn bản quyền
     const dur = v.duration ?? 0;
     if (dur < minDur || dur > maxDur) continue;
-    const pick = pickPortraitFile(v, minHeight);
+    const pick = pickFile(v, minHeight, orientation);
     if (pick) out.push(mapVideo(v, pick));
   }
   return out;
@@ -196,7 +204,7 @@ export async function getPopularPexelsVideos(
   const out: PexelsVideo[] = [];
   for (const v of vids) {
     if (isBlockedPexels(v)) continue; // tác giả/clip bị chặn bản quyền
-    const pick = pickPortraitFile(v, opts.minHeight ?? 1080);
+    const pick = pickFile(v, opts.minHeight ?? 1080);
     if (pick) out.push(mapVideo(v, pick));
   }
   return out;

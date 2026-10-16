@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
-import { COLORS, FORMAT, MOOD_ACCENTS, type MoodKey } from "../theme";
+import { COLORS, MOOD_ACCENTS, type MoodKey } from "../theme";
+import { useLayout } from "../layout";
 import type { Scene } from "../scenes";
 import { currentSceneIndex, sceneVariant } from "./scene-runtime";
 
@@ -29,6 +30,7 @@ type Props = {
 export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scenes, accentColor }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { landscape, width: W, height: H } = useLayout();
   const audioData = useAudioData(staticFile(audioSrc));
 
   const smoothed = useMemo(() => {
@@ -70,23 +72,24 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scene
   const vis = VIS_VARIANTS[variant];
   const BAR_WIDTH = vis.barWidth;
   const BAR_GAP = vis.barGap;
-  const MAX_HEIGHT = vis.maxHeight;
+  // 16:9: sóng thấp hơn (khung 1080px), đặt ngay trên caption.
+  const MAX_HEIGHT = landscape ? vis.maxHeight * 0.6 : vis.maxHeight;
 
   // Ưu tiên màu chủ đạo tập (đồng bộ cover); fallback accent theo mood.
   const accent = accentColor || MOOD_ACCENTS[activeMood];
   // Bars mirror đối xứng quanh trung tâm. Tổng 2*NUM_BANDS bars.
   const totalBars = NUM_BANDS * 2;
   const totalWidth = totalBars * BAR_WIDTH + (totalBars - 1) * BAR_GAP;
-  const leftX = (FORMAT.width - totalWidth) / 2;
-  const centerY = FORMAT.height * vis.centerYRatio;
+  const leftX = (W - totalWidth) / 2;
+  const centerY = H * (landscape ? vis.centerYRatio + 0.03 : vis.centerYRatio);
   const gradientId = `wave-grad-${activeMood}-${variant}`;
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       <svg
-        width={FORMAT.width}
-        height={FORMAT.height}
-        viewBox={`0 0 ${FORMAT.width} ${FORMAT.height}`}
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
         style={{ position: "absolute", inset: 0 }}
       >
         <defs>

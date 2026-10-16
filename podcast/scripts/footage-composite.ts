@@ -74,11 +74,13 @@ const themeColorbalance = (hex: string | null | undefined, strength: number): st
 export type FootageBgOpts = {
   /** Màu chủ đề (hex) — grade footage đồng bộ cover/wave. Bỏ trống = giữ màu gốc. */
   themeColor?: string | null;
+  /** Khung nền — mặc định dọc 1080×1920; bản YouTube truyền 1920×1080. */
+  size?: { width: number; height: number };
 };
 
 /**
  * Dựng NỀN footage dài durationSec từ các clip nối theo thứ tự, crop cover
- * 1080×1920. Nếu tổng clip ≥ durationSec → mỗi clip hiện ĐÚNG 1 LẦN (không lặp);
+ * theo opts.size (mặc định 1080×1920). Nếu tổng clip ≥ durationSec → mỗi clip hiện ĐÚNG 1 LẦN (không lặp);
  * thiếu thì mới lặp cho đủ. Nếu có themeColor → color grade về tông màu chủ đề.
  */
 export function buildFootageBg(
@@ -100,6 +102,7 @@ export function buildFootageBg(
     seq.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"),
   );
 
+  const { width: W, height: H } = opts?.size ?? { width: 1080, height: 1920 };
   const cb = themeColorbalance(opts?.themeColor, FOOTAGE_GRADE);
   const doTheme = cb !== "";
 
@@ -120,14 +123,14 @@ export function buildFootageBg(
 
   const chains: string[] = [];
   chains.push(
-    `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1${eqChain}[fv]`,
+    `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1${eqChain}[fv]`,
   );
   let last = "fv";
 
   // Ink overlay (legacy, mặc định tắt).
   if (FOOTAGE_INK > 0) {
     const ii = nextIdx++;
-    inputs.push("-f", "lavfi", "-i", "color=c=0x16244F:s=1080x1920");
+    inputs.push("-f", "lavfi", "-i", `color=c=0x16244F:s=${W}x${H}`);
     chains.push(`[${ii}:v]format=rgba,colorchannelmixer=aa=${FOOTAGE_INK}[ink]`);
     chains.push(`[${last}][ink]overlay=shortest=1[inked]`);
     last = "inked";
@@ -218,5 +221,18 @@ export function compositeOverlay(
     "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "192k",
     "-movflags", "+faststart", "-shortest", outPath,
+  ]);
+}
+
+/**
+ * Thumbnail YouTube từ ảnh cover 16:9 → JPEG 1280×720 (crop cover). YouTube
+ * giới hạn thumbnail 2MB; 1280×720 q3 thường ~200-400KB.
+ */
+export function makeYoutubeThumb(coverAbs: string, outPath: string): void {
+  execFileSync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-i", coverAbs,
+    "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
+    "-frames:v", "1", "-q:v", "3", outPath,
   ]);
 }

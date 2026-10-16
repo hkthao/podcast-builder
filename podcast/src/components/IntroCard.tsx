@@ -1,5 +1,6 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, FPS } from "../theme";
+import { useLayout } from "../layout";
 import { INTRO_SECONDS } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
@@ -59,6 +60,7 @@ export const IntroCard: React.FC<Props> = ({
   coverPosition = "center",
 }) => {
   const frame = useCurrentFrame();
+  const { landscape, sx, sy } = useLayout();
   const lines = splitIntoLines(title);
   const emphasisIdx = Math.floor(lines.length / 2);
 
@@ -66,11 +68,30 @@ export const IntroCard: React.FC<Props> = ({
   // đầy khung tới frame cuối rồi CẮT THẲNG sang Hook (2 thẻ đều full → không có
   // khoảng trống footage/nền chớp giữa cover và hook = hết "giật").
   if (coverImage) {
+    // 16:9 + contain (thường là cover DỌC dùng tạm cho bản YouTube): nền là
+    // chính ảnh đó phóng to + mờ thay vì dải vàng hai bên.
+    const blurredBackdrop = landscape && coverFit === "contain";
     return (
       <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>
+        {blurredBackdrop ? (
+          <Img
+            src={staticFile(coverImage)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: "blur(40px) brightness(0.75)",
+              transform: "scale(1.15)",
+            }}
+          />
+        ) : null}
         <Img
           src={staticFile(coverImage)}
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
             objectFit: coverFit,
@@ -124,10 +145,10 @@ export const IntroCard: React.FC<Props> = ({
       }}
     >
       {/* Decoration sparkles ở 4 góc */}
-      <Sparkle x={120} y={260} color={COLORS.accentRed} size={84} delay={0} />
-      <StarSmall x={960} y={340} color={COLORS.accentBlue} size={70} delay={6} />
-      <Sparkle x={960} y={1600} color={COLORS.accentTeal} size={76} delay={10} />
-      <StarSmall x={120} y={1500} color={COLORS.ink} size={64} delay={14} />
+      <Sparkle x={sx(120)} y={sy(260)} color={COLORS.accentRed} size={84} delay={0} />
+      <StarSmall x={sx(960)} y={sy(340)} color={COLORS.accentBlue} size={70} delay={6} />
+      <Sparkle x={sx(960)} y={sy(1600)} color={COLORS.accentTeal} size={76} delay={10} />
+      <StarSmall x={sx(120)} y={sy(1500)} color={COLORS.ink} size={64} delay={14} />
 
       {lines.map((line, i) => {
         const isEmphasis = i === emphasisIdx && lines.length > 1;

@@ -33,7 +33,7 @@ const PEOPLE_CHECK = process.env.FOOTAGE_PEOPLE_CHECK !== "0"; // vision loại 
 
 type Beat = { label: string; query: string; keywords: string[] };
 
-const SHOTLIST_SYSTEM = `Bạn là biên tập hình cho video podcast dọc 9:16 (triết học/tâm lý). Đọc transcript → chia 12-16 BEAT theo mạch bài (nhiều beat để đỡ lặp cảnh). Mỗi beat trả:
+const SHOTLIST_SYSTEM = `Bạn là biên tập hình cho video podcast (triết học/tâm lý). Đọc transcript → chia 12-16 BEAT theo mạch bài (nhiều beat để đỡ lặp cảnh). Mỗi beat trả:
 - label: nhãn ngắn tiếng Việt (≤6 từ)
 - query: 1 cụm TÌM KIẾM tiếng Anh cho Pexels. BẮT BUỘC là CẢNH THIÊN NHIÊN / PHONG CẢNH, TUYỆT ĐỐI KHÔNG CÓ NGƯỜI (no people, no person, no hands, no crowd). Chọn cảnh + MÀU SẮC hợp tông cảm xúc của beat, và ĐA DẠNG màu giữa các beat. Bộ cảnh gợi ý (xoay vòng cho đa dạng): "lotus flower pond", "water lily close up", "waterfall in forest", "tropical rainforest rain", "spring forest fresh green", "autumn forest golden leaves", "misty mountains sunrise", "sunrise over ocean", "golden sunset sky", "sunset silhouette mountains", "starry night sky milky way", "full moon night clouds", "moonlight over water", "cherry blossom branch", "rice terraces green", "bamboo forest", "calm lake reflection", "morning dew on leaves", "sunlight through trees", "flowing river", "ocean waves slow", "clouds timelapse sky", "snow falling forest", "aurora night sky", "field of flowers wind".
   Gợi ý ghép tông: suy ngẫm/thời gian → nước chảy/hồ tĩnh/mây/trăng nước; mất mát/vô thường → lá thu/sương/hoàng hôn; hồi sinh/di sản/hy vọng → bình minh/rừng xuân/hoa sen/nắng xuyên lá; bao la/hư vô/vĩnh cửu → bầu trời sao/dải ngân hà/mặt trăng; nỗi sợ/căng thẳng → biển động/rừng mưa/mây bão.
@@ -158,14 +158,14 @@ const matchScore = (beatKw: string[], clip: FootageTag): number => {
   return s;
 };
 
-/** Chuẩn hoá 1 clip Pexels đã tải → 1080×1920, bỏ tiếng (+silent aac), chậm. */
-const prepPexels = (src: string, out: string): void => {
+/** Chuẩn hoá 1 clip Pexels đã tải → khung W×H (dọc 1080×1920 / ngang 1920×1080), bỏ tiếng (+silent aac), chậm. */
+const prepPexels = (src: string, out: string, W = 1080, H = 1920): void => {
   execFileSync("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-y",
     "-ss", "0.2", "-i", src,
     "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
     "-map", "0:v:0", "-map", "1:a:0", "-shortest",
-    "-vf", "setpts=PTS/" + PREP_SPEED + ",scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+    "-vf", `setpts=PTS/${PREP_SPEED},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`,
     "-r", "30", "-c:v", "libx264", "-crf", "20", "-preset", "medium",
     "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "16k", "-movflags", "+faststart", out,
@@ -217,11 +217,21 @@ const audioDurationSec = (slug: string, transcript: Transcript): number => {
 
 export async function generateFootagePlan(
   slug: string,
-  opts: { apply?: boolean; maxPexels?: number; allPexels?: boolean } = {},
+  opts: { apply?: boolean; maxPexels?: number; allPexels?: boolean; landscape?: boolean } = {},
 ): Promise<void> {
   const maxPexels = opts.maxPexels ?? MAX_PEXELS_DEFAULT;
+  // Bản YouTube 16:9: footage NGANG riêng (pool tự quay đang là dọc → không
+  // dùng được) → luôn chạy chế độ 100% Pexels, ghi vào episode.footageLandscape.
+  const landscape = !!opts.landscape;
+  const allPexels = opts.allPexels || landscape;
+  const orientation = landscape ? "landscape" : "portrait";
+  const [outW, outH] = landscape ? [1920, 1080] : [1080, 1920];
+  const pexelsSub = landscape ? "pexels-yt" : "pexels";
+  // Sổ clip đã dùng: bản ngang ghi dưới khoá riêng để chạy lại --landscape
+  // không xoá dòng của bản dọc cùng tập (và ngược lại).
+  const ledgerKey = landscape ? `${slug}#yt` : slug;
   const footageDir = path.resolve("input/footage");
-  const pexelsDir = path.join(footageDir, "pexels");
+  const pexelsDir = path.join(footageDir, pexelsSub);
   const corrected = path.resolve("tmp", `${slug}.corrected.json`);
   const rawT = path.resolve("tmp", `${slug}.json`);
   const tPath = fs.existsSync(corrected) ? corrected : rawT;
@@ -233,7 +243,7 @@ export async function generateFootagePlan(
   const transcript = JSON.parse(fs.readFileSync(tPath, "utf-8")) as Transcript;
 
   // 1. shot-list (tags chỉ cần cho mix mode)
-  const tags = opts.allPexels ? {} : await tagFootagePool(footageDir);
+  const tags = allPexels ? {} : await tagFootagePool(footageDir);
   console.log("[footage-plan] sinh shot-list...");
   const beats = await genShotList(transcript, episode);
   console.log(`[footage-plan] ${beats.length} beat, ${Object.keys(tags).length} clip tự quay đã tag.`);
@@ -247,7 +257,7 @@ export async function generateFootagePlan(
   // Nạp clip các tập KHÁC đã dùng (bỏ dòng cũ của chính slug này → chạy lại được).
   const ledger = loadUsedLedger();
   for (const [id, s] of Object.entries(ledger.ids)) {
-    if (s === slug) delete ledger.ids[id];
+    if (s === ledgerKey) delete ledger.ids[id];
     else usedPexelsIds.add(Number(id));
   }
   const legacyUsed = ledger.legacy.filter((l) => l.slug !== slug);
@@ -257,7 +267,7 @@ export async function generateFootagePlan(
   const newIds: number[] = [];
 
   // ===== Chế độ 100% PEXELS PHONG CẢNH — lấp đủ thời lượng, KHÔNG lặp clip =====
-  if (opts.allPexels) {
+  if (allPexels) {
     const targetSec = audioDurationSec(slug, transcript) * 1.08; // +8% biên an toàn
     console.log(`[footage-plan] all-pexels: cần ~${targetSec.toFixed(0)}s footage (không lặp).`);
     // Xoá clip pexels cũ của slug để không lẫn/lặp.
@@ -269,7 +279,7 @@ export async function generateFootagePlan(
     const beatCands = await Promise.all(
       beats.map(async (b) => {
         const pages = await Promise.all(
-          [1, 2].map((page) => searchPexelsVideos(b.query, { perPage: 40, page, minHeight: 1080 }).catch(() => [])),
+          [1, 2].map((page) => searchPexelsVideos(b.query, { perPage: 40, page, minHeight: 1080, orientation }).catch(() => [])),
         );
         return pages.flat();
       }),
@@ -294,9 +304,9 @@ export async function generateFootagePlan(
             fs.rmSync(tmpDl, { force: true });
             continue;
           }
-          const rel = `pexels/${slug}-${String(clipIdx).padStart(2, "0")}.mp4`;
+          const rel = `${pexelsSub}/${slug}-${String(clipIdx).padStart(2, "0")}.mp4`;
           const outAbs = path.join(footageDir, rel);
-          prepPexels(tmpDl, outAbs);
+          prepPexels(tmpDl, outAbs, outW, outH);
           fs.rmSync(tmpDl, { force: true });
           const dur = probeSec(outAbs);
           usedPexelsIds.add(c.id);
@@ -344,7 +354,7 @@ export async function generateFootagePlan(
       continue;
     }
     try {
-      const cands = await searchPexelsVideos(b.query, { perPage: 40, minHeight: 1080 });
+      const cands = await searchPexelsVideos(b.query, { perPage: 40, minHeight: 1080, orientation });
       if (!cands.length) {
         report.push({ beat: b.label, query: b.query, match: "pexels:none", score: 0 });
         continue;
@@ -362,9 +372,9 @@ export async function generateFootagePlan(
           continue;
         }
         pick = c;
-        const rel = `pexels/${slug}-${String(i).padStart(2, "0")}.mp4`;
+        const rel = `${pexelsSub}/${slug}-${String(i).padStart(2, "0")}.mp4`;
         const outAbs = path.join(footageDir, rel);
-        prepPexels(tmpDl, outAbs);
+        prepPexels(tmpDl, outAbs, outW, outH);
         fs.rmSync(tmpDl, { force: true });
         usedPexelsIds.add(c.id);
         newIds.push(c.id);
@@ -387,29 +397,44 @@ export async function generateFootagePlan(
   const plan = {
     version: 1,
     slug,
+    orientation,
     beats: report,
     footage: chosen,
     pexelsAttributions: attributions,
   };
-  const planPath = path.resolve("tmp", `${slug}.footage-plan.json`);
+  const planPath = path.resolve("tmp", `${slug}${landscape ? ".yt" : ""}.footage-plan.json`);
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2));
   console.log(`\n[footage-plan] ✓ ${planPath}`);
-  console.log(`  local dùng: ${chosen.filter((c) => !c.startsWith("pexels/")).length}, pexels: ${pexelsUsed}`);
+  console.log(`  local dùng: ${chosen.filter((c) => !c.startsWith(`${pexelsSub}/`)).length}, pexels: ${pexelsUsed}`);
   report.forEach((r) => console.log(`   • ${r.beat.padEnd(24)} ${r.match}`));
 
   if (opts.apply) {
-    for (const id of newIds) ledger.ids[String(id)] = slug;
+    for (const id of newIds) ledger.ids[String(id)] = ledgerKey;
     fs.writeFileSync(USED_LEDGER, JSON.stringify(ledger, null, 2));
-    episode.footage = chosen;
+    // Đọc LẠI config ngay trước khi ghi: chạy footage-plan mất vài phút, trong
+    // lúc đó user có thể đã sửa tập trên UI (vd upload cover) → không ghi đè.
+    const latest: EpisodeConfig = fs.existsSync(jsonPath)
+      ? EpisodeConfigSchema.parse(JSON.parse(fs.readFileSync(jsonPath, "utf-8")))
+      : episode;
     const authors = [...new Set(attributions.map((a) => a.author.trim()).filter(Boolean))];
-    episode.footageCredit = authors.length ? `Footage: ${authors.join(", ")} (Pexels)` : null;
-    fs.writeFileSync(jsonPath, JSON.stringify(episode, null, 2));
-    console.log(`[footage-plan] ✓ đã ghi episode.footage (${chosen.length}) vào ${jsonPath}`);
+    const credit = authors.length ? `Footage: ${authors.join(", ")} (Pexels)` : null;
+    if (landscape) {
+      // footageCredit giữ cho bản FB; credit bản YouTube in ra để dán vào mô tả.
+      latest.footageLandscape = chosen;
+      if (credit) console.log(`  YouTube credit: ${credit}`);
+    } else {
+      latest.footage = chosen;
+      latest.footageCredit = credit;
+    }
+    fs.writeFileSync(jsonPath, JSON.stringify(latest, null, 2));
+    console.log(
+      `[footage-plan] ✓ đã ghi episode.${landscape ? "footageLandscape" : "footage"} (${chosen.length}) vào ${jsonPath}`,
+    );
     if (attributions.length) {
       console.log(`  ⚠ Ghi công Pexels trong caption: ${attributions.map((a) => a.author).join(", ")}`);
     }
   } else {
-    console.log(`[footage-plan] (dry-run) thêm --apply để ghi vào episode.footage`);
+    console.log(`[footage-plan] (dry-run) thêm --apply để ghi vào episode.${landscape ? "footageLandscape" : "footage"}`);
   }
 }
 
@@ -423,15 +448,17 @@ const isMain = (() => {
 if (isMain) {
   const slug = process.argv[2];
   if (!slug) {
-    console.error("Usage: npx tsx podcast/scripts/footage-plan.ts <slug> [--apply] [--all-pexels] [--max-pexels=N]");
+    console.error("Usage: npx tsx podcast/scripts/footage-plan.ts <slug> [--apply] [--all-pexels] [--landscape] [--max-pexels=N]");
     process.exit(1);
   }
   const apply = process.argv.includes("--apply");
   const allPexels = process.argv.includes("--all-pexels");
+  const landscape = process.argv.includes("--landscape");
   const mp = process.argv.find((a) => /^--max-pexels=\d+$/.test(a));
   generateFootagePlan(slug, {
     apply,
     allPexels,
+    landscape,
     maxPexels: mp ? Number(mp.split("=")[1]) : undefined,
   }).catch((e: unknown) => {
     console.error("[footage-plan] FAIL:", e);

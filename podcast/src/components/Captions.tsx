@@ -9,10 +9,14 @@ import {
   useVideoConfig,
 } from "remotion";
 import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
+import { useLayout } from "../layout";
 import type { Transcript } from "../../../shared/transcribe/transcribe";
 
 /** Padding-bottom = SAFE_ZONE.bottom - 40 — dịch caption xuống ~40px cho cân bố cục (vẫn nằm trên vùng FB overlay). */
 const CAPTION_PADDING_BOTTOM = SAFE_ZONE.bottom - 40;
+/** 16:9: caption sát đáy trên thanh điều khiển YouTube, khung rộng tối đa ~1440px. */
+const LANDSCAPE_PADDING_BOTTOM = 84;
+const LANDSCAPE_PADDING_X = 240;
 
 type Props = {
   transcriptSrc: string | null;
@@ -146,6 +150,7 @@ const chunkBySentence = (transcript: Transcript): Page[] => {
 export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentColor }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { landscape } = useLayout();
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const handleRef = useRef<number | null>(null);
 
@@ -196,7 +201,10 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentCol
   const scale = 0.94 + Math.min(1, localMs / 180) * 0.06;
 
   const wc = page.text.split(/\s+/).filter(Boolean).length;
-  const fontSize = wc > 7 ? 56 : wc > 5 ? 62 : TYPE_SCALE.caption;
+  // 16:9 khung thấp 1080px → chữ nhỏ hơn bản dọc nhưng vẫn đọc rõ trên TV/điện thoại ngang.
+  const fontSize = landscape
+    ? wc > 7 ? 46 : wc > 5 ? 50 : 54
+    : wc > 7 ? 56 : wc > 5 ? 62 : TYPE_SCALE.caption;
 
   // Viền + chữ theo màu chủ đề (fallback ink navy nếu tập chưa đặt màu).
   const accent = accentColor || COLORS.ink;
@@ -206,9 +214,9 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentCol
       style={{
         alignItems: "center",
         justifyContent: "flex-end",
-        paddingBottom: CAPTION_PADDING_BOTTOM,
-        paddingLeft: SAFE_ZONE.left,
-        paddingRight: SAFE_ZONE.right,
+        paddingBottom: landscape ? LANDSCAPE_PADDING_BOTTOM : CAPTION_PADDING_BOTTOM,
+        paddingLeft: landscape ? LANDSCAPE_PADDING_X : SAFE_ZONE.left,
+        paddingRight: landscape ? LANDSCAPE_PADDING_X : SAFE_ZONE.right,
         pointerEvents: "none",
       }}
     >
@@ -218,8 +226,8 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentCol
           transform: `scale(${scale})`,
           backgroundColor: COLORS.white,
           border: `5px solid ${accent}`,
-          borderRadius: 28,
-          padding: "20px 36px",
+          borderRadius: landscape ? 24 : 28,
+          padding: landscape ? "14px 32px" : "20px 36px",
           maxWidth: "100%",
           boxShadow: `6px 6px 0 ${accent}`,
         }}

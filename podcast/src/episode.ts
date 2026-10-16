@@ -55,6 +55,12 @@ export const EpisodeConfigSchema = z.object({
    * phiên cho tập này. Rỗng = nền sticker mặc định. Xem FootageLayer + §3.2.
    */
   footage: z.array(z.string()).default([]),
+  /**
+   * Footage NGANG 16:9 cho bản YouTube (input/footage/pexels-yt/...). Pool dọc
+   * ở `footage` crop sang 16:9 mất gần hết hình nên cần bộ riêng. Sinh bằng
+   * `footage-plan.ts <slug> --landscape --apply`. Bản 16:9 chỉ hỗ trợ nền footage.
+   */
+  footageLandscape: z.array(z.string()).default([]),
   sceneOverrides: z.array(SceneOverrideSchema).nullable().default(null),
   /** ID essay đã dùng làm input cho NotebookLM. Traceability. */
   essayId: z.string().nullable().default(null),
@@ -74,6 +80,11 @@ export const EpisodeConfigSchema = z.object({
    * Ví dụ: 16:9 landscape → 9:16, chọn `top`/`center`/`bottom` để pick strip dọc.
    */
   coverPosition: z.enum(["top", "center", "bottom"]).default("center"),
+  /**
+   * Ảnh cover 16:9 (input/<slug>.cover-yt.<ext>) — intro bản YouTube + làm
+   * thumbnail YouTube. Null → bản 16:9 dùng cover dọc (contain + nền mờ).
+   */
+  coverImageLandscape: z.string().nullable().default(null),
   // ────── Publishing workflow (tab "Đăng") ──────
   /** Trạng thái publish: draft, ready, scheduled (đã lên lịch FB), published (đã đăng). */
   publishStatus: z.enum(["draft", "ready", "scheduled", "published"]).default("draft"),
@@ -143,11 +154,13 @@ export const buildEpisodeTemplate = (
   showOutro: true,
   showEditorial: true,
   footage: [],
+  footageLandscape: [],
   sceneOverrides: null,
   essayId: null,
   coverImage: null,
   coverFit: "cover",
   coverPosition: "center",
+  coverImageLandscape: null,
   publishStatus: "draft",
   publishedAt: null,
   scheduledPublishTime: null,

@@ -16,7 +16,10 @@ import { getDb } from "./db";
 import { PODCAST_SYSTEM_PROMPT, PODCAST_EXPAND_SYSTEM_PROMPT } from "../../podcast/server/lib/brainstorm-store";
 import { ESSAY_SYSTEM_PROMPT, NLM_PROMPT_SYSTEM } from "../../podcast/server/lib/essay-store";
 import { SCRIPT_SYSTEM_PROMPT } from "../../podcast/server/lib/script-store";
-import { COVER_PROMPT_SYSTEM_PROMPT } from "../../podcast/server/lib/cover-prompt-store";
+import {
+  COVER_PROMPT_SYSTEM_PROMPT,
+  COVER_PROMPT_YT_SYSTEM_PROMPT,
+} from "../../podcast/server/lib/cover-prompt-store";
 
 export type PromptKey =
   | "podcast.brainstorm"
@@ -24,7 +27,8 @@ export type PromptKey =
   | "podcast.essay"
   | "podcast.nlm-prompt"
   | "podcast.script"
-  | "podcast.cover-prompt";
+  | "podcast.cover-prompt"
+  | "podcast.cover-prompt-yt";
 
 export type PromptMeta = {
   key: PromptKey;
@@ -94,6 +98,14 @@ const REGISTRY: Array<{
       "Meta prompt — chỉ định LLM viết prompt (tiếng Anh, cấu trúc section) cho AI image generator (Midjourney/Flux/DALL-E/Imagen) tạo thumbnail 9:16 style premium clay 3D render pastel ByteCast. Fill title + storytelling object + 6 notification + notebook phrase theo nội dung tập.",
     usedBy: "podcast/server/routes/episodes.ts → cover-prompt endpoint",
     getDefault: () => COVER_PROMPT_SYSTEM_PROMPT,
+  },
+  {
+    key: "podcast.cover-prompt-yt",
+    label: "Prompt tạo thumbnail YouTube 16:9",
+    description:
+      "Meta prompt — chỉ định LLM viết prompt (tiếng Anh) tạo thumbnail YouTube ngang 16:9 style clay pastel ByteCast: tiêu đề tập đúng nguyên văn (chữ lớn) + 1 vật kể chuyện, bố cục trái-phải, đọc được ở 320px.",
+    usedBy: "podcast/server/routes/episodes.ts → cover-prompt endpoint (variant=landscape)",
+    getDefault: () => COVER_PROMPT_YT_SYSTEM_PROMPT,
   },
 ];
 

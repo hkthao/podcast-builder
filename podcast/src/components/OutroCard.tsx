@@ -6,6 +6,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { BRAND, COLORS, FPS } from "../theme";
+import { useLayout } from "../layout";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
@@ -20,6 +21,7 @@ export const OutroCard: React.FC = () => {
   // durationInFrames = độ dài Sequence outro (có thể = đuôi nhạc nền, dài hơn
   // OUTRO_DURATION_FRAMES) → fade-out canh theo CUỐI sequence, không cứng 4s.
   const { durationInFrames } = useVideoConfig();
+  const { landscape, sx, sy } = useLayout();
   const inOpacity = interpolate(frame, [0, FADE_IN_FRAMES], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -38,19 +40,24 @@ export const OutroCard: React.FC = () => {
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: COLORS.bg,
-        gap: 56,
+        gap: landscape ? 32 : 56,
         padding: "0 60px",
         opacity,
       }}
     >
-      <Sparkle x={160} y={400} color={COLORS.accentRed} size={70} delay={4} />
-      <StarSmall x={920} y={520} color={COLORS.accentBlue} size={60} delay={8} />
-      <Sparkle x={920} y={1480} color={COLORS.accentTeal} size={64} delay={12} />
-      <StarSmall x={160} y={1380} color={COLORS.ink} size={56} delay={14} />
+      <Sparkle x={sx(160)} y={sy(400)} color={COLORS.accentRed} size={70} delay={4} />
+      <StarSmall x={sx(920)} y={sy(520)} color={COLORS.accentBlue} size={60} delay={8} />
+      <Sparkle x={sx(920)} y={sy(1480)} color={COLORS.accentTeal} size={64} delay={12} />
+      <StarSmall x={sx(160)} y={sy(1380)} color={COLORS.ink} size={56} delay={14} />
 
       <Img
         src={BRAND.logoSrc}
-        style={{ width: 920, height: 614, objectFit: "contain" }}
+        // 16:9: logo nhỏ lại để logo + CTA vừa khung cao 1080px.
+        style={
+          landscape
+            ? { width: 780, height: 520, objectFit: "contain" }
+            : { width: 920, height: 614, objectFit: "contain" }
+        }
       />
 
       <div

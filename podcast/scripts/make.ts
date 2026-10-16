@@ -22,7 +22,14 @@ import { spellFix } from "./spell-fix";
 import { planEpisode } from "./plan-episode";
 import { generateEditorial } from "./gen-editorial";
 import { stageFootageClips } from "./footage-clips";
-import { buildFootageBg, compositeChunk, muxAudio, concatVideos } from "./footage-composite";
+import {
+  buildFootageBg,
+  compositeChunk,
+  muxAudio,
+  concatVideos,
+  makeYoutubeThumb,
+} from "./footage-composite";
+import { FORMATS } from "../src/layout";
 import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 
 dotenv.config();
@@ -43,6 +50,8 @@ type Args = {
   seconds: number | null;
   /** Bắt đầu render từ giây thứ N (cửa sổ giữa video). 0 = từ đầu. */
   fromSeconds: number;
+  /** --landscape: bản YouTube 16:9 → output/<slug>.yt.mp4 (cần footageLandscape). */
+  landscape: boolean;
 };
 
 const parseArgs = (argv: string[]): Args => {
@@ -55,7 +64,7 @@ const parseArgs = (argv: string[]): Args => {
   const audio = positional[0];
   if (!audio) {
     console.error(
-      "Usage: tsx scripts/make.ts <audio> [--preview] [--seconds=N] [--from=N] [--no-thumb] [--plan-only]",
+      "Usage: tsx scripts/make.ts <audio> [--preview] [--seconds=N] [--from=N] [--no-thumb] [--plan-only] [--landscape]",
     );
     process.exit(1);
   }
@@ -67,6 +76,7 @@ const parseArgs = (argv: string[]): Args => {
     planOnly: flags.has("--plan-only"),
     seconds,
     fromSeconds,
+    landscape: flags.has("--landscape"),
   };
 };
 
@@ -129,14 +139,23 @@ async function main() {
     throw new Error(`File audio không tồn tại: ${args.audioPath}`);
   }
   const baseName = path.basename(args.audioPath).replace(/\.[^.]+$/, "");
+  // Bản YouTube 16:9 → file output/tmp/public mang tiền tố "<slug>.yt".
+  const landscape = args.landscape;
+  const outBase = landscape ? `${baseName}.yt` : baseName;
+  const format = landscape ? "landscape" : "vertical";
   ensureDir(OUTPUT_DIR);
   ensureDir(TMP_DIR);
 
   console.log(`\n[make] ===== ${baseName} ${args.preview ? "(PREVIEW)" : ""} =====`);
 
   // 1. Load episode config
-  const episode = loadOrTemplate(args.audioPath);
-  console.log(`[make] episode: "${episode.title}" #${episode.episodeNumber}`);
+  let episode = loadOrTemplate(args.audioPath);
+  console.log(`[make] episode: "${episode.title}" #${episode.episodeNumber}${landscape ? " (16:9 YouTube)" : ""}`);
+  if (landscape && episode.footageLandscape.length === 0) {
+    throw new Error(
+      `Bản 16:9 cần footage ngang. Chạy: npx tsx podcast/scripts/footage-plan.ts ${baseName} --landscape --apply`,
+    );
+  }
 
   // 2. Process audio (loudness normalize)
   const { whisperWav, renderWav } = await processAudio(args.audioPath);
@@ -161,9 +180,9 @@ async function main() {
 
   // 5. Copy assets vào public/ cho Remotion staticFile().
   // Caption đọc bản đã sửa chính tả (fallback raw nếu spell-fix skip).
-  const audioPublicName = `${baseName}.audio.wav`;
-  const transcriptPublicName = `${baseName}.transcript.json`;
-  const planPublicName = `${baseName}.plan.json`;
+  const audioPublicName = `${outBase}.audio.wav`;
+  const transcriptPublicName = `${outBase}.transcript.json`;
+  const planPublicName = `${outBase}.plan.json`;
   const transcriptSource = fs.existsSync(correctedJson) ? correctedJson : transcriptJson;
   copyToPublic(renderWav, audioPublicName);
   copyToPublic(transcriptSource, transcriptPublicName);
@@ -176,7 +195,7 @@ async function main() {
   if (episode.showEditorial) {
     const editorialJsonPath = path.join(TMP_DIR, `${baseName}.editorial.json`);
     await generateEditorial(transcriptSource, episode, editorialJsonPath);
-    editorialPublicName = `${baseName}.editorial.json`;
+    editorialPublicName = `${outBase}.editorial.json`;
     copyToPublic(editorialJsonPath, editorialPublicName);
     cleanupList.push(editorialPublicName);
   }
@@ -187,14 +206,39 @@ async function main() {
     if (!fs.existsSync(bgmAbsPath)) {
       throw new Error(`BGM không tồn tại: ${bgmAbsPath}`);
     }
-    bgmPublicName = `${baseName}.bgm${path.extname(episode.bgm)}`;
+    bgmPublicName = `${outBase}.bgm${path.extname(episode.bgm)}`;
     copyToPublic(bgmAbsPath, bgmPublicName);
     cleanupList.push(bgmPublicName);
   }
 
   // Cover image — IntroCard dùng staticFile(episode.coverImage) nên file phải
   // nằm trong public/ với ĐÚNG tên coverImage. Copy giữ nguyên tên.
-  if (episode.coverImage) {
+  // Bản 16:9: cover ngang nếu có (cover-fit), không thì cover dọc (contain + nền mờ).
+  let landscapeCoverAbs: string | null = null;
+  if (landscape) {
+    // Ưu tiên cover ngang; file đã bị xoá tay → lùi về cover dọc.
+    const inputDir = path.dirname(args.audioPath);
+    const abs = [episode.coverImageLandscape, episode.coverImage]
+      .filter((f): f is string => !!f)
+      .map((f) => path.resolve(inputDir, f))
+      .find((f) => fs.existsSync(f));
+    if (abs) {
+      const pub = copyToPublic(abs, `${outBase}.cover${path.extname(abs)}`);
+      cleanupList.push(pub);
+      const isLandscapeCover =
+        !!episode.coverImageLandscape &&
+        abs === path.resolve(inputDir, episode.coverImageLandscape);
+      if (isLandscapeCover) landscapeCoverAbs = abs;
+      episode = {
+        ...episode,
+        coverImage: pub,
+        coverFit: isLandscapeCover ? "cover" : "contain",
+        coverPosition: "center",
+      };
+    } else {
+      episode = { ...episode, coverImage: null };
+    }
+  } else if (episode.coverImage) {
     const coverAbsPath = path.resolve(
       path.dirname(args.audioPath),
       episode.coverImage,
@@ -212,7 +256,8 @@ async function main() {
       episode,
       path.resolve(path.dirname(args.audioPath), "footage"),
       PUBLIC_DIR,
-      baseName,
+      outBase,
+      landscape,
     );
   cleanupList.push(...footagePublicNames);
 
@@ -224,6 +269,7 @@ async function main() {
     bgmSrc: bgmPublicName,
     editorialSrc: editorialPublicName,
     footageClips,
+    format,
     episode,
   };
 
@@ -252,10 +298,10 @@ async function main() {
     const outputPath = path.join(
       OUTPUT_DIR,
       args.preview
-        ? `${baseName}.preview.mp4`
+        ? `${outBase}.preview.mp4`
         : isVerifyClip
-          ? `${baseName}.verify.mp4`
-          : `${baseName}.mp4`,
+          ? `${outBase}.verify.mp4`
+          : `${outBase}.mp4`,
     );
 
     if (args.preview) {
@@ -293,8 +339,8 @@ async function main() {
       // với nền footage (ffmpeg) → chunk h264 rồi XOÁ ProRes → đỉnh đĩa nhỏ (VP8
       // quá chậm ~0.7s/frame; ProRes 1 file ~13GB vượt đĩa → phải ghép từng đoạn).
       // (B) nối chunk h264 + mux audio. Xem footage-composite.ts.
-      const footageBg = path.join(TMP_DIR, `${baseName}.footagebg.mp4`);
-      const workDir = path.join(TMP_DIR, `${baseName}.fchunks`);
+      const footageBg = path.join(TMP_DIR, `${outBase}.footagebg.mp4`);
+      const workDir = path.join(TMP_DIR, `${outBase}.fchunks`);
       fs.rmSync(workDir, { recursive: true, force: true });
       ensureDir(workDir);
       // RE-SELECT composition với overlay props (renderMedia KHÔNG override props
@@ -315,11 +361,12 @@ async function main() {
       if (maxFrames > 0) console.log(`[make] VERIFY clip: cap ${total} frames (~${durationSec.toFixed(0)}s)`);
       // B1: dựng nền footage full (ffmpeg — decode footage native, nhanh + ổn).
       console.log(`[make] footage 2-pass: dựng nền footage (ffmpeg)...`);
-      const footageAbs = episode.footage
+      const footageAbs = (landscape ? episode.footageLandscape : episode.footage)
         .map((f) => path.resolve(path.dirname(args.audioPath), "footage", f))
         .filter((f) => fs.existsSync(f));
       buildFootageBg(footageAbs, durationSec, footageBg, {
         themeColor: episode.accentColor,
+        size: FORMATS[format],
       });
       // B2: render ProRes alpha theo đoạn + ghép ngay + xoá ProRes.
       const OCHUNK = Number(process.env.RENDER_OVERLAY_CHUNK ?? 1500);
@@ -372,7 +419,7 @@ async function main() {
           const mixed = await mixBgmIntoVoice({
             voicePath: renderWav,
             bgmPath: bgmAbs,
-            episodeName: baseName,
+            episodeName: outBase,
             bgmVolumeDb: episode.bgmVolumeDb,
             tailSec: episode.outroTailSec,
             headSec: headMusicSec,
@@ -404,26 +451,31 @@ async function main() {
 
     // 10. Thumbnail (skip preview, verify clip, hoặc --no-thumb)
     if (!args.preview && !args.noThumb && !isVerifyClip) {
-      const thumbPath = path.join(OUTPUT_DIR, `${baseName}.thumb.jpg`);
-      const thumbFrame = Math.min(
-        composition.durationInFrames - 1,
-        Math.round(composition.fps * 4.5),
-      );
-      await renderStill({
-        serveUrl,
-        composition,
-        output: thumbPath,
-        inputProps,
-        frame: thumbFrame,
-        imageFormat: "jpeg",
-        jpegQuality: 85,
-      });
+      const thumbPath = path.join(OUTPUT_DIR, `${outBase}.thumb.jpg`);
+      if (landscapeCoverAbs) {
+        // YouTube: thumbnail = chính cover 16:9 (1280×720, <2MB).
+        makeYoutubeThumb(landscapeCoverAbs, thumbPath);
+      } else {
+        const thumbFrame = Math.min(
+          composition.durationInFrames - 1,
+          Math.round(composition.fps * 4.5),
+        );
+        await renderStill({
+          serveUrl,
+          composition,
+          output: thumbPath,
+          inputProps,
+          frame: thumbFrame,
+          imageFormat: "jpeg",
+          jpegQuality: 85,
+        });
+      }
       console.log(`[make] ✓ ${thumbPath}`);
     }
 
     // 11. Lock file (skip verify clip)
     if (!args.preview && !isVerifyClip) {
-      const lockPath = path.join(OUTPUT_DIR, `${baseName}.lock.json`);
+      const lockPath = path.join(OUTPUT_DIR, `${outBase}.lock.json`);
       const plan = JSON.parse(fs.readFileSync(planJsonPath, "utf-8"));
       const lock = {
         renderedAt: new Date().toISOString(),

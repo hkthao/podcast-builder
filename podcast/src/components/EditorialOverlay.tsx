@@ -7,7 +7,8 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, FONTS, SAFE_ZONE, withAlpha } from "../theme";
+import { COLORS, FONTS, withAlpha } from "../theme";
+import { useLayout } from "../layout";
 import { type Editorial } from "../editorial";
 
 const CHAPTER_SHOW_MS = 5000;
@@ -20,6 +21,9 @@ const CITATION_FADE_MS = 450;
  */
 const WATERMARK_W = 340;
 const WATERMARK_BOTTOM = 300;
+/** 16:9: watermark nhỏ hơn (logo 140px) → mốc né tương ứng. */
+const WATERMARK_W_LANDSCAPE = 240;
+const WATERMARK_BOTTOM_LANDSCAPE = 210;
 
 type Props = {
   editorialSrc: string | null;
@@ -65,6 +69,9 @@ export const EditorialOverlay: React.FC<Props> = ({
   const accent = accentColor || COLORS.ink;
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { landscape, safe } = useLayout();
+  const wmW = landscape ? WATERMARK_W_LANDSCAPE : WATERMARK_W;
+  const wmBottom = landscape ? WATERMARK_BOTTOM_LANDSCAPE : WATERMARK_BOTTOM;
   const [editorial, setEditorial] = useState<Editorial | null>(null);
   const handleRef = useRef<number | null>(null);
 
@@ -130,10 +137,11 @@ export const EditorialOverlay: React.FC<Props> = ({
         <div
           style={{
             position: "absolute",
-            top: SAFE_ZONE.top + 8,
+            top: safe.top + 8,
             // Né logo watermark góc trên-trái → căn giữa trong dải bên phải logo.
-            left: SAFE_ZONE.left + WATERMARK_W,
-            right: SAFE_ZONE.right,
+            // 16:9 dư chiều ngang → chừa đối xứng 2 bên để chương nằm giữa khung.
+            left: safe.left + wmW,
+            right: landscape ? safe.right + wmW : safe.right,
             display: "flex",
             justifyContent: "center",
             opacity: chapterOpacity,
@@ -210,8 +218,8 @@ export const EditorialOverlay: React.FC<Props> = ({
           style={{
             position: "absolute",
             // Dưới watermark (logo+badge) để không đè nhau ở góc trên-trái.
-            top: SAFE_ZONE.top + WATERMARK_BOTTOM,
-            left: SAFE_ZONE.left,
+            top: safe.top + wmBottom,
+            left: safe.left,
             maxWidth: 620,
             opacity: citationOpacity,
           }}

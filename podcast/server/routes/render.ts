@@ -35,8 +35,9 @@ renderRoutes.post("/jobs/:id/cancel", (c) => {
 
 /**
  * Start render — POST /api/render
- * Body: { episodeName, preview, regenTranscribe?, regenPlan? }
+ * Body: { episodeName, preview, regenTranscribe?, regenPlan?, format? }
  * Mặc định reuse transcript/plan đã có. Set regen* = true để force re-run.
+ * format: "vertical" (mặc định, 9:16 FB) | "landscape" (16:9 YouTube → output/<slug>.yt.mp4).
  */
 renderRoutes.post("/", async (c) => {
   let body: unknown;
@@ -45,20 +46,25 @@ renderRoutes.post("/", async (c) => {
   } catch {
     return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
   }
-  const { episodeName, preview, regenTranscribe, regenPlan } = body as {
+  const { episodeName, preview, regenTranscribe, regenPlan, format } = body as {
     episodeName?: string;
     preview?: boolean;
     regenTranscribe?: boolean;
     regenPlan?: boolean;
+    format?: string;
   };
   if (typeof episodeName !== "string") {
     return c.json({ error: "Thiếu episodeName" }, 400);
+  }
+  if (format !== undefined && format !== "vertical" && format !== "landscape") {
+    return c.json({ error: "format phải là 'vertical' hoặc 'landscape'" }, 400);
   }
   try {
     const job = await startRender(episodeName, {
       preview: !!preview,
       regenTranscribe: !!regenTranscribe,
       regenPlan: !!regenPlan,
+      format,
     });
     return c.json(job, 201);
   } catch (e) {

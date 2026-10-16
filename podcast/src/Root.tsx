@@ -3,6 +3,7 @@ import { parseMedia } from "@remotion/media-parser";
 import { Video, type CompProps } from "./Video";
 import { ScenePreview, type ScenePreviewProps } from "./ScenePreview";
 import { FORMAT, FPS } from "./theme";
+import { FORMATS } from "./layout";
 import { buildEpisodeTemplate, EpisodeConfigSchema, outroTailFrames } from "./episode";
 
 const defaultProps: CompProps = {
@@ -34,8 +35,10 @@ export const RemotionRoot: React.FC = () => {
         height={FORMAT.height}
         defaultProps={defaultProps}
         calculateMetadata={async ({ props }) => {
+          // Khung theo format render (9:16 mặc định, 16:9 cho YouTube).
+          const size = FORMATS[props.format ?? "vertical"];
           if (!props.audioSrc) {
-            return { durationInFrames: FPS };
+            return { durationInFrames: FPS, ...size };
           }
           const { slowDurationInSeconds } = await parseMedia({
             src: staticFile(props.audioSrc),
@@ -46,6 +49,7 @@ export const RemotionRoot: React.FC = () => {
           const tail = outroTailFrames(props.episode, FPS);
           return {
             durationInFrames: Math.ceil(slowDurationInSeconds * FPS) + tail,
+            ...size,
           };
         }}
       />

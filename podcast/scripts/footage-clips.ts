@@ -28,10 +28,12 @@ export function stageFootageClips(
   inputFootageDir: string,
   publicDir: string,
   baseName: string,
+  /** true → dùng footage ngang (episode.footageLandscape) cho bản YouTube. */
+  landscape = false,
 ): { clips: FootageClip[]; publicNames: string[] } {
   const clips: FootageClip[] = [];
   const publicNames: string[] = [];
-  episode.footage.forEach((fn, idx) => {
+  (landscape ? episode.footageLandscape : episode.footage).forEach((fn, idx) => {
     const abs = path.join(inputFootageDir, fn);
     if (!fs.existsSync(abs)) {
       console.warn(`[footage] ✗ bỏ qua (không tồn tại): ${abs}`);

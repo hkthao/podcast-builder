@@ -1,5 +1,6 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
-import { COLORS, FPS, SAFE_ZONE } from "../theme";
+import { COLORS, FPS } from "../theme";
+import { useLayout } from "../layout";
 import { HOOK_SECONDS } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
@@ -50,6 +51,10 @@ const splitIntoLines = (text: string): string[] => {
 
 export const Hook: React.FC<Props> = ({ hook }) => {
   const frame = useCurrentFrame();
+  const { landscape, safe, sx, sy } = useLayout();
+  // 16:9: khung ngang rộng → giới hạn bề ngang dòng chữ để punchline dài vẫn
+  // xuống dòng gọn ở giữa (kể cả lúc pulse scale 1.12), không tràn mép.
+  const lineMaxWidth = landscape ? 1400 : undefined;
   const lines = splitIntoLines(hook);
   // Hook nhấn LINE CUỐI (punchline) — khác cover nhấn middle.
   const emphasisIdx = lines.length - 1;
@@ -119,18 +124,18 @@ export const Hook: React.FC<Props> = ({ hook }) => {
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: COLORS.bg,
-        paddingLeft: SAFE_ZONE.left,
-        paddingRight: SAFE_ZONE.right,
-        paddingTop: SAFE_ZONE.top,
-        paddingBottom: SAFE_ZONE.bottom,
+        paddingLeft: safe.left,
+        paddingRight: safe.right,
+        paddingTop: safe.top,
+        paddingBottom: safe.bottom,
         gap: 28,
         opacity,
       }}
     >
-      <Sparkle x={140} y={300} color={COLORS.accentRed} size={84} delay={0} />
-      <StarSmall x={940} y={420} color={COLORS.accentBlue} size={64} delay={6} />
-      <Sparkle x={140} y={1500} color={COLORS.accentTeal} size={76} delay={10} />
-      <StarSmall x={940} y={1620} color={COLORS.ink} size={60} delay={14} />
+      <Sparkle x={sx(140)} y={sy(300)} color={COLORS.accentRed} size={84} delay={0} />
+      <StarSmall x={sx(940)} y={sy(420)} color={COLORS.accentBlue} size={64} delay={6} />
+      <Sparkle x={sx(140)} y={sy(1500)} color={COLORS.accentTeal} size={76} delay={10} />
+      <StarSmall x={sx(940)} y={sy(1620)} color={COLORS.ink} size={60} delay={14} />
 
       {lines.map((line, i) => {
         const isEmphasis = i === emphasisIdx && lines.length > 1;
@@ -148,6 +153,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
                 flexWrap: "wrap",
                 justifyContent: "center",
                 gap: "0 28px",
+                maxWidth: lineMaxWidth,
               }}
             >
               {punchlineWords.map((word, wi) => {
@@ -201,7 +207,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
           );
         }
         return (
-          <div key={i} style={{ transform: `scale(${baseScale})` }}>
+          <div key={i} style={{ transform: `scale(${baseScale})`, maxWidth: lineMaxWidth }}>
             <StickerText
               fontSize={fontSize}
               color={isEmphasis ? COLORS.accentRed : COLORS.ink}

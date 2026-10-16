@@ -20,7 +20,9 @@ import {
   compositeChunk,
   muxAudio,
   concatVideos,
+  makeYoutubeThumb,
 } from "../../scripts/footage-composite";
+import { FORMATS, type VideoFormat } from "../../src/layout";
 import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 import { getModel } from "../../../shared/transcribe/whisper-config";
 import { bus } from "../../../shared/studio-core/events";
@@ -63,6 +65,8 @@ export type RenderJob = {
   regenTranscribe: boolean;
   /** Cho jobType="render": force re-run plan phase dù plan.json đã có. */
   regenPlan: boolean;
+  /** Khung render: "vertical" 9:16 (FB) hoặc "landscape" 16:9 (YouTube, output <slug>.yt.*). */
+  format: VideoFormat;
 };
 
 type JobInternal = RenderJob & {
@@ -70,6 +74,29 @@ type JobInternal = RenderJob & {
 };
 
 const jobs = new Map<string, JobInternal>();
+
+/**
+ * Khoá theo TẬP cho phần chuẩn bị dùng chung giữa 2 khung (normalize audio,
+ * transcript, plan, editorial — cùng file tmp/<slug>.*). Render dọc + ngang của
+ * 1 tập chạy song song được: job sau chờ job trước xong phần chuẩn bị rồi mới
+ * đọc/ghi các file đó; phần render (output tách <slug>.* / <slug>.yt.*) song song.
+ */
+const episodePrepLocks = new Map<string, Promise<void>>();
+async function acquireEpisodePrepLock(name: string): Promise<() => void> {
+  const prev = episodePrepLocks.get(name) ?? Promise.resolve();
+  let release!: () => void;
+  const mine = new Promise<void>((r) => (release = r));
+  const tail = prev.then(() => mine);
+  episodePrepLocks.set(name, tail);
+  await prev;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    release();
+    if (episodePrepLocks.get(name) === tail) episodePrepLocks.delete(name);
+  };
+}
 const queue: string[] = [];
 let activeCount = 0;
 
@@ -99,6 +126,7 @@ const emitProgress = (job: JobInternal) => {
     outputPath: job.outputPath,
     error: job.error,
     preview: job.preview,
+    format: job.format,
   });
 };
 
@@ -188,11 +216,22 @@ export function cancelJob(jobId: string): boolean {
 async function enqueueJob(
   episodeName: string,
   jobType: JobType,
-  opts: { preview?: boolean; regenTranscribe?: boolean; regenPlan?: boolean },
+  opts: {
+    preview?: boolean;
+    regenTranscribe?: boolean;
+    regenPlan?: boolean;
+    format?: VideoFormat;
+  },
 ): Promise<RenderJob> {
   const ep = await getEpisode(episodeName);
   if (!ep) throw new Error(`Episode không tồn tại: ${episodeName}`);
   if (!ep.audioPath) throw new Error(`Episode "${episodeName}" chưa có audio`);
+  // Bản 16:9 chỉ hỗ trợ nền footage (scene sticker vẽ cố định cho khung dọc).
+  if (jobType === "render" && opts.format === "landscape" && ep.config.footageLandscape.length === 0) {
+    throw new Error(
+      `Bản YouTube 16:9 cần footage ngang. Chạy: npx tsx podcast/scripts/footage-plan.ts ${episodeName} --landscape --apply`,
+    );
+  }
 
   // Pre-check phụ thuộc: plan job cần corrected transcript đã có
   if (jobType === "plan") {
@@ -223,6 +262,7 @@ async function enqueueJob(
     error: null,
     regenTranscribe: opts.regenTranscribe ?? false,
     regenPlan: opts.regenPlan ?? false,
+    format: opts.format ?? "vertical",
     abort: new AbortController(),
   };
   jobs.set(id, job);
@@ -235,7 +275,12 @@ async function enqueueJob(
 
 export async function startRender(
   episodeName: string,
-  opts: { preview: boolean; regenTranscribe?: boolean; regenPlan?: boolean },
+  opts: {
+    preview: boolean;
+    regenTranscribe?: boolean;
+    regenPlan?: boolean;
+    format?: VideoFormat;
+  },
 ): Promise<RenderJob> {
   return enqueueJob(episodeName, "render", opts);
 }
@@ -288,6 +333,10 @@ async function runJob(job: JobInternal): Promise<void> {
       throw err;
     }
   };
+
+  // Chờ job khác CÙNG tập (vd khung kia) chuẩn bị xong rồi mới xét cache
+  // transcript/plan → không chạy trùng / ghi đè file tmp đang dùng.
+  const releasePrep = await acquireEpisodePrepLock(baseName);
 
   const transcriptJson = path.join(PATHS.TMP_DIR, `${baseName}.json`);
   const correctedJson = path.join(PATHS.TMP_DIR, `${baseName}.corrected.json`);
@@ -364,10 +413,15 @@ async function runJob(job: JobInternal): Promise<void> {
       throw new Error("Internal: renderWav undefined cho render job");
     }
 
+    // Bản YouTube 16:9 → mọi file output/tmp/public mang tiền tố "<slug>.yt"
+    // để không đè bản dọc (và render 2 bản song song không xoá file của nhau).
+    const landscape = job.format === "landscape";
+    const outBase = landscape ? `${baseName}.yt` : baseName;
+
     // 5. Copy public assets
-    const audioPublicName = `${baseName}.audio.wav`;
-    const transcriptPublicName = `${baseName}.transcript.json`;
-    const planPublicName = `${baseName}.plan.json`;
+    const audioPublicName = `${outBase}.audio.wav`;
+    const transcriptPublicName = `${outBase}.transcript.json`;
+    const planPublicName = `${outBase}.plan.json`;
     const transcriptSource = fs.existsSync(correctedJson)
       ? correctedJson
       : transcriptJson;
@@ -391,7 +445,7 @@ async function runJob(job: JobInternal): Promise<void> {
       await generateEditorial(transcriptSource, ep.config, editorialJsonPath, {
         force: runPlan,
       });
-      editorialPublicName = `${baseName}.editorial.json`;
+      editorialPublicName = `${outBase}.editorial.json`;
       fs.copyFileSync(
         editorialJsonPath,
         path.join(PUBLIC_DIR, editorialPublicName),
@@ -399,6 +453,8 @@ async function runJob(job: JobInternal): Promise<void> {
       cleanupList.push(editorialPublicName);
       checkAbort();
     }
+    // Hết phần dùng chung tmp/<slug>.* → nhả khoá cho khung kia của tập.
+    releasePrep();
 
     let bgmPublicName: string | null = null;
     if (ep.config.bgm && ep.audioPath) {
@@ -407,7 +463,7 @@ async function runJob(job: JobInternal): Promise<void> {
         ep.config.bgm,
       );
       if (fs.existsSync(bgmAbsPath)) {
-        bgmPublicName = `${baseName}.bgm${path.extname(ep.config.bgm)}`;
+        bgmPublicName = `${outBase}.bgm${path.extname(ep.config.bgm)}`;
         fs.copyFileSync(bgmAbsPath, path.join(PUBLIC_DIR, bgmPublicName));
         cleanupList.push(bgmPublicName);
       }
@@ -416,7 +472,33 @@ async function runJob(job: JobInternal): Promise<void> {
     // Cover image — copy từ input/ sang public/, giữ nguyên filename để
     // `staticFile(episode.coverImage)` trong IntroCard resolve được.
     let episodeConfig = ep.config;
-    if (ep.config.coverImage) {
+    // Cover bản 16:9 dùng trong intro: cover ngang nếu có (cover-fit), không thì
+    // cover dọc (contain + nền mờ). Copy dưới tên riêng "<slug>.yt.cover.*".
+    let landscapeCoverAbs: string | null = null;
+    if (landscape) {
+      // Ưu tiên cover ngang; file đã bị xoá tay → lùi về cover dọc.
+      const abs = [ep.config.coverImageLandscape, ep.config.coverImage]
+        .filter((f): f is string => !!f)
+        .map((f) => path.join(PATHS.INPUT_DIR, f))
+        .find((f) => fs.existsSync(f));
+      if (abs) {
+        const pub = `${outBase}.cover${path.extname(abs)}`;
+        fs.copyFileSync(abs, path.join(PUBLIC_DIR, pub));
+        cleanupList.push(pub);
+        const isLandscapeCover =
+          !!ep.config.coverImageLandscape &&
+          abs === path.join(PATHS.INPUT_DIR, ep.config.coverImageLandscape);
+        if (isLandscapeCover) landscapeCoverAbs = abs;
+        episodeConfig = {
+          ...ep.config,
+          coverImage: pub,
+          coverFit: isLandscapeCover ? "cover" : "contain",
+          coverPosition: "center",
+        };
+      } else {
+        episodeConfig = { ...ep.config, coverImage: null };
+      }
+    } else if (ep.config.coverImage) {
       const coverAbsPath = path.join(PATHS.INPUT_DIR, ep.config.coverImage);
       if (fs.existsSync(coverAbsPath)) {
         const coverPublicName = ep.config.coverImage;
@@ -434,9 +516,15 @@ async function runJob(job: JobInternal): Promise<void> {
         ep.config,
         path.join(PATHS.INPUT_DIR, "footage"),
         PUBLIC_DIR,
-        baseName,
+        outBase,
+        landscape,
       );
     cleanupList.push(...footagePublicNames);
+    if (landscape && footageClips.length === 0) {
+      throw new Error(
+        "Bản 16:9: không tìm thấy file footage ngang nào (footageLandscape) trong input/footage — chạy lại footage-plan --landscape --apply",
+      );
+    }
 
     const inputProps = {
       audioSrc: audioPublicName,
@@ -445,6 +533,7 @@ async function runJob(job: JobInternal): Promise<void> {
       bgmSrc: bgmPublicName,
       editorialSrc: editorialPublicName,
       footageClips,
+      format: job.format,
       episode: episodeConfig,
     };
 
@@ -475,7 +564,7 @@ async function runJob(job: JobInternal): Promise<void> {
       // 7. Render
       const outputPath = path.join(
         PATHS.OUTPUT_DIR,
-        job.preview ? `${baseName}.preview.mp4` : `${baseName}.mp4`,
+        job.preview ? `${outBase}.preview.mp4` : `${outBase}.mp4`,
       );
 
       const renderOpts = {
@@ -519,8 +608,8 @@ async function runJob(job: JobInternal): Promise<void> {
         // render đồ hoạ trong suốt ProRes alpha THEO ĐOẠN + ghép ngay + xoá
         // ProRes → tránh crash browser trên render dài, đĩa gọn. Progress hiện
         // trên UI theo từng đoạn. Xem footage-composite.ts.
-        const footageBg = path.join(PATHS.TMP_DIR, `${baseName}.footagebg.mp4`);
-        const workDir = path.join(PATHS.TMP_DIR, `${baseName}.fchunks`);
+        const footageBg = path.join(PATHS.TMP_DIR, `${outBase}.footagebg.mp4`);
+        const workDir = path.join(PATHS.TMP_DIR, `${outBase}.fchunks`);
         fs.rmSync(workDir, { recursive: true, force: true });
         ensureDir(workDir);
         const overlayInputProps = {
@@ -536,11 +625,12 @@ async function runJob(job: JobInternal): Promise<void> {
         const total = overlayComposition.durationInFrames;
         const durationSec = total / overlayComposition.fps;
         setPhase(job, "render", 46, "Dựng nền footage (ffmpeg)…");
-        const footageAbs = episodeConfig.footage
+        const footageAbs = (landscape ? episodeConfig.footageLandscape : episodeConfig.footage)
           .map((f) => path.join(PATHS.INPUT_DIR, "footage", f))
           .filter((f) => fs.existsSync(f));
         buildFootageBg(footageAbs, durationSec, footageBg, {
           themeColor: episodeConfig.accentColor,
+          size: FORMATS[job.format],
         });
         checkAbort();
 
@@ -599,7 +689,7 @@ async function runJob(job: JobInternal): Promise<void> {
             const mixed = await mixBgmIntoVoice({
               voicePath: renderWav,
               bgmPath: bgmAbs,
-              episodeName: baseName,
+              episodeName: outBase,
               bgmVolumeDb: episodeConfig.bgmVolumeDb,
               tailSec: episodeConfig.outroTailSec,
               headSec: headMusicSec,
@@ -635,26 +725,31 @@ async function runJob(job: JobInternal): Promise<void> {
         setPhase(job, "thumbnail", 92, "Render thumbnail…");
         const thumbPath = path.join(
           PATHS.OUTPUT_DIR,
-          `${baseName}.thumb.jpg`,
+          `${outBase}.thumb.jpg`,
         );
-        const thumbFrame = Math.min(
-          composition.durationInFrames - 1,
-          Math.round(composition.fps * 4.5),
-        );
-        await renderStill({
-          serveUrl,
-          composition,
-          output: thumbPath,
-          inputProps,
-          frame: thumbFrame,
-          imageFormat: "jpeg",
-          jpegQuality: 85,
-          cancelSignal: remotionCancel.cancelSignal,
-        });
+        if (landscapeCoverAbs) {
+          // YouTube: thumbnail = chính cover 16:9 (1280×720, <2MB).
+          makeYoutubeThumb(landscapeCoverAbs, thumbPath);
+        } else {
+          const thumbFrame = Math.min(
+            composition.durationInFrames - 1,
+            Math.round(composition.fps * 4.5),
+          );
+          await renderStill({
+            serveUrl,
+            composition,
+            output: thumbPath,
+            inputProps,
+            frame: thumbFrame,
+            imageFormat: "jpeg",
+            jpegQuality: 85,
+            cancelSignal: remotionCancel.cancelSignal,
+          });
+        }
 
         // 9. Lock file
         setPhase(job, "lock", 96, "Ghi lock file…");
-        const lockPath = path.join(PATHS.OUTPUT_DIR, `${baseName}.lock.json`);
+        const lockPath = path.join(PATHS.OUTPUT_DIR, `${outBase}.lock.json`);
         const planObj = JSON.parse(fs.readFileSync(planJsonPath, "utf-8"));
         const lock = {
           renderedAt: new Date().toISOString(),
@@ -700,6 +795,7 @@ async function runJob(job: JobInternal): Promise<void> {
     job.finishedAt = Date.now();
     emitProgress(job);
   } finally {
+    releasePrep();
     // Cleanup after 1 hour to avoid memory bloat
     setTimeout(
       () => {

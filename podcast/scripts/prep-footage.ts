@@ -13,13 +13,16 @@ import path from "node:path";
  *
  * Dùng:
  *   npx tsx podcast/scripts/prep-footage.ts [--speed 0.7] [--out input/footage] <file...>
+ *   npx tsx podcast/scripts/prep-footage.ts --landscape <file...>   # 1920×1080 → input/footage/yt
+ * Clip ngang rồi thêm tay vào `footageLandscape` của tập (đường dẫn "yt/<tên>.mp4").
  *
  * Lưu ý originality (Meta): footage TỰ QUAY (kể cả đời thường/gia đình) là tín
  * hiệu "filmed by you" mạnh nhất — tốt hơn stock. Xem docs/originality-upgrade-plan.md §3.2.
  */
 
-const W = 1080;
-const H = 1920;
+/** Khung đích: dọc 1080×1920 (mặc định) hoặc ngang 1920×1080 (--landscape). */
+let W = 1080;
+let H = 1920;
 const HEAD_TRIM_S = 0.2; // bỏ 0.2s đầu (rung máy khi bấm quay)
 
 const sanitize = (name: string): string =>
@@ -118,11 +121,15 @@ const main = (): void => {
     const a = argv[i];
     if (a === "--speed") speed = Number(argv[++i]);
     else if (a === "--out") outDir = path.resolve(argv[++i]);
+    else if (a === "--landscape") {
+      [W, H] = [1920, 1080];
+      if (!argv.includes("--out")) outDir = path.resolve("input/footage/yt");
+    }
     else files.push(a);
   }
   if (files.length === 0) {
     console.error(
-      "Usage: npx tsx podcast/scripts/prep-footage.ts [--speed 0.7] [--out dir] <file...>",
+      "Usage: npx tsx podcast/scripts/prep-footage.ts [--speed 0.7] [--landscape] [--out dir] <file...>",
     );
     process.exit(1);
   }

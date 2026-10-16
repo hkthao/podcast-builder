@@ -217,11 +217,13 @@ const buildTemplate = (
   showOutro: true,
   showEditorial: true,
   footage: [],
+  footageLandscape: [],
   sceneOverrides: null,
   essayId: null,
   coverImage: null,
   coverFit: "cover",
   coverPosition: "center",
+  coverImageLandscape: null,
   publishStatus: "draft",
   publishedAt: null,
   scheduledPublishTime: null,
@@ -386,10 +388,18 @@ async function deriveFromEssay(
  * Lưu cover image cho 1 episode. Ghi đè cover cũ nếu có (xóa file cũ).
  * `originalName` để lấy ext (vd "cover.jpg"). Update config.coverImage = filename.
  */
+/**
+ * Cover có 2 biến thể: "vertical" (9:16, input/<slug>.cover.<ext>, config.coverImage)
+ * và "landscape" (16:9 cho YouTube, input/<slug>.cover-yt.<ext>, config.coverImageLandscape).
+ */
+export type CoverVariant = "vertical" | "landscape";
+const coverSuffix = (v: CoverVariant) => (v === "landscape" ? "cover-yt" : "cover");
+
 export async function uploadCover(
   name: string,
   originalName: string,
   buffer: Uint8Array,
+  variant: CoverVariant = "vertical",
 ): Promise<EpisodeSummary> {
   const summary = await loadSummary(name);
   if (!summary) {
@@ -408,7 +418,7 @@ export async function uploadCover(
 
   // Xóa cover cũ (mọi ext) trước khi ghi mới
   for (const e of COVER_EXTS) {
-    const old = path.join(INPUT_DIR, `${name}.cover.${e}`);
+    const old = path.join(INPUT_DIR, `${name}.${coverSuffix(variant)}.${e}`);
     if (await exists(old)) {
       try {
         await fs.unlink(old);
@@ -418,17 +428,23 @@ export async function uploadCover(
     }
   }
 
-  const filename = `${name}.cover.${ext}`;
+  const filename = `${name}.${coverSuffix(variant)}.${ext}`;
   const filePath = path.join(INPUT_DIR, filename);
   await fs.mkdir(INPUT_DIR, { recursive: true });
   await fs.writeFile(filePath, buffer);
 
-  const nextConfig = { ...summary.config, coverImage: filename };
+  const nextConfig =
+    variant === "landscape"
+      ? { ...summary.config, coverImageLandscape: filename }
+      : { ...summary.config, coverImage: filename };
   return saveEpisode(name, nextConfig);
 }
 
 /** Xóa cover image của episode + clear config.coverImage. */
-export async function deleteCover(name: string): Promise<EpisodeSummary> {
+export async function deleteCover(
+  name: string,
+  variant: CoverVariant = "vertical",
+): Promise<EpisodeSummary> {
   const summary = await loadSummary(name);
   if (!summary) {
     const err = new Error(`Episode không tồn tại: ${name}`);
@@ -436,7 +452,7 @@ export async function deleteCover(name: string): Promise<EpisodeSummary> {
     throw err;
   }
   for (const e of COVER_EXTS) {
-    const p = path.join(INPUT_DIR, `${name}.cover.${e}`);
+    const p = path.join(INPUT_DIR, `${name}.${coverSuffix(variant)}.${e}`);
     if (await exists(p)) {
       try {
         await fs.unlink(p);
@@ -444,6 +460,12 @@ export async function deleteCover(name: string): Promise<EpisodeSummary> {
         /* ignore */
       }
     }
+  }
+  if (variant === "landscape") {
+    if (summary.config.coverImageLandscape) {
+      return saveEpisode(name, { ...summary.config, coverImageLandscape: null });
+    }
+    return summary;
   }
   if (summary.config.coverImage) {
     const nextConfig = { ...summary.config, coverImage: null };
@@ -999,14 +1021,16 @@ export async function deleteEpisode(
     `${name}.script.json`,
     ...AUDIO_EXTS.map((ext) => `${name}.${ext}`),
     ...COVER_EXTS.map((ext) => `${name}.cover.${ext}`),
+    ...COVER_EXTS.map((ext) => `${name}.cover-yt.${ext}`),
     ...BGM_EXTS.map((ext) => `${name}.bgm.${ext}`),
   ];
-  // output/ — video full/preview, thumbnail, lock
+  // output/ — video full/preview, thumbnail, lock (bản dọc + bản YouTube .yt)
   const outputFiles = [
     `${name}.mp4`,
     `${name}.preview.mp4`,
     `${name}.thumb.jpg`,
     `${name}.lock.json`,
+    ...YT_OUTPUT_FILES(name),
   ];
   // tmp/ — transcript raw/corrected, plan, normalized audio
   const tmpFiles = [
@@ -1051,10 +1075,24 @@ export type EpisodeFile = {
     | "thumbnail"
     | "cover"
     | "lock"
+    // Bản YouTube 16:9 (output/<slug>.yt.*) + cover ngang (input/<slug>.cover-yt.*)
+    | "yt-video-full"
+    | "yt-video-preview"
+    | "yt-thumbnail"
+    | "yt-lock"
+    | "cover-yt"
     | "transcript-raw"
     | "transcript-corrected"
     | "plan";
 };
+
+/** File output của bản YouTube 16:9 (render format "landscape"). */
+const YT_OUTPUT_FILES = (name: string): string[] => [
+  `${name}.yt.mp4`,
+  `${name}.yt.preview.mp4`,
+  `${name}.yt.thumb.jpg`,
+  `${name}.yt.lock.json`,
+];
 
 export type EpisodeFiles = {
   input: EpisodeFile[];
@@ -1116,6 +1154,11 @@ export async function listEpisodeFiles(
     );
     if (f) input.push(f);
   }
+  for (const ext of COVER_EXTS) {
+    const fn = `${name}.cover-yt.${ext}`;
+    const f = await fileInfo(path.join(INPUT_DIR, fn), fn, "cover-yt", "/input");
+    if (f) input.push(f);
+  }
 
   // Outputs
   const fullMp4 = await fileInfo(
@@ -1149,6 +1192,14 @@ export async function listEpisodeFiles(
     "/output",
   );
   if (lock) output.push(lock);
+
+  // Bản YouTube 16:9
+  const ytKinds: EpisodeFile["kind"][] = ["yt-video-full", "yt-video-preview", "yt-thumbnail", "yt-lock"];
+  const ytFiles = YT_OUTPUT_FILES(name);
+  for (let i = 0; i < ytFiles.length; i++) {
+    const f = await fileInfo(path.join(OUTPUT_DIR, ytFiles[i]), ytFiles[i], ytKinds[i], "/output");
+    if (f) output.push(f);
+  }
 
   // Tmp artifacts (transcript / plan / normalized audio)
   const normalized48 = await fileInfo(
@@ -1211,12 +1262,14 @@ export async function deleteEpisodeFile(
     input: [
       ...AUDIO_EXTS.map((ext) => `${name}.${ext}`),
       ...COVER_EXTS.map((ext) => `${name}.cover.${ext}`),
+      ...COVER_EXTS.map((ext) => `${name}.cover-yt.${ext}`),
     ],
     output: [
       `${name}.mp4`,
       `${name}.preview.mp4`,
       `${name}.thumb.jpg`,
       `${name}.lock.json`,
+      ...YT_OUTPUT_FILES(name),
     ],
     tmp: [
       `${name}.normalized.48k.wav`,

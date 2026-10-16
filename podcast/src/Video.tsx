@@ -19,6 +19,7 @@ import { Visualizer } from "./components/Visualizer";
 import { Watermark } from "./components/Watermark";
 import { useScenePlan } from "./components/scene-runtime";
 import { outroTailFrames, type EpisodeConfig } from "./episode";
+import type { VideoFormat } from "./layout";
 
 export type CompProps = {
   audioSrc: string;
@@ -33,6 +34,8 @@ export type CompProps = {
    * Tránh Remotion giải mã footage (crash trên render dài). Xem make.ts 2-pass.
    */
   overlayMode?: boolean;
+  /** Khung render — Root đọc để đặt width/height. Component đọc qua useLayout(). */
+  format?: VideoFormat;
   episode: EpisodeConfig;
 };
 

@@ -47,7 +47,10 @@ import {
   listScriptTurnAudios,
   type TtsVoiceConfig,
 } from "../../../shared/studio-core/podcast-script-tts";
-import { buildCoverPromptUserContent } from "../lib/cover-prompt-store";
+import {
+  buildCoverPromptUserContent,
+  buildYoutubeCoverPromptUserContent,
+} from "../lib/cover-prompt-store";
 import { chat } from "../../../shared/studio-core/llm-providers";
 import { safeParseJson } from "../../../shared/lib/safe-json";
 import { getEffectivePrompt } from "../../../shared/studio-core/prompt-overrides-store";
@@ -213,9 +216,11 @@ episodesRoutes.post("/upload", async (c) => {
 /**
  * Upload cover image cho episode đã có. Ghi đè cover cũ.
  * Content-Type: multipart/form-data, field "cover".
+ * ?variant=landscape → cover 16:9 cho bản YouTube (config.coverImageLandscape).
  */
 episodesRoutes.post("/:name/cover", async (c) => {
   const name = c.req.param("name");
+  const variant = c.req.query("variant") === "landscape" ? "landscape" : "vertical";
   const body = await c.req.parseBody();
   const file = body["cover"];
   if (!file || typeof file === "string" || !(file instanceof File)) {
@@ -233,7 +238,7 @@ episodesRoutes.post("/:name/cover", async (c) => {
   }
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
-    const summary = await uploadCover(name, file.name, buf);
+    const summary = await uploadCover(name, file.name, buf, variant);
     return c.json(summary);
   } catch (e) {
     const err = e as Error & { code?: string };
@@ -323,11 +328,12 @@ episodesRoutes.delete("/:name/bgm", async (c) => {
   }
 });
 
-/** Xóa cover image + clear config.coverImage. */
+/** Xóa cover image + clear config.coverImage (?variant=landscape → cover 16:9). */
 episodesRoutes.delete("/:name/cover", async (c) => {
   const name = c.req.param("name");
+  const variant = c.req.query("variant") === "landscape" ? "landscape" : "vertical";
   try {
-    const summary = await deleteCover(name);
+    const summary = await deleteCover(name, variant);
     return c.json(summary);
   } catch (e) {
     const err = e as Error & { code?: string };
@@ -1408,7 +1414,9 @@ episodesRoutes.post("/:name/cover-prompt", async (c) => {
   } catch {
     return c.json({ error: "Body không phải JSON hợp lệ" }, 400);
   }
-  const body = raw as { provider?: string; model?: string };
+  // variant "landscape" → prompt thumbnail YouTube 16:9 (key "podcast.cover-prompt-yt").
+  const body = raw as { provider?: string; model?: string; variant?: string };
+  const landscape = body.variant === "landscape";
   if (body.provider !== "openai" && body.provider !== "ollama") {
     return c.json({ error: "provider phải là 'openai' hoặc 'ollama'" }, 400);
   }
@@ -1419,8 +1427,12 @@ episodesRoutes.post("/:name/cover-prompt", async (c) => {
     const content = await chat({
       provider: body.provider as LLMProvider,
       model: body.model.trim(),
-      systemPrompt: getEffectivePrompt("podcast.cover-prompt"),
-      userContent: buildCoverPromptUserContent(ep.config.title, ep.config.hook),
+      systemPrompt: getEffectivePrompt(
+        landscape ? "podcast.cover-prompt-yt" : "podcast.cover-prompt",
+      ),
+      userContent: landscape
+        ? buildYoutubeCoverPromptUserContent(ep.config.title, ep.config.hook, ep.config.accentColor)
+        : buildCoverPromptUserContent(ep.config.title, ep.config.hook),
       temperature: 0.7,
     });
     // Tách dòng THEME_COLOR (R0) ở đầu → trả riêng themeColor (dùng cho màu sóng).

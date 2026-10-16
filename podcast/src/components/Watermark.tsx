@@ -1,5 +1,6 @@
 import { AbsoluteFill, Img } from "remotion";
-import { BRAND, COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
+import { BRAND, COLORS, FONTS, TYPE_SCALE } from "../theme";
+import { useLayout } from "../layout";
 
 type Props = {
   episodeNumber: number;
@@ -9,7 +10,8 @@ type Props = {
 
 /** Logo height in px — keep ratio (~3:2) → width auto ≈ 1.5× height (~330px). */
 const LOGO_HEIGHT = 220;
-const LOGO_WIDTH = LOGO_HEIGHT * 1.5;
+/** 16:9: logo nhỏ lại (khung thấp 1080px) để không chiếm góc quá nhiều. */
+export const LOGO_HEIGHT_LANDSCAPE = 140;
 /**
  * Crop PNG decorations (heart/cloud/stars float xung quanh paper-card) bằng
  * cách zoom in 1.3× + overflow:hidden. Brand text "ByteCast Tech" được zoom
@@ -18,6 +20,10 @@ const LOGO_WIDTH = LOGO_HEIGHT * 1.5;
 const LOGO_ZOOM = 1.3;
 
 export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor }) => {
+  const { landscape, safe } = useLayout();
+  const logoH = landscape ? LOGO_HEIGHT_LANDSCAPE : LOGO_HEIGHT;
+  const logoW = logoH * 1.5;
+  const k = logoH / LOGO_HEIGHT; // co badge theo logo
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       {/*
@@ -30,19 +36,19 @@ export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor }) => {
       <div
         style={{
           position: "absolute",
-          top: SAFE_ZONE.top,
-          left: SAFE_ZONE.left,
+          top: safe.top,
+          left: safe.left,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 4,
-          width: LOGO_WIDTH,
+          width: logoW,
         }}
       >
         <div
           style={{
-            width: LOGO_WIDTH,
-            height: LOGO_HEIGHT,
+            width: logoW,
+            height: logoH,
             overflow: "hidden",
             display: "flex",
             alignItems: "center",
@@ -64,15 +70,15 @@ export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor }) => {
           style={{
             backgroundColor: accentColor || COLORS.accentRed,
             color: COLORS.white,
-            border: `5px solid ${COLORS.ink}`,
-            borderRadius: 22,
-            padding: "10px 24px",
+            border: `${Math.round(5 * k)}px solid ${COLORS.ink}`,
+            borderRadius: Math.round(22 * k),
+            padding: `${Math.round(10 * k)}px ${Math.round(24 * k)}px`,
             fontFamily: FONTS.display,
             fontWeight: 800,
-            fontSize: TYPE_SCALE.watermark + 12,
+            fontSize: Math.round((TYPE_SCALE.watermark + 12) * k),
             lineHeight: 1,
             letterSpacing: "0.05em",
-            boxShadow: `5px 5px 0 ${COLORS.ink}`,
+            boxShadow: `${Math.round(5 * k)}px ${Math.round(5 * k)}px 0 ${COLORS.ink}`,
           }}
         >
           #{String(episodeNumber).padStart(3, "0")}
