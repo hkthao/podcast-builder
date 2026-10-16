@@ -172,6 +172,27 @@ const prepPexels = (src: string, out: string): void => {
   ]);
 };
 
+/**
+ * Sổ clip Pexels đã dùng ở MỌI tập (input/_footage-used.json) → tập mới không
+ * lấy lại clip của tập cũ. `ids`: id Pexels → slug. `legacy`: tập làm trước khi
+ * có sổ (không lưu id) → nhận diện gần đúng bằng tác giả + thời lượng gốc.
+ */
+type UsedLedger = {
+  ids: Record<string, string>;
+  legacy: { slug: string; url: string; dur: number }[];
+};
+const USED_LEDGER = path.resolve("input/_footage-used.json");
+const loadUsedLedger = (): UsedLedger => {
+  try {
+    const j = JSON.parse(fs.readFileSync(USED_LEDGER, "utf-8"));
+    return { ids: j.ids ?? {}, legacy: j.legacy ?? [] };
+  } catch {
+    return { ids: {}, legacy: [] };
+  }
+};
+const normUrl = (u: string): string => u.trim().toLowerCase().replace(/\/+$/, "");
+
+
 const probeSec = (f: string): number => {
   try {
     return Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", f], { encoding: "utf-8" }).trim()) || 0;
@@ -223,6 +244,17 @@ export async function generateFootagePlan(
   fs.mkdirSync(pexelsDir, { recursive: true });
   let pexelsUsed = 0;
   const usedPexelsIds = new Set<number>(); // tránh trùng clip Pexels
+  // Nạp clip các tập KHÁC đã dùng (bỏ dòng cũ của chính slug này → chạy lại được).
+  const ledger = loadUsedLedger();
+  for (const [id, s] of Object.entries(ledger.ids)) {
+    if (s === slug) delete ledger.ids[id];
+    else usedPexelsIds.add(Number(id));
+  }
+  const legacyUsed = ledger.legacy.filter((l) => l.slug !== slug);
+  const usedElsewhere = (c: PexelsVideo): boolean =>
+    usedPexelsIds.has(c.id) ||
+    legacyUsed.some((l) => l.url === normUrl(c.authorUrl) && Math.abs(l.dur - c.durationS) <= 1);
+  const newIds: number[] = [];
 
   // ===== Chế độ 100% PEXELS PHONG CẢNH — lấp đủ thời lượng, KHÔNG lặp clip =====
   if (opts.allPexels) {
@@ -233,8 +265,14 @@ export async function generateFootagePlan(
       if (f.startsWith(`${slug}-`)) fs.rmSync(path.join(pexelsDir, f), { force: true });
     }
     // Prefetch ứng viên mỗi beat (nhiều để round-robin lấy clip độc nhất).
+    // 2 trang × 40 ứng viên/beat: đủ sâu để còn clip mới sau khi loại clip tập cũ.
     const beatCands = await Promise.all(
-      beats.map((b) => searchPexelsVideos(b.query, { perPage: 15, minHeight: 1080 }).catch(() => [])),
+      beats.map(async (b) => {
+        const pages = await Promise.all(
+          [1, 2].map((page) => searchPexelsVideos(b.query, { perPage: 40, page, minHeight: 1080 }).catch(() => [])),
+        );
+        return pages.flat();
+      }),
     );
     const ptr = beats.map(() => 0);
     let accSec = 0;
@@ -245,7 +283,7 @@ export async function generateFootagePlan(
         const b = beats[bi];
         while (ptr[bi] < beatCands[bi].length) {
           const c = beatCands[bi][ptr[bi]++];
-          if (usedPexelsIds.has(c.id)) continue;
+          if (usedElsewhere(c)) continue;
           const tmpDl = path.join(pexelsDir, `.dl-${slug}-${clipIdx}.mp4`);
           try {
             await downloadPexelsVideo(c.fileUrl, tmpDl);
@@ -262,6 +300,7 @@ export async function generateFootagePlan(
           fs.rmSync(tmpDl, { force: true });
           const dur = probeSec(outAbs);
           usedPexelsIds.add(c.id);
+          newIds.push(c.id);
           chosen.push(rel);
           attributions.push({ file: rel, author: c.author, url: c.authorUrl });
           accSec += dur;
@@ -305,7 +344,7 @@ export async function generateFootagePlan(
       continue;
     }
     try {
-      const cands = await searchPexelsVideos(b.query, { perPage: 10, minHeight: 1080 });
+      const cands = await searchPexelsVideos(b.query, { perPage: 40, minHeight: 1080 });
       if (!cands.length) {
         report.push({ beat: b.label, query: b.query, match: "pexels:none", score: 0 });
         continue;
@@ -314,7 +353,7 @@ export async function generateFootagePlan(
       let pick: PexelsVideo | null = null;
       let rejPeople = 0;
       for (const c of cands) {
-        if (usedPexelsIds.has(c.id)) continue;
+        if (usedElsewhere(c)) continue;
         const tmpDl = path.join(pexelsDir, `.dl-${slug}-${i}.mp4`);
         await downloadPexelsVideo(c.fileUrl, tmpDl);
         if (PEOPLE_CHECK && (await clipHasPeople(tmpDl))) {
@@ -328,6 +367,7 @@ export async function generateFootagePlan(
         prepPexels(tmpDl, outAbs);
         fs.rmSync(tmpDl, { force: true });
         usedPexelsIds.add(c.id);
+        newIds.push(c.id);
         chosen.push(rel);
         attributions.push({ file: rel, author: c.author, url: c.authorUrl });
         pexelsUsed++;
@@ -358,6 +398,8 @@ export async function generateFootagePlan(
   report.forEach((r) => console.log(`   • ${r.beat.padEnd(24)} ${r.match}`));
 
   if (opts.apply) {
+    for (const id of newIds) ledger.ids[String(id)] = slug;
+    fs.writeFileSync(USED_LEDGER, JSON.stringify(ledger, null, 2));
     episode.footage = chosen;
     const authors = [...new Set(attributions.map((a) => a.author.trim()).filter(Boolean))];
     episode.footageCredit = authors.length ? `Footage: ${authors.join(", ")} (Pexels)` : null;
