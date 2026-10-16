@@ -141,14 +141,16 @@ export const EditorialOverlay: React.FC<Props> = ({
         >
           <div
             style={{
+              position: "relative",
               display: "flex",
               alignItems: "center",
               gap: 16,
               background: COLORS.white,
               border: `3px solid ${accent}`,
-              borderRadius: 22,
+              // Bo tròn kiểu bong bóng chat (góc dưới-trái vuông hơn = phía đuôi).
+              borderRadius: "28px 28px 28px 8px",
               padding: "14px 28px",
-              boxShadow: `6px 6px 0 ${withAlpha(accent, 0.18)}`,
+              boxShadow: `0 8px 22px ${withAlpha(COLORS.ink, 0.2)}`,
               maxWidth: "100%",
             }}
           >
@@ -173,6 +175,31 @@ export const EditorialOverlay: React.FC<Props> = ({
             >
               {activeChapter.title}
             </span>
+            {/* Đuôi bong bóng chat (viền accent + ruột trắng) — góc dưới-trái. */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: -17,
+                left: 22,
+                width: 0,
+                height: 0,
+                borderLeft: "13px solid transparent",
+                borderRight: "13px solid transparent",
+                borderTop: `17px solid ${accent}`,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: -11,
+                left: 25,
+                width: 0,
+                height: 0,
+                borderLeft: "10px solid transparent",
+                borderRight: "10px solid transparent",
+                borderTop: `13px solid ${COLORS.white}`,
+              }}
+            />
           </div>
         </div>
       )}
@@ -191,10 +218,14 @@ export const EditorialOverlay: React.FC<Props> = ({
         >
           <div
             style={{
-              background: COLORS.ink,
-              borderRadius: 20,
-              padding: "16px 24px",
-              boxShadow: `6px 6px 0 ${withAlpha(COLORS.ink, 0.2)}`,
+              position: "relative",
+              display: "inline-block",
+              background: COLORS.white,
+              border: `3px solid ${accent}`,
+              // Bong bóng chat, đuôi ở góc dưới-trái.
+              borderRadius: "28px 28px 28px 8px",
+              padding: "16px 26px",
+              boxShadow: `0 8px 22px ${withAlpha(COLORS.ink, 0.2)}`,
             }}
           >
             <div
@@ -203,7 +234,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 fontWeight: 800,
                 fontSize: 40,
                 lineHeight: 1.1,
-                color: COLORS.white,
+                color: COLORS.ink,
               }}
             >
               {activeCitation.name}
@@ -215,13 +246,38 @@ export const EditorialOverlay: React.FC<Props> = ({
                   fontWeight: 600,
                   fontSize: 26,
                   lineHeight: 1.2,
-                  color: COLORS.accentTeal,
+                  color: accent,
                   marginTop: 4,
                 }}
               >
                 {activeCitation.source}
               </div>
             )}
+            {/* Đuôi bong bóng chat — góc dưới-trái. */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: -17,
+                left: 24,
+                width: 0,
+                height: 0,
+                borderLeft: "13px solid transparent",
+                borderRight: "13px solid transparent",
+                borderTop: `17px solid ${accent}`,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: -11,
+                left: 27,
+                width: 0,
+                height: 0,
+                borderLeft: "10px solid transparent",
+                borderRight: "10px solid transparent",
+                borderTop: `13px solid ${COLORS.white}`,
+              }}
+            />
           </div>
         </div>
       )}
