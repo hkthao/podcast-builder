@@ -44,11 +44,15 @@ export type EpisodeConfig = {
   showOutro: boolean;
   showEditorial: boolean;
   footage: string[];
+  /** Footage ngang 16:9 cho bản YouTube. */
+  footageLandscape: string[];
   sceneOverrides: unknown;
   essayId: string | null;
   coverImage: string | null;
   coverFit: "cover" | "contain";
   coverPosition: "top" | "center" | "bottom";
+  /** Ảnh cover 16:9 cho bản YouTube (null → dùng cover dọc). */
+  coverImageLandscape: string | null;
   publishStatus: "draft" | "ready" | "scheduled" | "published";
   publishedAt: string | null;
   scheduledPublishTime: string | null;
@@ -219,7 +223,16 @@ export type EpisodeFileKind =
   | "lock"
   | "transcript-raw"
   | "transcript-corrected"
-  | "plan";
+  | "plan"
+  // Bản YouTube 16:9 (output/<slug>.yt.*) + cover ngang (input/<slug>.cover-yt.*)
+  | "yt-video-full"
+  | "yt-video-preview"
+  | "yt-thumbnail"
+  | "yt-lock"
+  | "cover-yt";
+
+/** Khung render: dọc 9:16 (FB) hoặc ngang 16:9 (YouTube). */
+export type VideoFormat = "vertical" | "landscape";
 
 export type EpisodeFile = {
   filename: string;
@@ -532,6 +545,7 @@ export type RenderJob = {
   error: string | null;
   regenTranscribe: boolean;
   regenPlan: boolean;
+  format: VideoFormat;
 };
 
 export type RenderProgressEvent = RenderJob & {
@@ -894,7 +908,7 @@ export const api = {
   startRender: (
     episodeName: string,
     preview: boolean,
-    opts: { regenTranscribe?: boolean; regenPlan?: boolean } = {},
+    opts: { regenTranscribe?: boolean; regenPlan?: boolean; format?: VideoFormat } = {},
   ) =>
     jsonFetch<RenderJob>("/api/render", {
       method: "POST",
@@ -903,6 +917,7 @@ export const api = {
         preview,
         regenTranscribe: opts.regenTranscribe,
         regenPlan: opts.regenPlan,
+        format: opts.format,
       }),
     }),
 
@@ -1068,7 +1083,7 @@ export const api = {
 
   genEpisodeCoverPrompt: (
     episodeName: string,
-    input: { provider: LLMProvider; model: string },
+    input: { provider: LLMProvider; model: string; variant?: VideoFormat },
   ) =>
     jsonFetch<{ prompt: string; themeColor: string | null }>(
       `/api/episodes/${encodeURIComponent(episodeName)}/cover-prompt`,
@@ -1095,11 +1110,12 @@ export const api = {
   uploadCover: async (
     episodeName: string,
     file: File,
+    variant: VideoFormat = "vertical",
   ): Promise<EpisodeSummary> => {
     const form = new FormData();
     form.append("cover", file);
     const res = await fetch(
-      `/api/episodes/${encodeURIComponent(episodeName)}/cover`,
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover${variant === "landscape" ? "?variant=landscape" : ""}`,
       { method: "POST", body: form },
     );
     if (!res.ok) {
@@ -1109,9 +1125,9 @@ export const api = {
     return (await res.json()) as EpisodeSummary;
   },
 
-  deleteCover: (episodeName: string) =>
+  deleteCover: (episodeName: string, variant: VideoFormat = "vertical") =>
     jsonFetch<EpisodeSummary>(
-      `/api/episodes/${encodeURIComponent(episodeName)}/cover`,
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover${variant === "landscape" ? "?variant=landscape" : ""}`,
       { method: "DELETE" },
     ),
 

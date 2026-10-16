@@ -9,8 +9,6 @@ import {
   Download,
   FolderOpen,
   Trash2,
-  Image as ImageIcon,
-  FileJson,
 } from "lucide-react";
 import {
   api,
@@ -20,9 +18,12 @@ import {
   type RenderJob,
   type RenderPhase,
   type RenderProgressEvent,
+  type VideoFormat,
 } from "@/lib/api";
 import { useRenderProgress } from "@/lib/sse";
 import { Card } from "@/components/ui/card";
+import { LandscapeCoverField, VerticalCoverField } from "@/components/CoverFields";
+import { CoverPromptPanel } from "@/components/CoverPromptPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,35 @@ const PHASE_ORDER: Record<RenderPhase, number> = {
   cancelled: 99,
 };
 
+/** 2 tab render độc lập — mỗi khung có job / tiến trình / kết quả riêng. */
+const FORMAT_TABS: Array<{
+  format: VideoFormat;
+  label: string;
+  fullKind: EpisodeFile["kind"];
+  previewKind: EpisodeFile["kind"];
+  thumbKind: EpisodeFile["kind"];
+}> = [
+  {
+    format: "vertical",
+    label: "Facebook 9:16",
+    fullKind: "video-full",
+    previewKind: "video-preview",
+    thumbKind: "thumbnail",
+  },
+  {
+    format: "landscape",
+    label: "YouTube 16:9",
+    fullKind: "yt-video-full",
+    previewKind: "yt-video-preview",
+    thumbKind: "yt-thumbnail",
+  },
+];
+
+const isActiveJob = (j: RenderJob) =>
+  j.status !== "done" && j.status !== "error" && j.status !== "cancelled";
+/** Job cũ (trước khi có format) coi như bản dọc. */
+const jobFormat = (j: RenderJob): VideoFormat => j.format ?? "vertical";
+
 export function RenderTab({
   ep,
   files,
@@ -65,66 +95,34 @@ export function RenderTab({
   hasPlan: boolean;
 }) {
   const qc = useQueryClient();
-  const [job, setJob] = useState<RenderJob | null>(null);
+  const [tab, setTab] = useState<VideoFormat>("vertical");
   const [deletingUrl, setDeletingUrl] = useState<string | null>(null);
-  // Hold cancel-pending state across the SSE round-trip: cancelMutation.isPending
-  // chỉ true trong lúc POST, sau đó button quay lại "Hủy" dù job vẫn đang tear
-  // down. Track id riêng → khoá button cho tới khi job thật sự transition.
-  const [cancelRequestedId, setCancelRequestedId] = useState<string | null>(null);
-  // Default checkboxes off if artifacts exist (don't regen by default).
-  // If artifacts missing, render must run those phases anyway — checkbox forced on.
-  const [regenTranscribe, setRegenTranscribe] = useState(!hasTranscript);
-  const [regenPlan, setRegenPlan] = useState(!hasPlan);
 
-  const startMutation = useMutation({
-    mutationFn: (preview: boolean) =>
-      api.startRender(ep.name, preview, { regenTranscribe, regenPlan }),
-    onSuccess: (j) => setJob(j),
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: (id: string) => api.cancelJob(id),
-    onMutate: (id) => setCancelRequestedId(id),
-  });
-
-  // Clear cancel-pending khi job đã transition sang terminal (cancelled/error/done)
-  // hoặc khi id job đổi (user start render mới).
-  useEffect(() => {
-    if (!cancelRequestedId) return;
-    if (!job || job.id !== cancelRequestedId) {
-      setCancelRequestedId(null);
-      return;
-    }
-    if (
-      job.status === "cancelled" ||
-      job.status === "error" ||
-      job.status === "done"
-    ) {
-      setCancelRequestedId(null);
-    }
-  }, [job, cancelRequestedId]);
-
-  // Surface server queue state — giúp debug khi job kẹt
+  // Surface server queue state — giúp debug khi job kẹt. Mỗi panel cũng đọc
+  // query này (cùng key → 1 request) để re-attach + đồng bộ job của mình.
   const jobsQ = useQuery({
     queryKey: ["render-jobs"],
     queryFn: () => api.listRenderJobs(),
-    // Poll mỗi 2s khi component mount để bắt stuck jobs
     refetchInterval: 2000,
   });
-  const activeServerJobs =
-    jobsQ.data?.jobs.filter(
-      (j) =>
-        j.status !== "done" &&
-        j.status !== "error" &&
-        j.status !== "cancelled",
-    ) ?? [];
-  const otherActiveJobs = activeServerJobs.filter((j) => j.id !== job?.id);
+  const activeServerJobs = jobsQ.data?.jobs.filter(isActiveJob) ?? [];
+  // Banner chỉ cho job KHÔNG thuộc tập này (job của tập hiện trong từng tab).
+  const otherActiveJobs = activeServerJobs.filter(
+    (j) => j.episodeName !== ep.name,
+  );
+  const runningByFormat = (f: VideoFormat) =>
+    activeServerJobs.some(
+      (j) => j.episodeName === ep.name && j.jobType === "render" && jobFormat(j) === f,
+    );
+
+  const cancelOther = useMutation({
+    mutationFn: (id: string) => api.cancelJob(id),
+  });
 
   const resetMut = useMutation({
     mutationFn: () => api.resetRenderQueue(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["render-jobs"] });
-      setJob(null);
     },
   });
 
@@ -139,107 +137,9 @@ export function RenderTab({
     onSettled: () => setDeletingUrl(null),
   });
 
-  const onProgress = useCallback(
-    (ev: RenderProgressEvent) => {
-      setJob((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: ev.status,
-              percent: ev.percent,
-              message: ev.message,
-              finishedAt: ev.finishedAt,
-              outputPath: ev.outputPath,
-              error: ev.error,
-            }
-          : prev,
-      );
-      if (
-        ev.status === "done" ||
-        ev.status === "error" ||
-        ev.status === "cancelled"
-      ) {
-        qc.invalidateQueries({ queryKey: ["episodes"] });
-        qc.invalidateQueries({ queryKey: ["episode", ev.episodeName] });
-        qc.invalidateQueries({ queryKey: ["episode-files", ev.episodeName] });
-      }
-    },
-    [qc],
-  );
-  useRenderProgress(job?.id ?? null, onProgress);
-
-  // Re-attach to job đang chạy khi user mở lại tab Render giữa chừng render.
-  useEffect(() => {
-    if (job) return;
-    if (!jobsQ.data) return;
-    const active = jobsQ.data.jobs
-      .filter(
-        (j) =>
-          j.episodeName === ep.name &&
-          j.status !== "done" &&
-          j.status !== "error" &&
-          j.status !== "cancelled",
-      )
-      .sort((a, b) => b.startedAt - a.startedAt)[0];
-    if (active) setJob(active);
-  }, [job, jobsQ.data, ep.name]);
-
-  // Fallback polling — SSE event giữa lúc subscribe có thể bị miss (race
-  // condition: server emit "process-audio" trước khi useEffect subscribe
-  // chạy). `jobsQ` đã poll mỗi 2s → sync trạng thái mới nhất từ đó.
-  useEffect(() => {
-    if (!job || !jobsQ.data) return;
-    const latest = jobsQ.data.jobs.find((j) => j.id === job.id);
-    if (!latest) {
-      // Local có job đang chạy nhưng server không biết → server đã restart
-      // (vd tsx watch reload mid-render → in-memory jobs Map mất sạch).
-      // Job trên Chrome subprocess có thể vẫn chạy zombie nhưng không emit
-      // được. Mark cancelled để user dismiss + restart.
-      if (job.status !== "done" && job.status !== "error" && job.status !== "cancelled") {
-        setJob({
-          ...job,
-          status: "error",
-          error:
-            "Server lost track of this job (restarted?). Subprocess có thể vẫn chạy ngầm — kill manually nếu cần. Restart render mới ở đây.",
-          finishedAt: Date.now(),
-        });
-      }
-      return;
-    }
-    if (
-      latest.status === job.status &&
-      latest.percent === job.percent &&
-      latest.message === job.message
-    ) {
-      return;
-    }
-    setJob(latest);
-    if (
-      latest.status === "done" ||
-      latest.status === "error" ||
-      latest.status === "cancelled"
-    ) {
-      qc.invalidateQueries({ queryKey: ["episodes"] });
-      qc.invalidateQueries({ queryKey: ["episode", ep.name] });
-      qc.invalidateQueries({ queryKey: ["episode-files", ep.name] });
-    }
-  }, [job, jobsQ.data, qc, ep.name]);
-
-  const isFinished =
-    job?.status === "done" ||
-    job?.status === "error" ||
-    job?.status === "cancelled";
-  const isRunning = !!job && !isFinished;
-
-  const triggerRender = (preview: boolean) => {
-    if (startMutation.isPending || isRunning) return;
-    setJob(null);
-    startMutation.mutate(preview);
-  };
-
   const confirmAndDelete = (f: EpisodeFile) => {
     const warn =
-      f.kind === "video-full"
+      f.kind === "video-full" || f.kind === "yt-video-full"
         ? `XOÁ video full "${f.filename}" (${humanSize(f.size)})?\n\nPhải render lại để tái tạo.`
         : `XOÁ "${f.filename}"?`;
     if (!window.confirm(warn)) return;
@@ -251,22 +151,16 @@ export function RenderTab({
     return <Card className="h-64 animate-pulse bg-muted/30" />;
   }
 
-  const fullVideo = files.output.find((f) => f.kind === "video-full");
-  const previewVideo = files.output.find((f) => f.kind === "video-preview");
-  const thumbnail = files.output.find((f) => f.kind === "thumbnail");
-  const lockFile = files.output.find((f) => f.kind === "lock");
-  const hasResult = fullVideo || previewVideo || thumbnail || lockFile;
-
   return (
     <div className="space-y-6">
-      {/* Stuck-queue banner: hiện khi có job khác đang chiếm slot */}
+      {/* Stuck-queue banner: hiện khi có job của tập KHÁC đang chiếm slot */}
       {otherActiveJobs.length > 0 && (
         <Card className="p-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
             <AlertCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">
-                Server đang chạy {otherActiveJobs.length} render khác
+                Server đang chạy {otherActiveJobs.length} render của tập khác
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Job mới sẽ chờ trong queue. Nếu đã &gt;5 phút mà phase không
@@ -274,10 +168,7 @@ export function RenderTab({
               </p>
               <div className="mt-2 space-y-1">
                 {otherActiveJobs.map((j) => (
-                  <div
-                    key={j.id}
-                    className="flex items-center gap-2 text-xs"
-                  >
+                  <div key={j.id} className="flex items-center gap-2 text-xs">
                     <code className="font-mono text-muted-foreground">
                       {j.episodeName}
                     </code>
@@ -285,7 +176,7 @@ export function RenderTab({
                       · {j.status} · {Math.round(j.percent)}%
                     </span>
                     <button
-                      onClick={() => cancelMutation.mutate(j.id)}
+                      onClick={() => cancelOther.mutate(j.id)}
                       className="ml-2 text-destructive hover:underline"
                     >
                       cancel
@@ -300,7 +191,7 @@ export function RenderTab({
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Force reset queue? Sẽ hủy tất cả ${activeServerJobs.length} job đang chạy. Subprocess (ffmpeg/whisper) có thể còn chạy ngầm tới khi tự kết thúc.`,
+                      `Force reset queue? Sẽ hủy tất cả ${activeServerJobs.length} job đang chạy (kể cả của tập này). Subprocess (ffmpeg/whisper) có thể còn chạy ngầm tới khi tự kết thúc.`,
                     )
                   )
                     resetMut.mutate();
@@ -319,23 +210,210 @@ export function RenderTab({
         </Card>
       )}
 
-      {/* Trigger / Progress */}
+      <Card className="p-0 overflow-hidden">
+        {/* Tab header */}
+        <div className="flex border-b bg-secondary/20">
+          {FORMAT_TABS.map((t) => {
+            const running = runningByFormat(t.format);
+            const hasVideo = files.output.some((f) => f.kind === t.fullKind);
+            return (
+              <button
+                key={t.format}
+                type="button"
+                onClick={() => setTab(t.format)}
+                className={cn(
+                  "flex items-center gap-2 px-5 py-3 text-sm border-b-2 -mb-px transition-colors",
+                  tab === t.format
+                    ? "border-primary text-foreground font-medium bg-background"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Play className="size-4" />
+                {t.label}
+                {running ? (
+                  <Loader2 className="size-3.5 animate-spin text-accent" />
+                ) : hasVideo ? (
+                  <CheckCircle2 className="size-3.5 text-accent" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Cả 2 panel luôn mount (ẩn tab kia) → job/SSE của từng khung chạy
+            độc lập, chuyển tab không mất tiến trình. */}
+        {FORMAT_TABS.map((t) => (
+          <div key={t.format} className={cn(tab !== t.format && "hidden")}>
+            <FormatPanel
+              ep={ep}
+              format={t.format}
+              jobs={jobsQ.data?.jobs ?? null}
+              fullVideo={files.output.find((f) => f.kind === t.fullKind)}
+              previewVideo={files.output.find((f) => f.kind === t.previewKind)}
+              thumbnail={files.output.find((f) => f.kind === t.thumbKind)}
+              hasTranscript={hasTranscript}
+              hasPlan={hasPlan}
+              deletingUrl={deletingUrl}
+              onDelete={confirmAndDelete}
+            />
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * 1 khung render (dọc hoặc ngang): nút tạo video + tiến trình + kết quả. State
+ * job riêng → render 2 khung song song không ảnh hưởng nhau (server chạy tối
+ * đa STUDIO_RENDER_PARALLEL job, output tách tên <slug>.* / <slug>.yt.*).
+ */
+function FormatPanel({
+  ep,
+  format,
+  jobs,
+  fullVideo,
+  previewVideo,
+  thumbnail,
+  hasTranscript,
+  hasPlan,
+  deletingUrl,
+  onDelete,
+}: {
+  ep: EpisodeSummary;
+  format: VideoFormat;
+  jobs: RenderJob[] | null;
+  fullVideo: EpisodeFile | undefined;
+  previewVideo: EpisodeFile | undefined;
+  thumbnail: EpisodeFile | undefined;
+  hasTranscript: boolean;
+  hasPlan: boolean;
+  deletingUrl: string | null;
+  onDelete: (f: EpisodeFile) => void;
+}) {
+  const qc = useQueryClient();
+  const [job, setJob] = useState<RenderJob | null>(null);
+  // Hold cancel-pending state across the SSE round-trip: cancelMutation.isPending
+  // chỉ true trong lúc POST, sau đó button quay lại "Hủy" dù job vẫn đang tear
+  // down. Track id riêng → khoá button cho tới khi job thật sự transition.
+  const [cancelRequestedId, setCancelRequestedId] = useState<string | null>(null);
+  // Default checkboxes off if artifacts exist (don't regen by default).
+  const [regenTranscribe, setRegenTranscribe] = useState(!hasTranscript);
+  const [regenPlan, setRegenPlan] = useState(!hasPlan);
+
+  const startMutation = useMutation({
+    mutationFn: (preview: boolean) =>
+      api.startRender(ep.name, preview, { regenTranscribe, regenPlan, format }),
+    onSuccess: (j) => setJob(j),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api.cancelJob(id),
+    onMutate: (id) => setCancelRequestedId(id),
+  });
+
+  useEffect(() => {
+    if (!cancelRequestedId) return;
+    if (!job || job.id !== cancelRequestedId || !isActiveJob(job)) {
+      setCancelRequestedId(null);
+    }
+  }, [job, cancelRequestedId]);
+
+  const refreshEpisode = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["episodes"] });
+    qc.invalidateQueries({ queryKey: ["episode", ep.name] });
+    qc.invalidateQueries({ queryKey: ["episode-files", ep.name] });
+  }, [qc, ep.name]);
+
+  const onProgress = useCallback(
+    (ev: RenderProgressEvent) => {
+      setJob((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: ev.status,
+              percent: ev.percent,
+              message: ev.message,
+              finishedAt: ev.finishedAt,
+              outputPath: ev.outputPath,
+              error: ev.error,
+            }
+          : prev,
+      );
+      if (!isActiveJob(ev)) refreshEpisode();
+    },
+    [refreshEpisode],
+  );
+  useRenderProgress(job?.id ?? null, onProgress);
+
+  // Re-attach job render ĐÚNG KHUNG này đang chạy khi user mở lại tab giữa chừng.
+  useEffect(() => {
+    if (job || !jobs) return;
+    const active = jobs
+      .filter(
+        (j) =>
+          j.episodeName === ep.name &&
+          j.jobType === "render" &&
+          jobFormat(j) === format &&
+          isActiveJob(j),
+      )
+      .sort((a, b) => b.startedAt - a.startedAt)[0];
+    if (active) setJob(active);
+  }, [job, jobs, ep.name, format]);
+
+  // Fallback polling — SSE event có thể bị miss (subscribe sau khi server emit).
+  useEffect(() => {
+    if (!job || !jobs) return;
+    const latest = jobs.find((j) => j.id === job.id);
+    if (!latest) {
+      // Server không biết job → đã restart (tsx watch reload mid-render).
+      if (isActiveJob(job)) {
+        setJob({
+          ...job,
+          status: "error",
+          error:
+            "Server lost track of this job (restarted?). Subprocess có thể vẫn chạy ngầm — kill manually nếu cần. Restart render mới ở đây.",
+          finishedAt: Date.now(),
+        });
+      }
+      return;
+    }
+    if (
+      latest.status === job.status &&
+      latest.percent === job.percent &&
+      latest.message === job.message
+    ) {
+      return;
+    }
+    setJob(latest);
+    if (!isActiveJob(latest)) refreshEpisode();
+  }, [job, jobs, refreshEpisode]);
+
+  const isRunning = !!job && isActiveJob(job);
+
+  const triggerRender = (preview: boolean) => {
+    if (startMutation.isPending || isRunning) return;
+    setJob(null);
+    startMutation.mutate(preview);
+  };
+
+  const landscape = format === "landscape";
+
+  return (
+    <div className="divide-y">
       {isRunning ? (
         <ProgressCard
           job={job!}
           onCancel={() => cancelMutation.mutate(job!.id)}
-          cancelling={
-            cancelMutation.isPending || cancelRequestedId === job!.id
-          }
+          cancelling={cancelMutation.isPending || cancelRequestedId === job!.id}
         />
       ) : (
         <TriggerCard
           ep={ep}
+          format={format}
           job={job}
           pending={startMutation.isPending}
-          startError={
-            startMutation.isError ? String(startMutation.error) : null
-          }
+          startError={startMutation.isError ? String(startMutation.error) : null}
           onRender={triggerRender}
           onReset={() => setJob(null)}
           hasTranscript={hasTranscript}
@@ -347,87 +425,62 @@ export function RenderTab({
         />
       )}
 
-      {/* Last output section */}
-      {hasResult && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wider">
-              Kết quả render gần nhất
-            </h3>
-            {ep.renderedAt && (
-              <span className="text-xs text-muted-foreground">
-                {timeAgo(ep.renderedAt)}
-              </span>
-            )}
-          </div>
+      {/* Ảnh cover (intro) + prompt tạo ảnh của đúng khung này */}
+      <div className="px-5 pb-5 pt-3 space-y-4">
+        {landscape ? <LandscapeCoverField ep={ep} /> : <VerticalCoverField ep={ep} />}
+        <CoverPromptPanel ep={ep} variant={format} />
+      </div>
 
+      {(fullVideo || previewVideo) && (
+        <div className="p-5 space-y-4">
           {fullVideo && (
             <VideoCard
               file={fullVideo}
-              label="Video full"
+              label={landscape ? "YouTube full (16:9)" : "Video full"}
               poster={thumbnail?.url}
-              maxHeight={480}
+              maxHeight={landscape ? 400 : 480}
               accentIcon
               deletingUrl={deletingUrl}
-              onDelete={confirmAndDelete}
+              onDelete={onDelete}
             />
           )}
-
           {previewVideo && (
             <VideoCard
               file={previewVideo}
               label="Preview 10s"
-              maxHeight={320}
+              maxHeight={landscape ? 260 : 320}
               deletingUrl={deletingUrl}
-              onDelete={confirmAndDelete}
+              onDelete={onDelete}
             />
           )}
-
-          {(thumbnail || lockFile) && (
-            <Card className="p-0 overflow-hidden">
-              <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">
-                <FileJson className="size-4 text-muted-foreground" />
-                <span className="font-medium text-sm">Metadata</span>
-              </div>
-              <div className="divide-y">
-                {thumbnail && (
-                  <FileRow
-                    file={thumbnail}
-                    icon={<ImageIcon className="size-3.5" />}
-                    label="Thumbnail (cover FB)"
-                    deletingUrl={deletingUrl}
-                    onDelete={confirmAndDelete}
-                  >
-                    <img
-                      src={thumbnail.url}
-                      alt="thumbnail"
-                      className="mt-2 max-h-40 rounded border"
-                    />
-                  </FileRow>
-                )}
-                {lockFile && (
-                  <FileRow
-                    file={lockFile}
-                    icon={<FileJson className="size-3.5" />}
-                    label="Lock file (reproducibility)"
-                    deletingUrl={deletingUrl}
-                    onDelete={confirmAndDelete}
-                  />
-                )}
-              </div>
-            </Card>
+          {landscape && thumbnail && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <img
+                src={thumbnail.url}
+                alt="thumbnail YouTube"
+                className="h-16 aspect-video rounded border object-cover"
+              />
+              <span>Thumbnail YouTube 1280×720</span>
+              <Button variant="outline" size="sm" asChild className="ml-auto">
+                <a href={thumbnail.url} download={thumbnail.filename}>
+                  <Download className="size-3.5" />
+                  Tải thumbnail
+                </a>
+              </Button>
+            </div>
           )}
         </div>
       )}
 
-      {!hasResult && !isRunning && !job && (
-        <Card className="p-8 text-center border-dashed">
+      {!fullVideo && !previewVideo && !job && (
+        <div className="p-8 text-center">
           <Play className="mx-auto mb-3 size-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            Chưa có video render. Bấm <strong>Render preview</strong> để test
-            nhanh 10s đầu, hoặc <strong>Render full</strong> cho bản hoàn chỉnh.
+            Chưa có video {landscape ? "YouTube 16:9" : "Facebook 9:16"}. Bấm{" "}
+            <strong>Render preview</strong> để test nhanh 10s đầu, hoặc{" "}
+            <strong>Render full</strong> cho bản hoàn chỉnh.
           </p>
-        </Card>
+        </div>
       )}
     </div>
   );
@@ -435,6 +488,7 @@ export function RenderTab({
 
 function TriggerCard({
   ep,
+  format,
   job,
   pending,
   startError,
@@ -448,6 +502,7 @@ function TriggerCard({
   onRegenPlanChange,
 }: {
   ep: EpisodeSummary;
+  format: VideoFormat;
   job: RenderJob | null;
   pending: boolean;
   startError: string | null;
@@ -460,17 +515,32 @@ function TriggerCard({
   onRegenTranscribeChange: (v: boolean) => void;
   onRegenPlanChange: (v: boolean) => void;
 }) {
+  // Bản 16:9 chỉ chạy nền footage ngang (scene sticker vẽ cho khung dọc).
+  const landscape = format === "landscape";
+  const missingLandscapeFootage =
+    landscape && (ep.config.footageLandscape ?? []).length === 0;
+  const blocked = !ep.audioPath || pending || missingLandscapeFootage;
   return (
-    <Card className="p-5">
+    <div className="p-5">
       <div className="flex items-start justify-between mb-3 gap-3">
         <div className="min-w-0">
           <h3 className="font-medium flex items-center gap-2">
             <Play className="size-4 text-accent" />
-            Tạo video
+            Tạo video {landscape ? "YouTube 16:9" : "Facebook 9:16"}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Preview = 10s đầu, ~30s render. Full = hoàn chỉnh (~5-10 phút tuỳ
-            độ dài audio).
+            {landscape ? (
+              <>
+                Ra <code className="font-mono">{ep.name}.yt.mp4</code> + thumbnail,
+                nền footage ngang ({(ep.config.footageLandscape ?? []).length}{" "}
+                clip). Upload tay lên YouTube Studio.
+              </>
+            ) : (
+              <>
+                Preview = 10s đầu, ~30s render. Full = hoàn chỉnh (~5-10 phút
+                tuỳ độ dài audio).
+              </>
+            )}
           </p>
         </div>
         {job && (
@@ -481,11 +551,20 @@ function TriggerCard({
         )}
       </div>
 
-      {/* Regen options — reuse hay tạo lại transcript/plan */}
+      {missingLandscapeFootage && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+          Chưa có footage ngang cho bản YouTube. Chạy:
+          <code className="block mt-1 font-mono break-all">
+            npx tsx podcast/scripts/footage-plan.ts {ep.name} --landscape --apply
+          </code>
+        </div>
+      )}
+
+      {/* Regen options — reuse hay tạo lại transcript/plan (dùng CHUNG 2 khung) */}
       <div className="mb-4 rounded-md border bg-secondary/20 p-3 space-y-2">
         <p className="text-xs text-muted-foreground">
-          Mặc định reuse transcript + plan đã có. Tick để chạy lại (sẽ GHI ĐÈ
-          các sửa của bạn).
+          Mặc định reuse transcript + plan đã có (dùng chung cho cả 2 khung).
+          Tick để chạy lại (sẽ GHI ĐÈ các sửa của bạn).
         </p>
         <label
           className={cn(
@@ -501,8 +580,7 @@ function TriggerCard({
             className="mt-0.5"
           />
           <span>
-            Tạo lại transcript{" "}
-            {!hasTranscript && "(chưa có — sẽ tự chạy)"}
+            Tạo lại transcript {!hasTranscript && "(chưa có — sẽ tự chạy)"}
           </span>
         </label>
         <label
@@ -523,10 +601,7 @@ function TriggerCard({
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button
-          disabled={!ep.audioPath || pending}
-          onClick={() => onRender(true)}
-        >
+        <Button disabled={blocked} onClick={() => onRender(true)}>
           {pending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
@@ -534,11 +609,7 @@ function TriggerCard({
           )}
           Render preview (10s)
         </Button>
-        <Button
-          variant="secondary"
-          disabled={!ep.audioPath || pending}
-          onClick={() => onRender(false)}
-        >
+        <Button variant="secondary" disabled={blocked} onClick={() => onRender(false)}>
           <Play className="size-4" />
           Render full
         </Button>
@@ -585,7 +656,7 @@ function TriggerCard({
           Đã hủy render
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -617,7 +688,7 @@ function ProgressCard({
   const phases = PHASES_BY_JOB[job.jobType] ?? PHASES;
   const title = JOB_TITLE[job.jobType] ?? "Đang chạy";
   return (
-    <Card className="p-5">
+    <div className="p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Loader2 className="size-4 animate-spin text-accent" />
@@ -695,7 +766,7 @@ function ProgressCard({
           <span>{Math.round(job.percent)}%</span>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -778,60 +849,6 @@ function VideoCard({
         </Button>
       </div>
     </Card>
-  );
-}
-
-function FileRow({
-  file,
-  icon,
-  label,
-  deletingUrl,
-  onDelete,
-  children,
-}: {
-  file: EpisodeFile;
-  icon: React.ReactNode;
-  label: string;
-  deletingUrl: string | null;
-  onDelete: (f: EpisodeFile) => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="px-6 py-3 space-y-2">
-      <div className="flex items-center gap-3">
-        <span className="text-muted-foreground shrink-0">{icon}</span>
-        <span className="text-sm font-medium">{label}</span>
-        <code className="text-xs text-muted-foreground font-mono truncate ml-1">
-          {file.filename}
-        </code>
-        <span className="text-xs text-muted-foreground tabular-nums shrink-0 ml-auto">
-          {humanSize(file.size)}
-        </span>
-      </div>
-      {children}
-      <div className="flex justify-end gap-2 pt-1">
-        <Button variant="outline" size="sm" asChild>
-          <a href={file.url} download={file.filename}>
-            <Download className="size-3.5" />
-            Tải về
-          </a>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onDelete(file)}
-          disabled={deletingUrl === file.url}
-        >
-          {deletingUrl === file.url ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Trash2 className="size-3.5" />
-          )}
-          Xoá
-        </Button>
-      </div>
-    </div>
   );
 }
 
