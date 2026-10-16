@@ -1,6 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
 import https from "node:https";
+import path from "node:path";
 
 /**
  * Pexels video API client — lấy b-roll dọc 9:16 lấp chỗ footage tự quay không
@@ -35,6 +36,48 @@ export type Orientation = "portrait" | "landscape" | "square";
 export type PexelsSize = "large" | "medium" | "small";
 
 const KEY = () => process.env.PEXELS_API_KEY || "";
+
+/**
+ * Blocklist tác giả/video Pexels bị chặn bản quyền (Meta/FB block reel).
+ * Nguồn: input/_footage-blocklist.json. Nạp 1 lần (cache). Mọi video thuộc
+ * tác giả / URL / id trong danh sách sẽ bị loại khỏi kết quả search → footage
+ * không bao giờ tải lại clip đã gây strike. Thêm tác giả mới = sửa file JSON,
+ * KHÔNG cần đổi code.
+ */
+type Blocklist = { authors: Set<string>; authorUrls: Set<string>; videoIds: Set<number> };
+let _blocklist: Blocklist | null = null;
+const loadBlocklist = (): Blocklist => {
+  if (_blocklist) return _blocklist;
+  const bl: Blocklist = { authors: new Set(), authorUrls: new Set(), videoIds: new Set() };
+  try {
+    const p = path.resolve("input/_footage-blocklist.json");
+    const j = JSON.parse(fs.readFileSync(p, "utf-8"));
+    for (const a of j.authors ?? []) bl.authors.add(String(a).trim().toLowerCase());
+    for (const u of j.authorUrls ?? []) bl.authorUrls.add(String(u).trim().toLowerCase());
+    for (const id of j.videoIds ?? []) {
+      const n = Number(id);
+      if (!Number.isNaN(n)) bl.videoIds.add(n);
+    }
+  } catch {
+    /* không có file blocklist → rỗng */
+  }
+  _blocklist = bl;
+  return bl;
+};
+
+/** Video Pexels thuộc tác giả/URL/id bị chặn bản quyền? */
+const isBlockedPexels = (v: any): boolean => {
+  const bl = loadBlocklist();
+  if (!bl.authors.size && !bl.authorUrls.size && !bl.videoIds.size) return false;
+  const name = String(v.user?.name ?? "").trim().toLowerCase();
+  const url = String(v.user?.url ?? "").trim().toLowerCase();
+  const id = Number(v.id);
+  if (name && bl.authors.has(name)) return true;
+  if (url && bl.authorUrls.has(url)) return true;
+  for (const slug of bl.authorUrls) if (slug && url.includes(slug)) return true;
+  if (!Number.isNaN(id) && bl.videoIds.has(id)) return true;
+  return false;
+};
 
 /** GET JSON + đọc header rate-limit (X-Ratelimit-*). */
 const getJson = (
@@ -117,6 +160,7 @@ export async function searchPexelsVideos(
   const vids = Array.isArray(j.videos) ? j.videos : [];
   const out: PexelsVideo[] = [];
   for (const v of vids) {
+    if (isBlockedPexels(v)) continue; // tác giả/clip bị chặn bản quyền
     const dur = v.duration ?? 0;
     if (dur < minDur || dur > maxDur) continue;
     const pick = pickPortraitFile(v, minHeight);
@@ -151,6 +195,7 @@ export async function getPopularPexelsVideos(
   const vids = Array.isArray(j.videos) ? j.videos : [];
   const out: PexelsVideo[] = [];
   for (const v of vids) {
+    if (isBlockedPexels(v)) continue; // tác giả/clip bị chặn bản quyền
     const pick = pickPortraitFile(v, opts.minHeight ?? 1080);
     if (pick) out.push(mapVideo(v, pick));
   }
