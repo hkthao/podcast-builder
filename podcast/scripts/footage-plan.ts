@@ -9,11 +9,15 @@ import { chat } from "../../shared/studio-core/llm-providers";
 import {
   EpisodeConfigSchema,
   buildEpisodeTemplate,
+  outroTailFrames,
+  speechLeadFrames,
   type EpisodeConfig,
 } from "../src/episode";
 import type { Transcript } from "../../shared/transcribe/transcribe";
 import { tagFootagePool, type FootageTag } from "./footage-tags";
 import { searchPexelsVideos, downloadPexelsVideo, type PexelsVideo } from "./pexels";
+import { buildFootageShotlistUserContent } from "../server/lib/footage-shotlist-prompt";
+import { getEffectivePrompt } from "../../shared/studio-core/prompt-overrides-store";
 
 /**
  * Đánh giá footage tự quay theo chủ đề tập + lấp chỗ thiếu bằng Pexels.
@@ -24,6 +28,13 @@ import { searchPexelsVideos, downloadPexelsVideo, type PexelsVideo } from "./pex
  * clip tự quay hợp → tải Pexels (giới hạn, xử lý blur/tối ở FootageLayer nên
  * không phải stock thô). Xuất tmp/<slug>.footage-plan.json + (tuỳ chọn) ghi
  * episode.footage. Xem docs/originality-upgrade-plan.md §3.2.
+ *
+ * Chế độ 100% Pexels (--all-pexels / --landscape) BÁM THỜI GIAN: chia lời thoại
+ * thành beat ~45s theo mốc video thật → shot-list theo Ý từng khúc (ẩn dụ hình
+ * ảnh, không người, đúng nguyên tắc bố cục khung dọc/ngang) → mỗi beat lấp bằng
+ * các shot cắt đúng độ dài, xếp theo thời gian → nền khớp nội dung đang nói.
+ * Shot-list do CLAUDE CODE viết (miễn phí): --brief → Claude viết JSON →
+ * --shotlist=<file> --apply. Không truyền --shotlist → gọi OpenAI (tốn phí).
  */
 
 const SHOT_MODEL = process.env.FOOTAGE_PLAN_MODEL ?? "gpt-4o";
@@ -159,7 +170,7 @@ const matchScore = (beatKw: string[], clip: FootageTag): number => {
 };
 
 /** Chuẩn hoá 1 clip Pexels đã tải → khung W×H (dọc 1080×1920 / ngang 1920×1080), bỏ tiếng (+silent aac), chậm. */
-const prepPexels = (src: string, out: string, W = 1080, H = 1920): void => {
+const prepPexels = (src: string, out: string, W = 1080, H = 1920, dur?: number): void => {
   execFileSync("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-y",
     "-ss", "0.2", "-i", src,
@@ -168,7 +179,10 @@ const prepPexels = (src: string, out: string, W = 1080, H = 1920): void => {
     "-vf", `setpts=PTS/${PREP_SPEED},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`,
     "-r", "30", "-c:v", "libx264", "-crf", "20", "-preset", "medium",
     "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "16k", "-movflags", "+faststart", out,
+    "-c:a", "aac", "-b:a", "16k", "-movflags", "+faststart",
+    // Cắt đúng độ dài shot (chế độ bám thời gian) → footage khớp mốc lời thoại.
+    ...(dur ? ["-t", dur.toFixed(3)] : []),
+    out,
   ]);
 };
 
@@ -215,9 +229,100 @@ const audioDurationSec = (slug: string, transcript: Transcript): number => {
   return last ? last.offsets.to / 1000 : 900;
 };
 
+
+// ═══════════ CHẾ ĐỘ BÁM THỜI GIAN (100% Pexels) ═══════════
+// Mỗi BEAT = 1 khúc lời thoại ~45s (cắt ở ranh giới câu) có mốc VIDEO thật
+// (đã cộng đoạn mở đầu chỉ-nhạc). Shot-list theo Ý của từng khúc → mỗi khúc
+// được lấp bằng các shot cắt đúng độ dài → nền footage khớp nội dung đang nói.
+
+/** Độ dài khúc lời thoại cho 1 beat (giây). */
+const BEAT_SEC = Number(process.env.FOOTAGE_BEAT_SEC ?? 45);
+/** Độ dài 1 shot (giây): dọc cắt nhanh hơn, ngang giữ lâu (4-7s, nhịp thở chậm). */
+const SHOT_SEC = {
+  portrait: Number(process.env.FOOTAGE_SHOT_SEC ?? 6),
+  landscape: Number(process.env.FOOTAGE_SHOT_SEC ?? 7),
+} as const;
+/** Số beat tải/xử lý song song. */
+const BEAT_CONCURRENCY = Number(process.env.FOOTAGE_CONCURRENCY ?? 3);
+
+type TimedBeat = { i: number; startSec: number; endSec: number; text: string };
+type BeatShotList = { i: number; label: string; idea?: string; queries: string[] };
+
+const fmtMmSs = (sec: number): string =>
+  `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+
+/**
+ * Chia transcript thành beat ~BEAT_SEC theo mốc VIDEO (lead + mốc lời). Beat
+ * đầu bắt đầu từ 0 (phủ cả intro + hook), beat cuối kéo tới hết video (đuôi nhạc).
+ */
+const buildTimedBeats = (transcript: Transcript, leadSec: number, totalSec: number): TimedBeat[] => {
+  const segs = transcript.transcription.filter((s) => s.text.trim());
+  const beats: TimedBeat[] = [];
+  let buf: string[] = [];
+  let startMs = -1;
+  for (const seg of segs) {
+    if (startMs < 0) startMs = seg.offsets.from;
+    buf.push(seg.text.trim());
+    if ((seg.offsets.to - startMs) / 1000 >= BEAT_SEC) {
+      beats.push({ i: beats.length, startSec: leadSec + startMs / 1000, endSec: 0, text: buf.join(" ") });
+      buf = [];
+      startMs = -1;
+    }
+  }
+  if (buf.length) {
+    // Khúc cuối quá ngắn → gộp vào beat trước.
+    if (beats.length && buf.join(" ").length < 200) beats[beats.length - 1].text += " " + buf.join(" ");
+    else beats.push({ i: beats.length, startSec: leadSec + startMs / 1000, endSec: 0, text: buf.join(" ") });
+  }
+  if (!beats.length) beats.push({ i: 0, startSec: 0, endSec: totalSec, text: "" });
+  beats[0].startSec = 0;
+  for (let k = 0; k < beats.length; k++) {
+    beats[k].endSec = k + 1 < beats.length ? beats[k + 1].startSec : totalSec;
+  }
+  return beats;
+};
+
+const timedUserContent = (
+  episode: EpisodeConfig,
+  beats: TimedBeat[],
+  orientation: "portrait" | "landscape",
+): string =>
+  buildFootageShotlistUserContent({
+    title: episode.title,
+    accentColor: episode.accentColor,
+    orientation,
+    beats,
+  });
+
+const parseShotList = (raw: string, beats: TimedBeat[]): BeatShotList[] => {
+  const j = JSON.parse(raw);
+  const arr: any[] = Array.isArray(j) ? j : Array.isArray(j.beats) ? j.beats : [];
+  return beats.map((b) => {
+    const hit = arr.find((x) => Number(x?.i) === b.i) ?? arr[b.i] ?? {};
+    const queries = (Array.isArray(hit.queries) ? hit.queries : [hit.query])
+      .map((q: unknown) => String(q ?? "").trim())
+      .filter(Boolean);
+    return {
+      i: b.i,
+      label: String(hit.label ?? `beat ${b.i}`).trim(),
+      idea: hit.idea ? String(hit.idea) : undefined,
+      queries: queries.length ? queries : ["calm lake reflection wide shot"],
+    };
+  });
+};
+
 export async function generateFootagePlan(
   slug: string,
-  opts: { apply?: boolean; maxPexels?: number; allPexels?: boolean; landscape?: boolean } = {},
+  opts: {
+    apply?: boolean;
+    maxPexels?: number;
+    allPexels?: boolean;
+    landscape?: boolean;
+    /** Chỉ ghi brief beat cho Claude Code viết shot-list (KHÔNG gọi OpenAI), rồi dừng. */
+    brief?: boolean;
+    /** File shot-list JSON do Claude viết → dùng thay cho OpenAI. */
+    shotlistPath?: string;
+  } = {},
 ): Promise<void> {
   const maxPexels = opts.maxPexels ?? MAX_PEXELS_DEFAULT;
   // Bản YouTube 16:9: footage NGANG riêng (pool tự quay đang là dọc → không
@@ -242,11 +347,67 @@ export async function generateFootagePlan(
     : EpisodeConfigSchema.parse(buildEpisodeTemplate(slug));
   const transcript = JSON.parse(fs.readFileSync(tPath, "utf-8")) as Transcript;
 
+  const sfx = landscape ? ".yt" : "";
+
+  // Chế độ bám thời gian: beat theo mốc video thật + shot-list theo ý từng khúc.
+  const fps = 30;
+  const leadSec = speechLeadFrames(episode, fps) / fps;
+  const tailSec = outroTailFrames(episode, fps) / fps;
+  const totalSec = leadSec + audioDurationSec(slug, transcript) + tailSec;
+  const timedBeats = allPexels ? buildTimedBeats(transcript, leadSec, totalSec) : [];
+
+  if (opts.brief) {
+    if (!allPexels) throw new Error("--brief chỉ dùng với --all-pexels hoặc --landscape");
+    const briefPath = path.resolve("tmp", `${slug}${sfx}.footage-brief.json`);
+    const outPath = path.resolve("tmp", `${slug}${sfx}.footage-shotlist.json`);
+    fs.writeFileSync(
+      briefPath,
+      JSON.stringify(
+        {
+          system: getEffectivePrompt("podcast.footage-shotlist"),
+          user: timedUserContent(episode, timedBeats, orientation),
+          beats: timedBeats,
+          output: outPath,
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(`[footage-plan] ✓ brief ${timedBeats.length} beat → ${briefPath}`);
+    console.log(`  Claude đọc "system" + "user", viết JSON shot-list vào ${outPath}`);
+    console.log(
+      `  rồi chạy: npx tsx podcast/scripts/footage-plan.ts ${slug}${landscape ? " --landscape" : " --all-pexels"} --shotlist=${path.relative(process.cwd(), outPath)} --apply`,
+    );
+    return;
+  }
+
   // 1. shot-list (tags chỉ cần cho mix mode)
   const tags = allPexels ? {} : await tagFootagePool(footageDir);
-  console.log("[footage-plan] sinh shot-list...");
-  const beats = await genShotList(transcript, episode);
-  console.log(`[footage-plan] ${beats.length} beat, ${Object.keys(tags).length} clip tự quay đã tag.`);
+  let beats: Beat[] = [];
+  let shotList: BeatShotList[] = [];
+  if (allPexels) {
+    if (opts.shotlistPath) {
+      shotList = parseShotList(fs.readFileSync(opts.shotlistPath, "utf-8"), timedBeats);
+      console.log(`[footage-plan] dùng shot-list của Claude: ${opts.shotlistPath}`);
+    } else {
+      console.log(`[footage-plan] sinh shot-list ${timedBeats.length} beat (OpenAI ${SHOT_MODEL})...`);
+      const raw = await chat({
+        provider: "openai",
+        model: SHOT_MODEL,
+        systemPrompt: getEffectivePrompt("podcast.footage-shotlist"),
+        userContent: timedUserContent(episode, timedBeats, orientation),
+        temperature: 0.6,
+        jsonMode: true,
+        maxTokens: 6000,
+      });
+      shotList = parseShotList(raw, timedBeats);
+    }
+    console.log(`[footage-plan] ${timedBeats.length} beat bám thời gian, shot ${SHOT_SEC[orientation]}s.`);
+  } else {
+    console.log("[footage-plan] sinh shot-list...");
+    beats = await genShotList(transcript, episode);
+    console.log(`[footage-plan] ${beats.length} beat, ${Object.keys(tags).length} clip tự quay đã tag.`);
+  }
 
   const report: any[] = [];
   const chosen: string[] = []; // filenames (relative to input/footage) theo thứ tự
@@ -266,66 +427,111 @@ export async function generateFootagePlan(
     legacyUsed.some((l) => l.url === normUrl(c.authorUrl) && Math.abs(l.dur - c.durationS) <= 1);
   const newIds: number[] = [];
 
-  // ===== Chế độ 100% PEXELS PHONG CẢNH — lấp đủ thời lượng, KHÔNG lặp clip =====
+  // ===== Chế độ 100% PEXELS BÁM THỜI GIAN — mỗi beat lấp bằng shot hợp ý, KHÔNG lặp =====
   if (allPexels) {
-    const targetSec = audioDurationSec(slug, transcript) * 1.08; // +8% biên an toàn
-    console.log(`[footage-plan] all-pexels: cần ~${targetSec.toFixed(0)}s footage (không lặp).`);
-    // Xoá clip pexels cũ của slug để không lẫn/lặp.
-    for (const f of fs.readdirSync(pexelsDir)) {
-      if (f.startsWith(`${slug}-`)) fs.rmSync(path.join(pexelsDir, f), { force: true });
-    }
-    // Prefetch ứng viên mỗi beat (nhiều để round-robin lấy clip độc nhất).
-    // 2 trang × 40 ứng viên/beat: đủ sâu để còn clip mới sau khi loại clip tập cũ.
-    const beatCands = await Promise.all(
-      beats.map(async (b) => {
-        const pages = await Promise.all(
-          [1, 2].map((page) => searchPexelsVideos(b.query, { perPage: 40, page, minHeight: 1080, orientation }).catch(() => [])),
+    // Clip cũ của slug KHÔNG xoá ở đây (dry-run vẫn phải giữ footage đang dùng);
+    // chỉ dọn sau khi --apply ghi config mới thành công (cuối hàm).
+    const shotSec = SHOT_SEC[orientation];
+    const beatClips: string[][] = timedBeats.map(() => []);
+
+    const fillBeat = async (b: TimedBeat): Promise<void> => {
+      const sl = shotList[b.i];
+      const need = b.endSec - b.startSec;
+      const nShots = Math.max(1, Math.round(need / shotSec));
+      const shotLen = need / nShots;
+      // Clip gốc phải đủ dài cho 1 shot SAU khi làm chậm (PREP_SPEED) + bỏ 0.2s đầu
+      // → không bị ngắn hơn shotLen (lệch mốc thời gian các beat sau).
+      const minDur = Math.ceil(shotLen * PREP_SPEED + 0.2) + 1;
+      // Ứng viên xen kẽ giữa các query (q0#0, q1#0, q2#0, q0#1…) → đa dạng góc nhìn.
+      const fetchCands = async (page: number): Promise<PexelsVideo[]> => {
+        const lists = await Promise.all(
+          sl.queries.map((q) =>
+            searchPexelsVideos(q, { perPage: 30, page, minHeight: 1080, minDurationS: minDur, orientation }).catch(
+              () => [] as PexelsVideo[],
+            ),
+          ),
         );
-        return pages.flat();
-      }),
-    );
-    const ptr = beats.map(() => 0);
-    let accSec = 0;
-    let clipIdx = 0;
-    while (accSec < targetSec) {
-      let progressed = false;
-      for (let bi = 0; bi < beats.length && accSec < targetSec; bi++) {
-        const b = beats[bi];
-        while (ptr[bi] < beatCands[bi].length) {
-          const c = beatCands[bi][ptr[bi]++];
+        const out: PexelsVideo[] = [];
+        for (let k = 0; k < Math.max(...lists.map((l) => l.length), 0); k++) {
+          for (const l of lists) if (l[k]) out.push(l[k]);
+        }
+        return out;
+      };
+      let cands = await fetchCands(1);
+      let page = 1;
+      let ptr = 0;
+      let rejPeople = 0;
+      for (let shot = 0; shot < nShots; shot++) {
+        let done = false;
+        while (!done) {
+          if (ptr >= cands.length) {
+            if (page >= 3) break;
+            page++;
+            cands = await fetchCands(page);
+            ptr = 0;
+            if (!cands.length) break;
+          }
+          const c = cands[ptr++];
           if (usedElsewhere(c)) continue;
-          const tmpDl = path.join(pexelsDir, `.dl-${slug}-${clipIdx}.mp4`);
+          usedPexelsIds.add(c.id); // giữ chỗ ngay (beat khác chạy song song)
+          const tag = `b${String(b.i).padStart(2, "0")}-${String(shot).padStart(2, "0")}`;
+          const tmpDl = path.join(pexelsDir, `.dl-${slug}-${tag}.mp4`);
           try {
             await downloadPexelsVideo(c.fileUrl, tmpDl);
           } catch {
+            usedPexelsIds.delete(c.id);
             continue;
           }
           if (PEOPLE_CHECK && (await clipHasPeople(tmpDl))) {
             fs.rmSync(tmpDl, { force: true });
+            rejPeople++;
             continue;
           }
-          const rel = `${pexelsSub}/${slug}-${String(clipIdx).padStart(2, "0")}.mp4`;
-          const outAbs = path.join(footageDir, rel);
-          prepPexels(tmpDl, outAbs, outW, outH);
+          const rel = `${pexelsSub}/${slug}-${tag}.mp4`;
+          prepPexels(tmpDl, path.join(footageDir, rel), outW, outH, shotLen);
           fs.rmSync(tmpDl, { force: true });
-          const dur = probeSec(outAbs);
-          usedPexelsIds.add(c.id);
           newIds.push(c.id);
-          chosen.push(rel);
+          beatClips[b.i].push(rel);
           attributions.push({ file: rel, author: c.author, url: c.authorUrl });
-          accSec += dur;
           pexelsUsed++;
-          clipIdx++;
-          progressed = true;
-          console.log(`  [${accSec.toFixed(0)}/${targetSec.toFixed(0)}s] "${b.query}" → ${rel} (${dur.toFixed(0)}s, by ${c.author})`);
-          break;
+          done = true;
         }
+        if (!done) break; // hết ứng viên → phần còn lại lấp bằng clip đã có của beat
       }
-      if (!progressed) {
-        console.warn(`[footage-plan] hết ứng viên ở ${accSec.toFixed(0)}s < ${targetSec.toFixed(0)}s → có thể lặp nhẹ ở cuối.`);
-        break;
+      // Thiếu shot → lặp lại clip của chính beat (vẫn đúng ý) cho đủ thời lượng.
+      const got = beatClips[b.i].length;
+      if (got > 0 && got < nShots) {
+        for (let k = got; k < nShots; k++) beatClips[b.i].push(beatClips[b.i][k % got]);
+      }
+      report.push({
+        beat: `#${b.i} ${fmtMmSs(b.startSec)} ${sl.label}`,
+        idea: sl.idea,
+        queries: sl.queries,
+        match: `${got}/${nShots} shot × ${shotLen.toFixed(1)}s${rejPeople ? ` [bỏ ${rejPeople} clip có người]` : ""}`,
+        clips: beatClips[b.i],
+        score: 0,
+      });
+      console.log(`  #${b.i} [${fmtMmSs(b.startSec)}] ${sl.label} → ${got}/${nShots} shot  (${sl.queries.join(" | ")})`);
+    };
+
+    // Pool song song theo beat.
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(BEAT_CONCURRENCY, timedBeats.length) }, async () => {
+        while (next < timedBeats.length) await fillBeat(timedBeats[next++]);
+      }),
+    );
+    // Beat trắng (không tải được clip nào) → mượn clip beat trước để không hụt thời lượng.
+    for (let k = 0; k < timedBeats.length; k++) {
+      if (!beatClips[k].length) {
+        const prev = beatClips.slice(0, k).reverse().find((x) => x.length) ?? beatClips.find((x) => x.length) ?? [];
+        const nShots = Math.max(1, Math.round((timedBeats[k].endSec - timedBeats[k].startSec) / shotSec));
+        for (let n = 0; n < nShots && prev.length; n++) beatClips[k].push(prev[n % prev.length]);
+        console.warn(`[footage-plan] ⚠ beat #${k} không có clip → mượn clip beat lân cận`);
       }
     }
+    chosen.push(...beatClips.flat());
+    report.sort((a, b) => String(a.beat).localeCompare(String(b.beat), undefined, { numeric: true }));
   } else {
 
   // ===== Chế độ MIX self-filmed + Pexels =====
@@ -402,7 +608,7 @@ export async function generateFootagePlan(
     footage: chosen,
     pexelsAttributions: attributions,
   };
-  const planPath = path.resolve("tmp", `${slug}${landscape ? ".yt" : ""}.footage-plan.json`);
+  const planPath = path.resolve("tmp", `${slug}${sfx}.footage-plan.json`);
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2));
   console.log(`\n[footage-plan] ✓ ${planPath}`);
   console.log(`  local dùng: ${chosen.filter((c) => !c.startsWith(`${pexelsSub}/`)).length}, pexels: ${pexelsUsed}`);
@@ -428,6 +634,11 @@ export async function generateFootagePlan(
       latest.footageCredit = credit;
     }
     fs.writeFileSync(jsonPath, JSON.stringify(latest, null, 2));
+    // Dọn clip Pexels cũ của slug không còn dùng (chạy lại footage-plan).
+    const keep = new Set(chosen.map((c) => path.basename(c)));
+    for (const f of fs.readdirSync(pexelsDir)) {
+      if (f.startsWith(`${slug}-`) && !keep.has(f)) fs.rmSync(path.join(pexelsDir, f), { force: true });
+    }
     console.log(
       `[footage-plan] ✓ đã ghi episode.${landscape ? "footageLandscape" : "footage"} (${chosen.length}) vào ${jsonPath}`,
     );
@@ -449,20 +660,39 @@ const isMain = (() => {
 if (isMain) {
   const slug = process.argv[2];
   if (!slug) {
-    console.error("Usage: npx tsx podcast/scripts/footage-plan.ts <slug> [--apply] [--all-pexels] [--landscape] [--max-pexels=N]");
+    console.error(
+      "Usage: npx tsx podcast/scripts/footage-plan.ts <slug> [--all-pexels|--landscape] [--brief] [--shotlist=<file>] [--apply] [--max-pexels=N]",
+    );
     process.exit(1);
   }
   const apply = process.argv.includes("--apply");
   const allPexels = process.argv.includes("--all-pexels");
   const landscape = process.argv.includes("--landscape");
+  const brief = process.argv.includes("--brief");
+  const sl = process.argv.find((a) => a.startsWith("--shotlist="));
   const mp = process.argv.find((a) => /^--max-pexels=\d+$/.test(a));
+  // Lưới an toàn: nếu event loop cạn khi plan chưa xong (promise treo) → báo lỗi
+  // + exit 1 thay vì thoát im lặng exit 0 mà chưa ghi episode.
+  let finished = false;
+  process.on("beforeExit", () => {
+    if (!finished) {
+      console.error("[footage-plan] FAIL: thoát giữa chừng (có tác vụ treo) — CHƯA ghi episode, chạy lại.");
+      process.exit(1);
+    }
+  });
   generateFootagePlan(slug, {
     apply,
     allPexels,
     landscape,
+    brief,
+    shotlistPath: sl ? sl.slice("--shotlist=".length) : undefined,
     maxPexels: mp ? Number(mp.split("=")[1]) : undefined,
-  }).catch((e: unknown) => {
-    console.error("[footage-plan] FAIL:", e);
-    process.exit(1);
-  });
+  })
+    .then(() => {
+      finished = true;
+    })
+    .catch((e: unknown) => {
+      console.error("[footage-plan] FAIL:", e);
+      process.exit(1);
+    });
 }

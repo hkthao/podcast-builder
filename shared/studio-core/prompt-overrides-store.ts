@@ -20,6 +20,7 @@ import {
   COVER_PROMPT_SYSTEM_PROMPT,
   COVER_PROMPT_YT_SYSTEM_PROMPT,
 } from "../../podcast/server/lib/cover-prompt-store";
+import { FOOTAGE_SHOTLIST_SYSTEM_PROMPT } from "../../podcast/server/lib/footage-shotlist-prompt";
 
 export type PromptKey =
   | "podcast.brainstorm"
@@ -28,7 +29,8 @@ export type PromptKey =
   | "podcast.nlm-prompt"
   | "podcast.script"
   | "podcast.cover-prompt"
-  | "podcast.cover-prompt-yt";
+  | "podcast.cover-prompt-yt"
+  | "podcast.footage-shotlist";
 
 export type PromptMeta = {
   key: PromptKey;
@@ -106,6 +108,14 @@ const REGISTRY: Array<{
       "Meta prompt — chỉ định LLM viết prompt (tiếng Anh) tạo thumbnail YouTube ngang 16:9 style clay pastel ByteCast: tiêu đề tập đúng nguyên văn (chữ lớn) + 1 vật kể chuyện, bố cục trái-phải, đọc được ở 320px.",
     usedBy: "podcast/server/routes/episodes.ts → cover-prompt endpoint (variant=landscape)",
     getDefault: () => COVER_PROMPT_YT_SYSTEM_PROMPT,
+  },
+  {
+    key: "podcast.footage-shotlist",
+    label: "Shot-list footage (bám nội dung từng đoạn)",
+    description:
+      "Luật chọn b-roll cho MỌI tập: mỗi beat ~45s lời thoại → 3 query Pexels là ẩn dụ hình ảnh cho đúng ý đoạn, KHÔNG người, nội dung > màu. Nguyên tắc bố cục khung + thư viện mô-típ (podcast/data/footage-motifs.json) được ghép thêm vào nội dung mỗi tập.",
+    usedBy: "podcast/scripts/footage-plan.ts (--brief cho Claude / OpenAI dự phòng)",
+    getDefault: () => FOOTAGE_SHOTLIST_SYSTEM_PROMPT,
   },
 ];
 

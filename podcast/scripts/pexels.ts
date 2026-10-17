@@ -234,11 +234,23 @@ export async function downloadPexelsVideo(
             return reject(new Error(`Tải Pexels lỗi HTTP ${res.statusCode}`));
           }
           const f = fs.createWriteStream(dest);
+          // Luồng tải bị ngắt giữa chừng (mất mạng / CDN cắt) → PHẢI reject; nếu
+          // không, promise treo mãi và Node thoát im lặng (exit 0) giữa footage-plan.
+          const fail = (e: Error) => {
+            f.destroy();
+            reject(e);
+          };
+          res.on("aborted", () => fail(new Error("Tải Pexels bị ngắt giữa chừng")));
+          res.on("error", fail);
           res.pipe(f);
           f.on("finish", () => f.close(() => resolve()));
           f.on("error", reject);
         })
-        .on("error", reject);
+        .on("error", reject)
+        // Không nhận thêm dữ liệu 60s → huỷ (tránh treo vô hạn).
+        .setTimeout(60_000, function (this: import("node:http").ClientRequest) {
+          this.destroy(new Error("Tải Pexels quá 60s không có dữ liệu"));
+        });
     };
     go(fileUrl, 0);
   });
