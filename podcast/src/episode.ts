@@ -85,6 +85,12 @@ export const EpisodeConfigSchema = z.object({
    * thumbnail YouTube. Null → bản 16:9 dùng cover dọc (contain + nền mờ).
    */
   coverImageLandscape: z.string().nullable().default(null),
+  /**
+   * Prompt tạo ảnh cover 9:16 / thumbnail 16:9 (Midjourney/Flux) — do Claude
+   * Code tự viết qua `cover-prompt.ts` (miễn phí), UI chỉ hiển thị + copy.
+   */
+  coverPrompt: z.string().nullable().default(null),
+  coverPromptLandscape: z.string().nullable().default(null),
   // ────── Publishing workflow (tab "Đăng") ──────
   /** Trạng thái publish: draft, ready, scheduled (đã lên lịch FB), published (đã đăng). */
   publishStatus: z.enum(["draft", "ready", "scheduled", "published"]).default("draft"),
@@ -119,6 +125,22 @@ export const EpisodeConfigSchema = z.object({
   /** Playlist đã chọn (chỉ lưu để nhắc thêm tay — API không cho tự thêm). */
   fbPlaylistId: z.string().nullable().default(null),
   fbPlaylistName: z.string().nullable().default(null),
+  // ────── Đăng YouTube (bản 16:9, upload TAY — app chỉ soạn data + lưu kết quả) ──────
+  /** Ghi công footage NGANG (Pexels) của bản YouTube — footage-plan --landscape tự điền. */
+  footageCreditLandscape: z.string().nullable().default(null),
+  /** Tiêu đề video YouTube (≤100 ký tự). Null → dùng title tập. */
+  ytTitle: z.string().nullable().default(null),
+  /** Phần mô tả do người viết (chapter + công bố AI được ghép tự động khi copy). */
+  ytDescription: z.string().nullable().default(null),
+  /** Tags YouTube (ô "Thẻ" trong Studio). */
+  ytTags: z.array(z.string()).default([]),
+  /** Hashtag YouTube (3 cái đầu hiện trên tiêu đề video). */
+  ytHashtags: z.array(z.string()).default([]),
+  /** Trạng thái đăng YouTube — tách khỏi publishStatus (Facebook). */
+  ytPublishStatus: z.enum(["draft", "published"]).default("draft"),
+  ytPublishedAt: z.string().nullable().default(null),
+  /** Link video YouTube sau khi upload tay. */
+  ytUrl: z.string().nullable().default(null),
 });
 
 export type EpisodeConfig = z.infer<typeof EpisodeConfigSchema>;
@@ -161,6 +183,8 @@ export const buildEpisodeTemplate = (
   coverFit: "cover",
   coverPosition: "center",
   coverImageLandscape: null,
+  coverPrompt: null,
+  coverPromptLandscape: null,
   publishStatus: "draft",
   publishedAt: null,
   scheduledPublishTime: null,
@@ -175,4 +199,12 @@ export const buildEpisodeTemplate = (
   fbPermalink: null,
   fbPlaylistId: null,
   fbPlaylistName: null,
+  footageCreditLandscape: null,
+  ytTitle: null,
+  ytDescription: null,
+  ytTags: [],
+  ytHashtags: [],
+  ytPublishStatus: "draft",
+  ytPublishedAt: null,
+  ytUrl: null,
 });

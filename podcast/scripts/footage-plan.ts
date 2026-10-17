@@ -419,8 +419,9 @@ export async function generateFootagePlan(
     const authors = [...new Set(attributions.map((a) => a.author.trim()).filter(Boolean))];
     const credit = authors.length ? `Footage: ${authors.join(", ")} (Pexels)` : null;
     if (landscape) {
-      // footageCredit giữ cho bản FB; credit bản YouTube in ra để dán vào mô tả.
+      // Credit riêng cho bản YouTube (footageCredit giữ cho bản FB).
       latest.footageLandscape = chosen;
+      latest.footageCreditLandscape = credit;
       if (credit) console.log(`  YouTube credit: ${credit}`);
     } else {
       latest.footage = chosen;

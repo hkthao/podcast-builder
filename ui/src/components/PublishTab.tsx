@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock,
-  Copy,
   Check,
   Download,
   ExternalLink,
@@ -18,7 +17,6 @@ import {
   X as XIcon,
   Plus,
   ShieldCheck,
-  ChevronDown,
 } from "lucide-react";
 import {
   api,
@@ -28,7 +26,7 @@ import {
   type EpisodeSummary,
   type LLMProvider,
 } from "@/lib/api";
-import { Facebook } from "lucide-react";
+import { Facebook, Youtube } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,40 +35,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  BRAND_NAME,
+  buildDisclosure,
+  CollapsibleCard,
+  CopyButton,
+  CopyChip,
+} from "@/components/publish-ui";
+import { YouTubePublishPanel } from "@/components/YouTubePublishPanel";
 
 /** FB Reels best practice: 3-5 hashtags max. */
 const MAX_HASHTAGS = 5;
-
-/** Tên brand mặc định cho phần ghi công khi scriptCredit để trống. */
-const BRAND_NAME = "ByteCast Tech";
-
-/**
- * Dựng khối "công bố AI + ghi công" chèn vào cuối mô tả khi đăng.
- * Đáp ứng yêu cầu originality của Meta: công bố nội dung AI + ghi rõ đóng góp
- * người thật (kịch bản gốc, biên tập, nguồn). Xem docs/originality-upgrade-plan.md §5.1.
- */
-function buildDisclosure(opts: {
-  aiAssisted: boolean;
-  editor: string;
-  musicCredit: string;
-  footageCredit: string;
-  sources: string[];
-}): string {
-  const lines: string[] = [];
-  if (opts.aiAssisted) {
-    lines.push(
-      `Kịch bản gốc do ${opts.editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${BRAND_NAME} định hướng và biên tập.`,
-    );
-  } else {
-    lines.push(`Kịch bản gốc do ${opts.editor} biên soạn và biên tập.`);
-  }
-  if (opts.musicCredit) lines.push(`Nhạc nền: ${opts.musicCredit}.`);
-  if (opts.footageCredit) lines.push(`${opts.footageCredit}.`);
-  if (opts.sources.length) {
-    lines.push(`Nguồn tham khảo: ${opts.sources.join("; ")}.`);
-  }
-  return lines.join("\n");
-}
 
 /** Curated short list — FB ưu tiên ÍT mà RELEVANT. User add custom thêm. */
 const DEFAULT_HASHTAGS = [
@@ -104,7 +79,66 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 const toLocalInputValue = (d: Date) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
+/**
+ * Tab Đăng chia 2 nền tảng — data đăng khác nhau: Facebook (Reel dọc 9:16,
+ * caption + hashtag + đăng thẳng qua API) và YouTube (bản 16:9, tiêu đề/mô tả/
+ * chapter/tags, upload tay).
+ */
 export function PublishTab({
+  ep,
+  files,
+  loading,
+}: {
+  ep: EpisodeSummary;
+  files: EpisodeFiles;
+  loading: boolean;
+}) {
+  const [platform, setPlatform] = useState<"facebook" | "youtube">("facebook");
+  const tabs = [
+    {
+      key: "facebook" as const,
+      label: "Facebook 9:16",
+      icon: <Facebook className="size-3.5" />,
+      done: ep.config.publishStatus === "published",
+    },
+    {
+      key: "youtube" as const,
+      label: "YouTube 16:9",
+      icon: <Youtube className="size-3.5" />,
+      done: ep.config.ytPublishStatus === "published",
+    },
+  ];
+  return (
+    <>
+      <div className="mb-4 flex gap-1 flex-wrap text-xs">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setPlatform(t.key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors whitespace-nowrap",
+              platform === t.key
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground",
+            )}
+          >
+            {t.icon}
+            {t.label}
+            {t.done && <CheckCircle2 className="size-3.5 text-accent" />}
+          </button>
+        ))}
+      </div>
+      {platform === "facebook" ? (
+        <FacebookPublishTab ep={ep} files={files} loading={loading} />
+      ) : (
+        <YouTubePublishPanel ep={ep} files={files} loading={loading} />
+      )}
+    </>
+  );
+}
+
+function FacebookPublishTab({
   ep,
   files,
   loading,
@@ -374,7 +408,7 @@ export function PublishTab({
               </div>
               <p className="mt-1.5 text-[10px] text-muted-foreground">
                 {isUserCover
-                  ? "Ảnh user upload (Cấu hình → Ảnh cover)"
+                  ? "Ảnh user upload (Render → Facebook 9:16 → Ảnh cover)"
                   : "Thumbnail tự gen từ video render"}
               </p>
             </div>
@@ -1174,117 +1208,6 @@ function FacebookPublishCard({
         </Button>
       </footer>
     </Card>
-  );
-}
-
-/**
- * Card có nút thu gọn/mở rộng. Header khớp style các card trong PublishTab
- * (icon + title + phần phải), bấm header để toggle. Nội dung + footer bọc trong
- * children — ẩn khi thu gọn.
- */
-function CollapsibleCard({
-  icon,
-  title,
-  headerRight,
-  defaultOpen = true,
-  cardClassName,
-  children,
-}: {
-  icon?: React.ReactNode;
-  title: React.ReactNode;
-  headerRight?: React.ReactNode;
-  defaultOpen?: boolean;
-  cardClassName?: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <Card className={cn("p-0 overflow-hidden", cardClassName)}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className={cn(
-          "w-full px-5 py-3 flex items-center gap-2 bg-secondary/30 text-left transition-colors hover:bg-secondary/50",
-          open && "border-b",
-        )}
-      >
-        {icon}
-        <span className="font-medium text-sm">{title}</span>
-        <span className="ml-auto flex items-center gap-2">
-          {headerRight}
-          <ChevronDown
-            className={cn(
-              "size-4 text-muted-foreground transition-transform",
-              !open && "-rotate-90",
-            )}
-          />
-        </span>
-      </button>
-      {open && children}
-    </Card>
-  );
-}
-
-function CopyButton({
-  text,
-  label,
-  disabled,
-}: {
-  text: string;
-  label: string;
-  disabled?: boolean;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={disabled}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          alert("Clipboard không khả dụng — copy thủ công.");
-        }
-      }}
-    >
-      {copied ? (
-        <Check className="size-3.5 text-accent" />
-      ) : (
-        <Copy className="size-3.5" />
-      )}
-      {copied ? "Đã copy" : label}
-    </Button>
-  );
-}
-
-function CopyChip({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className={cn(
-        "text-[10px] px-2 py-1 rounded border inline-flex items-center gap-1 transition-colors",
-        copied
-          ? "border-accent bg-accent/20 text-accent"
-          : "border-input hover:bg-secondary text-muted-foreground",
-      )}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          /* ignore */
-        }
-      }}
-    >
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-      {copied ? "Đã copy" : label}
-    </button>
   );
 }
 

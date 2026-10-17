@@ -224,6 +224,8 @@ const buildTemplate = (
   coverFit: "cover",
   coverPosition: "center",
   coverImageLandscape: null,
+  coverPrompt: null,
+  coverPromptLandscape: null,
   publishStatus: "draft",
   publishedAt: null,
   scheduledPublishTime: null,
@@ -238,6 +240,14 @@ const buildTemplate = (
   fbPermalink: null,
   fbPlaylistId: null,
   fbPlaylistName: null,
+  footageCreditLandscape: null,
+  ytTitle: null,
+  ytDescription: null,
+  ytTags: [],
+  ytHashtags: [],
+  ytPublishStatus: "draft",
+  ytPublishedAt: null,
+  ytUrl: null,
 });
 
 /**

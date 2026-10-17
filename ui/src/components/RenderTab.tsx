@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 const PHASES: Array<{ key: RenderPhase; label: string }> = [
   { key: "process-audio", label: "Xử lý audio (loudness norm)" },
   { key: "transcribe", label: "Whisper transcribe" },
-  { key: "spell-fix", label: "Sửa chính tả (OpenAI)" },
+  { key: "spell-fix", label: "Gom câu transcript" },
   { key: "plan-episode", label: "Lên kế hoạch cảnh" },
   { key: "bundle", label: "Bundle Remotion" },
   { key: "render", label: "Render frame" },

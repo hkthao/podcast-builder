@@ -88,7 +88,9 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         f.coverImage === ep.config.coverImage &&
         f.coverImageLandscape === ep.config.coverImageLandscape &&
         f.coverFit === ep.config.coverFit &&
-        f.coverPosition === ep.config.coverPosition
+        f.coverPosition === ep.config.coverPosition &&
+        f.coverPrompt === ep.config.coverPrompt &&
+        f.coverPromptLandscape === ep.config.coverPromptLandscape
       )
         return f;
       const covers = {
@@ -96,6 +98,8 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         coverImageLandscape: ep.config.coverImageLandscape,
         coverFit: ep.config.coverFit,
         coverPosition: ep.config.coverPosition,
+        coverPrompt: ep.config.coverPrompt,
+        coverPromptLandscape: ep.config.coverPromptLandscape,
       };
       try {
         const snap = JSON.parse(lastSavedSnapshot.current) as EpisodeConfig;
@@ -110,6 +114,8 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
     ep.config.coverImageLandscape,
     ep.config.coverFit,
     ep.config.coverPosition,
+    ep.config.coverPrompt,
+    ep.config.coverPromptLandscape,
   ]);
 
   // Auto-save debounce

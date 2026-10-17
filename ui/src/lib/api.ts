@@ -53,6 +53,9 @@ export type EpisodeConfig = {
   coverPosition: "top" | "center" | "bottom";
   /** Ảnh cover 16:9 cho bản YouTube (null → dùng cover dọc). */
   coverImageLandscape: string | null;
+  /** Prompt tạo ảnh cover 9:16 / thumbnail 16:9 — Claude Code viết qua cover-prompt.ts. */
+  coverPrompt: string | null;
+  coverPromptLandscape: string | null;
   publishStatus: "draft" | "ready" | "scheduled" | "published";
   publishedAt: string | null;
   scheduledPublishTime: string | null;
@@ -68,6 +71,15 @@ export type EpisodeConfig = {
   fbPermalink: string | null;
   fbPlaylistId: string | null;
   fbPlaylistName: string | null;
+  /** Đăng YouTube (bản 16:9, upload tay). */
+  footageCreditLandscape: string | null;
+  ytTitle: string | null;
+  ytDescription: string | null;
+  ytTags: string[];
+  ytHashtags: string[];
+  ytPublishStatus: "draft" | "published";
+  ytPublishedAt: string | null;
+  ytUrl: string | null;
 };
 
 export type EpisodeSummary = {

@@ -377,7 +377,7 @@ async function runJob(job: JobInternal): Promise<void> {
       checkAbort();
 
       // 3. Spell fix
-      setPhase(job, "spell-fix", 30, "Sửa chính tả qua OpenAI…");
+      setPhase(job, "spell-fix", 30, "Gom câu transcript (sửa chính tả bằng Claude)…");
       await spellFix(transcriptJson, correctedJson, { signal });
       checkAbort();
     } else if (job.jobType === "render") {

@@ -26,10 +26,26 @@ export function CoverPromptPanel({
   });
   const [provider, setProvider] = useState<"openai" | "ollama">("openai");
   const [model, setModel] = useState<string>("gpt-4o");
-  const [generated, setGenerated] = useState<string>("");
+  // Prompt đã lưu trong config (Claude Code viết qua cover-prompt.ts — miễn phí).
+  const field = variant === "landscape" ? "coverPromptLandscape" : "coverPrompt";
+  const saved = ep.config[field] ?? "";
+  const [generated, setGenerated] = useState<string>(saved);
   const [themeColor, setThemeColor] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showOpenAI, setShowOpenAI] = useState(false);
   const qc = useQueryClient();
+  // Claude ghi prompt mới vào config (fs watcher → ep đổi) → hiện ngay.
+  useEffect(() => {
+    setGenerated(saved);
+  }, [saved]);
+  const savePromptMut = useMutation({
+    mutationFn: (text: string) =>
+      api.saveEpisodeConfig(ep.name, { ...ep.config, [field]: text.trim() || null }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+    },
+  });
+  const cliFlag = variant === "landscape" ? " --landscape" : "";
   const applyAccentMut = useMutation({
     mutationFn: (hex: string) =>
       api.saveEpisodeConfig(ep.name, { ...ep.config, accentColor: hex }),
@@ -52,6 +68,7 @@ export function CoverPromptPanel({
     onSuccess: (res) => {
       setGenerated(res.prompt);
       setThemeColor(res.themeColor);
+      savePromptMut.mutate(res.prompt);
     },
   });
 
@@ -86,6 +103,9 @@ export function CoverPromptPanel({
         <Textarea
           value={generated}
           onChange={(e) => setGenerated(e.target.value)}
+          onBlur={() => {
+            if (generated !== saved) savePromptMut.mutate(generated);
+          }}
           rows={Math.min(20, Math.max(8, generated.split("\n").length + 1))}
           className="font-mono text-xs leading-relaxed"
         />
@@ -109,6 +129,24 @@ export function CoverPromptPanel({
           <strong>Settings → System prompts</strong>.
         </p>
       )}
+
+      {/* Claude Code tự viết prompt (miễn phí) — hướng dẫn lệnh */}
+      <div className="mt-3 rounded-md bg-secondary/30 p-2.5 text-[11px] text-muted-foreground space-y-1">
+        <p>
+          <strong className="text-foreground">Claude Code tự viết (miễn phí):</strong>{" "}
+          bảo Claude "viết prompt {variant === "landscape" ? "thumbnail YouTube" : "cover"} cho tập này" —
+          Claude chạy:
+        </p>
+        <code className="block font-mono break-all">
+          npx tsx podcast/scripts/cover-prompt.ts brief {ep.name}
+          {cliFlag}
+        </code>
+        <code className="block font-mono break-all">
+          npx tsx podcast/scripts/cover-prompt.ts apply {ep.name} &lt;file&gt;
+          {cliFlag}
+        </code>
+        <p>Prompt lưu vào tập và hiện ở đây để copy.</p>
+      </div>
 
       {themeColor && (
         <div className="mt-3 flex items-center gap-2 flex-wrap text-xs">
@@ -142,70 +180,78 @@ export function CoverPromptPanel({
         </div>
       )}
 
-      {/* Footer actions — căn phải */}
+      {/* Footer: Copy luôn có; gen qua API (OpenAI/Ollama) ẩn sau nút — tốn phí */}
       <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2 flex-wrap">
-        <select
-          value={provider}
-          onChange={(e) => setProvider(e.target.value as "openai" | "ollama")}
-          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-          title="LLM provider"
-        >
-          <option
-            value="openai"
-            disabled={!!modelsQ.data && modelsQ.data.openai.length === 0}
-          >
-            OpenAI
-          </option>
-          <option
-            value="ollama"
-            disabled={!!modelsQ.data && modelsQ.data.ollama.length === 0}
-          >
-            Ollama
-          </option>
-        </select>
-        <select
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-2 text-xs max-w-[200px]"
-          title="LLM model"
-        >
-          {(modelsQ.data?.[provider] ?? []).map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-        {generated && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={copyPrompt}
-            title="Copy prompt vào clipboard"
-          >
-            {copied ? (
-              <Check className="size-3.5 text-accent" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-            {copied ? "Đã copy" : "Copy"}
-          </Button>
+        {showOpenAI && (
+          <>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as "openai" | "ollama")}
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+              title="LLM provider"
+            >
+              <option
+                value="openai"
+                disabled={!!modelsQ.data && modelsQ.data.openai.length === 0}
+              >
+                OpenAI
+              </option>
+              <option
+                value="ollama"
+                disabled={!!modelsQ.data && modelsQ.data.ollama.length === 0}
+              >
+                Ollama
+              </option>
+            </select>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs max-w-[200px]"
+              title="LLM model"
+            >
+              {(modelsQ.data?.[provider] ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => genMut.mutate()}
+              disabled={genMut.isPending || !model}
+              title="Gọi API LLM — OpenAI tốn phí"
+            >
+              {genMut.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="size-3.5" />
+              )}
+              {genMut.isPending ? "Đang gen…" : "Gen qua API"}
+            </Button>
+          </>
         )}
         <Button
           size="sm"
-          variant="outline"
-          onClick={() => genMut.mutate()}
-          disabled={genMut.isPending || !model}
+          variant="ghost"
+          className="text-xs text-muted-foreground"
+          onClick={() => setShowOpenAI((v) => !v)}
         >
-          {genMut.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
+          {showOpenAI ? "Ẩn gen qua API" : "Gen qua API (tốn phí)…"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={copyPrompt}
+          disabled={!generated}
+          title="Copy prompt vào clipboard"
+        >
+          {copied ? (
+            <Check className="size-3.5 text-accent" />
           ) : (
-            <Sparkles className="size-3.5" />
+            <Copy className="size-3.5" />
           )}
-          {genMut.isPending
-            ? "Đang gen…"
-            : generated
-              ? "Gen lại"
-              : "Gen prompt"}
+          {copied ? "Đã copy" : "Copy prompt"}
         </Button>
       </div>
     </div>

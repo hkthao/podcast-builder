@@ -158,9 +158,13 @@ export async function spellFix(
     }
     console.log(`[spell-fix] cache stale (src mới hơn), regen...`);
   }
-  if (!process.env.OPENAI_API_KEY) {
+  // MẶC ĐỊNH KHÔNG gọi OpenAI (tốn phí): chỉ gom token → câu (đúng format
+  // sentence-level) để caption/plan chạy được; sửa chính tả do Claude Code làm
+  // qua spell-fix-manual.ts (dump → sửa → apply). Bật lại GPT: SPELL_FIX_OPENAI=1.
+  const useOpenAI = process.env.SPELL_FIX_OPENAI === "1";
+  if (useOpenAI && !process.env.OPENAI_API_KEY) {
     console.warn(
-      `[spell-fix] ⚠ Thiếu OPENAI_API_KEY — copy raw (KHÔNG sửa lỗi).`,
+      `[spell-fix] ⚠ SPELL_FIX_OPENAI=1 nhưng thiếu OPENAI_API_KEY — copy raw (KHÔNG sửa lỗi).`,
     );
     ensureDir(path.dirname(outPath));
     fs.copyFileSync(transcriptPath, outPath);
@@ -171,7 +175,9 @@ export async function spellFix(
   const tokens = transcript.transcription;
   const sentences = groupIntoSentences(tokens);
   console.log(
-    `[spell-fix] ${tokens.length} tokens → ${sentences.length} sentences, batch=${BATCH_SIZE}, conc=${CONCURRENCY}, model=${MODEL}`,
+    useOpenAI
+      ? `[spell-fix] ${tokens.length} tokens → ${sentences.length} sentences, batch=${BATCH_SIZE}, conc=${CONCURRENCY}, model=${MODEL}`
+      : `[spell-fix] ${tokens.length} tokens → ${sentences.length} câu — KHÔNG gọi OpenAI. Sửa chính tả bằng Claude: spell-fix-manual.ts dump/apply.`,
   );
 
   if (sentences.length === 0) {
@@ -180,13 +186,12 @@ export async function spellFix(
     return;
   }
 
-  const openai = new OpenAI();
   const correctedText = new Map<number, string>(
     sentences.map((s) => [s.id, s.text]),
   );
 
   const batches: FixItem[][] = [];
-  for (let i = 0; i < sentences.length; i += BATCH_SIZE) {
+  for (let i = 0; useOpenAI && i < sentences.length; i += BATCH_SIZE) {
     const batch = sentences
       .slice(i, i + BATCH_SIZE)
       .map((s) => ({ id: s.id, text: s.text }));
@@ -198,8 +203,9 @@ export async function spellFix(
   let rejectedItems = 0;
   let appliedItems = 0;
 
+  const openai = useOpenAI ? new OpenAI() : null;
   const t0 = Date.now();
-  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+  for (let i = 0; openai && i < batches.length; i += CONCURRENCY) {
     if (signal?.aborted) {
       const err = new Error("Cancelled by user");
       err.name = "AbortError";

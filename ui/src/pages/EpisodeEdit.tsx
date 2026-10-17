@@ -77,7 +77,7 @@ export function EpisodeEdit() {
     enabled: !!name,
   });
 
-  // Lần load đầu: nếu tập chưa có audio → mở thẳng tab "Âm thanh & Ảnh" để
+  // Lần load đầu: nếu tập chưa có audio → mở thẳng tab "Âm thanh" để
   // thấy ngay ô upload (trước đây panel này luôn hiện trên đầu).
   const didInitTab = useRef(false);
   useEffect(() => {
@@ -174,13 +174,13 @@ export function EpisodeEdit() {
         </Meta>
       </div>
 
-      {/* Tabs — Âm thanh & Ảnh / Nội dung / Render (gồm Cấu hình) / Footage / Đăng */}
+      {/* Tabs — Âm thanh / Nội dung / Footage / Render (gồm Cấu hình) / Đăng */}
       <div className="mb-4 flex flex-wrap gap-x-1 gap-y-0 border-b">
         <TabButton
           active={tab === "assets"}
           onClick={() => setTab("assets")}
           icon={<FileAudio2 className="size-4" />}
-          label={`Âm thanh & Ảnh${ep.audioPath ? " ✓" : " —"}`}
+          label={`Âm thanh${ep.audioPath ? " ✓" : " —"}`}
         />
         <TabButton
           active={tab === "content"}
@@ -193,16 +193,16 @@ export function EpisodeEdit() {
           }`}
         />
         <TabButton
-          active={tab === "render"}
-          onClick={() => setTab("render")}
-          icon={<Play className="size-4" />}
-          label={`Render${ep.hasOutput ? " ✓" : ""}`}
-        />
-        <TabButton
           active={tab === "footage"}
           onClick={() => setTab("footage")}
           icon={<Film className="size-4" />}
           label={`Footage${ep.config.footage.length > 0 ? ` (${ep.config.footage.length})` : ""}`}
+        />
+        <TabButton
+          active={tab === "render"}
+          onClick={() => setTab("render")}
+          icon={<Play className="size-4" />}
+          label={`Render${ep.hasOutput ? " ✓" : ""}`}
         />
         <TabButton
           active={tab === "publish"}
@@ -282,7 +282,7 @@ export function EpisodeEdit() {
           />
         </>
       )}
-      {tab === "footage" && <FootagePanel ep={ep} />}
+      {tab === "footage" && <FootageTab ep={ep} />}
       {tab === "publish" && (
         <PublishTab
           ep={ep}
@@ -1619,8 +1619,41 @@ function highlightMatches(text: string, query: string): string {
 /** Tab Footage — xem trước các clip footage dùng trong tập. */
 const FOOTAGE_PAGE_SIZE = 12;
 
-function FootagePanel({ ep }: { ep: EpisodeSummary }) {
-  const clips = ep.config.footage ?? [];
+/** Tab Footage chia 2 khung — bộ clip dọc (Facebook) và ngang (YouTube) riêng. */
+function FootageTab({ ep }: { ep: EpisodeSummary }) {
+  const [sub, setSub] = useState<"vertical" | "landscape">("vertical");
+  return (
+    <>
+      <div className="mb-4 flex gap-1 flex-wrap text-xs">
+        <SubTabButton
+          active={sub === "vertical"}
+          onClick={() => setSub("vertical")}
+          icon={<Film className="size-3.5" />}
+          label={`Facebook 9:16 · ${(ep.config.footage ?? []).length}`}
+        />
+        <SubTabButton
+          active={sub === "landscape"}
+          onClick={() => setSub("landscape")}
+          icon={<Film className="size-3.5" />}
+          label={`YouTube 16:9 · ${(ep.config.footageLandscape ?? []).length}`}
+        />
+      </div>
+      {/* key → reset trang khi đổi khung */}
+      <FootagePanel key={sub} ep={ep} format={sub} />
+    </>
+  );
+}
+
+function FootagePanel({
+  ep,
+  format,
+}: {
+  ep: EpisodeSummary;
+  format: "vertical" | "landscape";
+}) {
+  const landscape = format === "landscape";
+  const clips = (landscape ? ep.config.footageLandscape : ep.config.footage) ?? [];
+  const credit = landscape ? ep.config.footageCreditLandscape : ep.config.footageCredit;
   const [page, setPage] = useState(0);
   const srcOf = (clip: string) =>
     `/footage/${clip.split("/").map(encodeURIComponent).join("/")}`;
@@ -1632,28 +1665,45 @@ function FootagePanel({ ep }: { ep: EpisodeSummary }) {
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-1">
         <Film className="size-4 text-accent" />
-        <h3 className="font-medium">Footage dùng trong tập</h3>
+        <h3 className="font-medium">
+          Footage {landscape ? "YouTube 16:9" : "Facebook 9:16"}
+        </h3>
         <Badge variant="outline" className="text-[10px] ml-auto">
           {clips.length} clip
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground mb-4">
-        Các clip nền (theo thứ tự) sẽ lấp đầy video. Bấm play để xem trước từng
-        clip. Muốn đổi: chạy lại footage-plan hoặc sửa <code>footage</code> trong
-        cấu hình.
+      <p className="text-xs text-muted-foreground mb-2">
+        Các clip nền (theo thứ tự) sẽ lấp đầy video {landscape ? "bản YouTube" : "bản Facebook"}.
+        Bấm play để xem trước từng clip. Muốn đổi: chạy lại
       </p>
+      <code className="block mb-3 text-[11px] font-mono rounded bg-secondary/40 px-2 py-1 break-all">
+        npx tsx podcast/scripts/footage-plan.ts {ep.name}
+        {landscape ? " --landscape" : " --all-pexels"} --apply
+      </code>
+      {credit && (
+        <p className="text-xs text-muted-foreground mb-4">
+          <span className="font-medium text-foreground">Ghi công:</span> {credit}
+        </p>
+      )}
       {clips.length === 0 ? (
         <p className="text-sm text-muted-foreground italic">
-          Chưa gán footage cho tập này.
+          Chưa gán footage {landscape ? "ngang cho bản YouTube" : "cho tập này"}.
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div
+            className={cn(
+              "grid gap-3",
+              landscape
+                ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
+                : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4",
+            )}
+          >
             {pageClips.map((clip, i) => (
               <div key={clip} className="space-y-1">
                 <div
                   className="bg-black rounded-md overflow-hidden border"
-                  style={{ aspectRatio: "9/16" }}
+                  style={{ aspectRatio: landscape ? "16/9" : "9/16" }}
                 >
                   <video
                     src={srcOf(clip)}
@@ -1669,7 +1719,7 @@ function FootagePanel({ ep }: { ep: EpisodeSummary }) {
                   className="text-[10px] text-muted-foreground truncate"
                   title={clip}
                 >
-                  {start + i + 1}. {clip.replace(/^pexels\//, "")}
+                  {start + i + 1}. {clip.replace(/^pexels(-yt)?\//, "")}
                 </p>
               </div>
             ))}
