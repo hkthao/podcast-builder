@@ -786,7 +786,7 @@ function FacebookPublishTab({
 }
 
 /**
- * Đăng video render lên Trang Facebook dạng Reel (SSE). Mô tả = fullCaption đã
+ * Đăng video render lên Trang Facebook (SSE) — server tự chọn: ≤90s → Reel, dài hơn → video thường kèm tiêu đề + cover. Mô tả = fullCaption đã
  * dựng ở PublishTab (server dựng lại từ config đã lưu). Playlist chỉ để nhắc
  * thêm tay — Graph API không cho tự thêm Reel vào playlist.
  */
@@ -922,11 +922,11 @@ function FacebookPublishCard({
             ? `Đã lên lịch lúc ${new Date(d.scheduledAt).toLocaleString("vi-VN")}`
             : "Đã lên lịch",
         );
-        push("✓ Đã lên lịch Reel.", "text-accent");
+        push("✓ Đã lên lịch video.", "text-accent");
       } else {
         setStatusKind("success");
         setStatusText("Đã đăng");
-        push(d.permalink ? `✓ Đã đăng: ${d.permalink}` : "✓ Đã đăng Reel.", "text-accent");
+        push(d.permalink ? `✓ Đã đăng: ${d.permalink}` : "✓ Đã đăng video.", "text-accent");
       }
       qc.invalidateQueries({ queryKey: ["episode", ep.name] });
       qc.invalidateQueries({ queryKey: ["episodes"] });
@@ -970,7 +970,7 @@ function FacebookPublishCard({
     <Card className="p-0 overflow-hidden border-primary/30">
       <header className="px-5 py-3 border-b bg-primary/10 flex items-center gap-2">
         <Facebook className="size-4 text-primary" />
-        <span className="font-medium text-sm">Đăng thẳng lên Facebook Reel</span>
+        <span className="font-medium text-sm">Đăng thẳng lên Facebook</span>
         {headerBadge && (
           <Badge variant="outline" className={cn("ml-auto gap-1", headerBadge.cls)}>
             {headerBadge.icon} {headerBadge.label}
@@ -1157,11 +1157,11 @@ function FacebookPublishCard({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-accent hover:underline"
             >
-              Xem Reel đã đăng <ExternalLink className="size-3" />
+              Xem video đã đăng <ExternalLink className="size-3" />
             </a>
             {ep.config.fbPlaylistName && (
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Nhớ thêm vào playlist "{ep.config.fbPlaylistName}" (mở Reel → ⋯ → Thêm vào playlist).
+                Nhớ thêm vào playlist "{ep.config.fbPlaylistName}" (mở video → ⋯ → Thêm vào playlist).
               </p>
             )}
           </div>
@@ -1203,8 +1203,8 @@ function FacebookPublishCard({
           {scheduleOn
             ? "Lên lịch đăng"
             : publishedAt
-              ? "Đăng lại Reel"
-              : "Đăng lên Facebook Reel"}
+              ? "Đăng lại"
+              : "Đăng lên Facebook"}
         </Button>
       </footer>
     </Card>

@@ -1,5 +1,5 @@
 /**
- * facebook.ts — client tối giản cho Facebook Graph API để đăng Reel lên 1 Trang.
+ * facebook.ts — client tối giản cho Facebook Graph API để đăng video lên 1 Trang.
  *
  * Dùng Page Access Token dài hạn (user tự lấy + lưu qua Settings UI / .env). Không
  * làm OAuth flow ở đây — app chạy local, single-user.
@@ -10,12 +10,29 @@
  *   3) finish : POST /{page-id}/video_reels?upload_phase=finish&video_id=…&video_state=PUBLISHED&description=…
  * Sau finish, Reel còn "processing" → poll GET /{video_id}?fields=status tới khi xong,
  * rồi lấy permalink_url.
+ *
+ * Reels API CHỈ nhận video 3–90s (docs "Reels Publishing API"). Video dài hơn
+ * (podcast 12–18') đăng qua Reels bị đẩy vào luồng Reel ngắn → reach chết ~100-200
+ * view. Nên video >90s đi đường VIDEO THƯỜNG (docs "Page videos" — chunked upload):
+ *   1) start    : POST graph-video/{page-id}/videos upload_phase=start&file_size=…
+ *                 → { video_id, upload_session_id, start_offset, end_offset }
+ *   2) transfer : POST … upload_phase=transfer + start_offset + video_file_chunk
+ *                 (multipart) lặp tới khi start_offset == end_offset
+ *   3) finish   : POST … upload_phase=finish + title + description + thumb (ảnh
+ *                 cover) + published=false&scheduled_publish_time nếu lên lịch.
  */
 import fs from "node:fs";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
-/** Bump khi cần API mới hơn. */
-const GRAPH_VERSION = "v21.0";
+/** Bump khi cần API mới hơn (docs Meta hiện dùng v25.0). */
+const GRAPH_VERSION = "v25.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+/** Host upload video thường (/{page}/videos) theo docs Page videos. */
+const GRAPH_VIDEO = `https://graph-video.facebook.com/${GRAPH_VERSION}`;
+/** Giới hạn độ dài Reels API (docs: 3–90 giây). */
+const REEL_MAX_SECONDS = 90;
 
 export type FbProgress = (msg: string) => void;
 
@@ -432,7 +449,7 @@ const sleep = (ms: number, signal?: AbortSignal) =>
 
 /**
  * Poll trạng thái tới khi Reel "ready" hoặc lỗi. FB xử lý video mất vài chục giây.
- * maxTries×intervalMs ≈ 5 phút.
+ * maxTries×intervalMs ≈ 15 phút (video 15' xử lý lâu hơn Reel ngắn).
  */
 async function waitReady(
   token: string,
@@ -440,8 +457,8 @@ async function waitReady(
   onProgress?: FbProgress,
   signal?: AbortSignal,
 ): Promise<void> {
-  const maxTries = 100;
-  const intervalMs = 3000;
+  const maxTries = 180;
+  const intervalMs = 5000;
   let lastMsg = "";
   for (let i = 0; i < maxTries; i++) {
     const url = `${GRAPH}/${encodeURIComponent(videoId)}?fields=status&access_token=${encodeURIComponent(token)}`;
@@ -455,7 +472,7 @@ async function waitReady(
     const procErr = st?.processing_phase?.errors?.[0]?.message;
     const pubErr = st?.publishing_phase?.errors?.[0]?.message;
     if (vs === "error" || procErr || pubErr) {
-      throw new Error(`Facebook xử lý Reel lỗi: ${procErr || pubErr || "không rõ"}`);
+      throw new Error(`Facebook xử lý video lỗi: ${procErr || pubErr || "không rõ"}`);
     }
     if (vs === "ready" || pub === "complete") return;
 
@@ -466,7 +483,7 @@ async function waitReady(
     }
     await sleep(intervalMs, signal);
   }
-  throw new Error("Hết thời gian chờ Facebook xử lý (5 phút). Reel có thể vẫn đang xử lý — kiểm tra trên Trang.");
+  throw new Error("Hết thời gian chờ Facebook xử lý (15 phút). Video có thể vẫn đang xử lý — kiểm tra trên Trang.");
 }
 
 /** Lấy permalink công khai (best-effort, không có cũng không sao). */
@@ -486,18 +503,147 @@ async function fetchPermalink(token: string, videoId: string, signal?: AbortSign
   return null;
 }
 
-/** Đăng 1 file video (mp4 dọc) lên Trang dưới dạng Reel (đăng ngay hoặc lên lịch). */
+/** Độ dài video (giây) qua ffprobe; null nếu không đo được. */
+async function probeDuration(videoPath: string): Promise<number | null> {
+  try {
+    const { stdout } = await promisify(execFile)("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", videoPath,
+    ]);
+    const d = parseFloat(stdout.trim());
+    return Number.isFinite(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
+};
+
+/** POST multipart lên /{page}/videos (graph-video host). */
+async function postPageVideos(
+  pageId: string,
+  form: FormData,
+  signal?: AbortSignal,
+): Promise<any> {
+  const res = await fetch(`${GRAPH_VIDEO}/${encodeURIComponent(pageId)}/videos`, {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  const body = (await parseJson(res)) as any;
+  if (!res.ok || body?.error) {
+    throwGraphError(body, `Graph /videos lỗi (HTTP ${res.status})`);
+  }
+  return body;
+}
+
+/**
+ * Đăng video DÀI (>90s) qua /{page}/videos — chunked upload start/transfer/finish.
+ * Trả về video_id. Ảnh cover (thumbPath) gửi kèm ở pha finish làm thumbnail.
+ */
+async function uploadPageVideo(opts: {
+  token: string;
+  pageId: string;
+  videoPath: string;
+  title: string;
+  description: string;
+  thumbPath?: string | null;
+  scheduledPublishTime?: number;
+  onProgress?: FbProgress;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { token, pageId, videoPath, title, description, thumbPath, scheduledPublishTime, onProgress, signal } = opts;
+  const fileSize = fs.statSync(videoPath).size;
+
+  // 1) start
+  const startForm = new FormData();
+  startForm.set("access_token", token);
+  startForm.set("upload_phase", "start");
+  startForm.set("file_size", String(fileSize));
+  const st = await postPageVideos(pageId, startForm, signal);
+  const videoId: string | undefined = st.video_id;
+  const sessionId: string | undefined = st.upload_session_id;
+  if (!videoId || !sessionId) throw new Error("Graph không trả về video_id/upload_session_id ở pha start.");
+  let start = Number(st.start_offset ?? 0);
+  let end = Number(st.end_offset ?? 0);
+
+  // 2) transfer — FB tự quyết kích thước chunk qua start/end_offset.
+  const fh = await fs.promises.open(videoPath, "r");
+  try {
+    let lastPct = -1;
+    while (start < end) {
+      const len = end - start;
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, start);
+      let body: any;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const form = new FormData();
+          form.set("access_token", token);
+          form.set("upload_phase", "transfer");
+          form.set("upload_session_id", sessionId);
+          form.set("start_offset", String(start));
+          form.set("video_file_chunk", new Blob([buf]), "chunk");
+          body = await postPageVideos(pageId, form, signal);
+          break;
+        } catch (e) {
+          if (signal?.aborted || attempt >= 3) throw e;
+          onProgress?.(`Chunk tại byte ${start} lỗi (${e instanceof Error ? e.message : e}) — thử lại ${attempt + 1}/3…`);
+          await sleep(3000 * attempt, signal);
+        }
+      }
+      start = Number(body.start_offset);
+      end = Number(body.end_offset);
+      const pct = Math.floor((start / fileSize) * 100);
+      if (pct >= lastPct + 10 || start >= end) {
+        onProgress?.(`Đã tải ${Math.min(pct, 100)}%…`);
+        lastPct = pct;
+      }
+    }
+  } finally {
+    await fh.close();
+  }
+
+  // 3) finish — title + description + thumbnail + lịch.
+  const finForm = new FormData();
+  finForm.set("access_token", token);
+  finForm.set("upload_phase", "finish");
+  finForm.set("upload_session_id", sessionId);
+  finForm.set("title", title);
+  finForm.set("description", description);
+  if (thumbPath && fs.existsSync(thumbPath)) {
+    const mime = MIME_BY_EXT[path.extname(thumbPath).toLowerCase()] ?? "image/jpeg";
+    finForm.set("thumb", new Blob([fs.readFileSync(thumbPath)], { type: mime }), path.basename(thumbPath));
+  }
+  if (scheduledPublishTime && scheduledPublishTime > 0) {
+    finForm.set("published", "false");
+    finForm.set("scheduled_publish_time", String(scheduledPublishTime));
+  }
+  const fin = await postPageVideos(pageId, finForm, signal);
+  if (fin.success === false) throw new Error("Graph trả success=false ở pha finish.");
+  return videoId;
+}
+
+/**
+ * Đăng 1 file video lên Trang (đăng ngay hoặc lên lịch). Tự chọn đường theo độ dài:
+ * ≤90s → Reels API; dài hơn → video thường /{page}/videos (kèm title + thumbnail).
+ */
 export async function publishReel(opts: {
   token: string;
   pageIdOverride?: string;
   videoPath: string;
   description: string;
+  /** Tiêu đề video (chỉ dùng cho đường video thường; Reel không có title riêng). */
+  title?: string;
+  /** Ảnh thumbnail (cover) cho video thường. */
+  thumbPath?: string | null;
   /** Unix seconds — nếu có (>0) thì LÊN LỊCH thay vì đăng ngay. */
   scheduledPublishTime?: number;
   onProgress?: FbProgress;
   signal?: AbortSignal;
 }): Promise<PublishReelResult> {
-  const { token, pageIdOverride, videoPath, description, scheduledPublishTime, onProgress, signal } = opts;
+  const { token, pageIdOverride, videoPath, description, title, thumbPath, scheduledPublishTime, onProgress, signal } = opts;
   if (!fs.existsSync(videoPath)) {
     throw new Error(`Không tìm thấy video: ${videoPath} — hãy Assemble (ráp mp4) trước.`);
   }
@@ -506,28 +652,52 @@ export async function publishReel(opts: {
   onProgress?.("Đang xác định Trang từ token…");
   const page = await resolvePage(token, pageIdOverride, signal);
   onProgress?.(`Trang: ${page.name} (id ${page.id})`);
-  // TỪ ĐÂY dùng PAGE token (không dùng user token) cho mọi lệnh video_reels.
+  // TỪ ĐÂY dùng PAGE token (không dùng user token) cho mọi lệnh upload.
   const pageToken = page.token;
 
-  onProgress?.("Khởi tạo phiên upload Reel…");
-  const { videoId, uploadUrl } = await startReel(pageToken, page.id, signal);
-
+  const duration = await probeDuration(videoPath);
+  const asReel = duration !== null && duration <= REEL_MAX_SECONDS;
   const sizeMb = (fs.statSync(videoPath).size / 1024 / 1024).toFixed(1);
-  onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB)…`);
-  await uploadBinary(uploadUrl, pageToken, videoPath, signal);
+  const kind = asReel ? "Reel" : "video";
+  let videoId: string;
 
-  onProgress?.(isScheduled ? "Đang chốt & lên lịch Reel…" : "Đang chốt & xuất bản Reel…");
-  await finishReel(pageToken, page.id, videoId, description, scheduledPublishTime, signal);
+  if (asReel) {
+    onProgress?.(`Video ${duration!.toFixed(0)}s ≤ ${REEL_MAX_SECONDS}s → đăng dạng Reel.`);
+    onProgress?.("Khởi tạo phiên upload Reel…");
+    const s = await startReel(pageToken, page.id, signal);
+    videoId = s.videoId;
+    onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB)…`);
+    await uploadBinary(s.uploadUrl, pageToken, videoPath, signal);
+    onProgress?.(isScheduled ? "Đang chốt & lên lịch Reel…" : "Đang chốt & xuất bản Reel…");
+    await finishReel(pageToken, page.id, videoId, description, scheduledPublishTime, signal);
+  } else {
+    onProgress?.(
+      `Video ${duration !== null ? `${Math.round(duration / 60)} phút` : "(không đo được độ dài)"} > ${REEL_MAX_SECONDS}s → đăng dạng VIDEO thường (Reels API chỉ nhận 3–90s).`,
+    );
+    if (!thumbPath) onProgress?.("⚠ Không có ảnh cover — Facebook sẽ tự chọn khung hình làm thumbnail.");
+    onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB, chia chunk)…`);
+    videoId = await uploadPageVideo({
+      token: pageToken,
+      pageId: page.id,
+      videoPath,
+      title: title?.trim() || path.basename(videoPath, path.extname(videoPath)),
+      description,
+      thumbPath,
+      scheduledPublishTime,
+      onProgress,
+      signal,
+    });
+  }
 
   if (isScheduled) {
-    // Reel lên lịch chưa xử lý/hiển thị công khai ngay → không poll ready/permalink.
-    onProgress?.("✓ Đã lên lịch Reel thành công.");
+    // Video lên lịch chưa xử lý/hiển thị công khai ngay → không poll ready/permalink.
+    onProgress?.(`✓ Đã lên lịch ${kind} thành công.`);
     return { videoId, permalink: null, pageName: page.name, pageId: page.id, scheduled: true };
   }
 
   await waitReady(pageToken, videoId, onProgress, signal);
 
   const permalink = await fetchPermalink(pageToken, videoId, signal);
-  onProgress?.("✓ Đã đăng Reel thành công.");
+  onProgress?.(`✓ Đã đăng ${kind} thành công.`);
   return { videoId, permalink, pageName: page.name, pageId: page.id, scheduled: false };
 }

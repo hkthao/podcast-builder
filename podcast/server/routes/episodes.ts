@@ -697,7 +697,7 @@ episodesRoutes.get("/:name/publish", (c) => {
     await send("log", {
       line: scheduledIso
         ? `Lên lịch "${name}.mp4" đăng lúc ${new Date(scheduledIso).toLocaleString("vi-VN")}…`
-        : `Đăng "${name}.mp4" lên Facebook Reel…`,
+        : `Đăng "${name}.mp4" lên Facebook…`,
     });
 
     const holder: {
@@ -710,6 +710,10 @@ episodesRoutes.get("/:name/publish", (c) => {
       pageIdOverride: process.env.FB_PAGE_ID,
       videoPath,
       description,
+      title: summary.config.title,
+      thumbPath: summary.config.coverImage
+        ? path.join(PATHS.INPUT_DIR, summary.config.coverImage)
+        : null,
       scheduledPublishTime,
       onProgress,
       signal: ac.signal,
