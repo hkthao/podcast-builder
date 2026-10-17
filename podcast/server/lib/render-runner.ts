@@ -12,7 +12,7 @@ import { processAudio } from "../../../shared/audio/process-audio";
 import { transcribeAudio } from "../../../shared/transcribe/transcribe";
 import { spellFix } from "../../scripts/spell-fix";
 import { planEpisode } from "../../scripts/plan-episode";
-import { INTRO_SECONDS, HOOK_SECONDS, HEAD_MUSIC_EXTRA_SECONDS } from "../../src/timing";
+import { INTRO_SECONDS, hookSeconds, HEAD_MUSIC_EXTRA_SECONDS } from "../../src/timing";
 import { generateEditorial } from "../../scripts/gen-editorial";
 import { stageFootageClips } from "../../scripts/footage-clips";
 import {
@@ -21,7 +21,9 @@ import {
   muxAudio,
   concatVideos,
   makeYoutubeThumb,
+  padLeadingSilence,
 } from "../../scripts/footage-composite";
+import { speechLeadFrames } from "../../src/episode";
 import { FORMATS, type VideoFormat } from "../../src/layout";
 import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 import { getModel } from "../../../shared/transcribe/whisper-config";
@@ -675,7 +677,14 @@ async function runJob(job: JobInternal): Promise<void> {
         const silentVideo = path.join(workDir, "silent.mp4");
         concatVideos(videoChunks, silentVideo);
         // Có BGM → mix nhạc nền (ducking) vào voice (footage path không dùng BGMTrack).
-        let audioForMux = renderWav;
+        // Giọng bắt đầu SAU intro + hook (đoạn đầu chỉ có nhạc) — khớp Video.tsx.
+        const leadSec = speechLeadFrames(episodeConfig, overlayComposition.fps) / overlayComposition.fps;
+        const leadVoice = padLeadingSilence(
+          renderWav,
+          leadSec,
+          path.join(PATHS.TMP_DIR, `${outBase}.voice-lead.wav`),
+        );
+        let audioForMux = leadVoice;
         if (episodeConfig.bgm && ep.audioPath) {
           const bgmAbs = path.resolve(path.dirname(ep.audioPath), episodeConfig.bgm);
           if (fs.existsSync(bgmAbs)) {
@@ -683,11 +692,12 @@ async function runJob(job: JobInternal): Promise<void> {
             const headMusicSec =
               episodeConfig.bgmMode === "headtail"
                 ? (episodeConfig.showIntro ? INTRO_SECONDS : 0) +
-                  (episodeConfig.hook ? HOOK_SECONDS : 0) +
+                  hookSeconds(episodeConfig.hook) +
                   HEAD_MUSIC_EXTRA_SECONDS
                 : undefined;
             const mixed = await mixBgmIntoVoice({
-              voicePath: renderWav,
+              voicePath: leadVoice,
+              leadSec,
               bgmPath: bgmAbs,
               episodeName: outBase,
               bgmVolumeDb: episodeConfig.bgmVolumeDb,
@@ -698,6 +708,7 @@ async function runJob(job: JobInternal): Promise<void> {
           }
         }
         muxAudio(silentVideo, audioForMux, outputPath);
+        if (leadVoice !== renderWav) fs.rmSync(leadVoice, { force: true });
         fs.rmSync(workDir, { recursive: true, force: true });
         fs.rmSync(footageBg, { force: true });
       } else {

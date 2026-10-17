@@ -1,7 +1,7 @@
-import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS, FPS } from "../theme";
 import { useLayout } from "../layout";
-import { HOOK_SECONDS } from "../timing";
+import { hookSeconds, splitHookLines } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
 
@@ -14,7 +14,9 @@ import { Sparkle, StarSmall } from "./doodles";
  * pulse shift trễ sau khi word-pop xong → 3 beats: read setup → climax →
  * underline seal.
  */
-export const HOOK_DURATION_FRAMES = Math.round(FPS * HOOK_SECONDS);
+/** Số frame của card hook — co giãn theo độ dài chữ (timing.hookSeconds). */
+export const hookDurationFrames = (hook: string | null | undefined): number =>
+  Math.round(FPS * hookSeconds(hook));
 
 const T = {
   punchlineStart: 10, // sau khi setup lines đã được đọc 1 nhịp
@@ -23,39 +25,22 @@ const T = {
   underlineIn: 50,
   underlineSettle: 68,
   emphasisPulseStart: 55,
-  outStart: HOOK_DURATION_FRAMES - 16,
 } as const;
 
 type Props = {
   hook: string;
 };
 
-const splitIntoLines = (text: string): string[] => {
-  const cleaned = text.trim();
-  if (cleaned.includes(",")) {
-    return cleaned.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3);
-  }
-  const words = cleaned.split(/\s+/);
-  if (words.length <= 5) return [cleaned];
-  if (words.length <= 10) {
-    const mid = Math.ceil(words.length / 2);
-    return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
-  }
-  const third = Math.ceil(words.length / 3);
-  return [
-    words.slice(0, third).join(" "),
-    words.slice(third, third * 2).join(" "),
-    words.slice(third * 2).join(" "),
-  ];
-};
-
 export const Hook: React.FC<Props> = ({ hook }) => {
   const frame = useCurrentFrame();
+  // Trong <Sequence>, durationInFrames = độ dài card hook (co giãn theo chữ).
+  const { durationInFrames } = useVideoConfig();
+  const outStart = durationInFrames - 16;
   const { landscape, safe, sx, sy } = useLayout();
   // 16:9: khung ngang rộng → giới hạn bề ngang dòng chữ để punchline dài vẫn
   // xuống dòng gọn ở giữa (kể cả lúc pulse scale 1.12), không tràn mép.
   const lineMaxWidth = landscape ? 1400 : undefined;
-  const lines = splitIntoLines(hook);
+  const lines = splitHookLines(hook);
   // Hook nhấn LINE CUỐI (punchline) — khác cover nhấn middle.
   const emphasisIdx = lines.length - 1;
   const punchlineWords = lines[emphasisIdx]?.split(/\s+/).filter(Boolean) ?? [];
@@ -78,7 +63,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
   );
   const opacity = interpolate(
     frame,
-    [T.outStart, HOOK_DURATION_FRAMES],
+    [outStart, durationInFrames],
     [1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );

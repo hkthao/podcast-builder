@@ -4,7 +4,12 @@ import { Video, type CompProps } from "./Video";
 import { ScenePreview, type ScenePreviewProps } from "./ScenePreview";
 import { FORMAT, FPS } from "./theme";
 import { FORMATS } from "./layout";
-import { buildEpisodeTemplate, EpisodeConfigSchema, outroTailFrames } from "./episode";
+import {
+  buildEpisodeTemplate,
+  EpisodeConfigSchema,
+  outroTailFrames,
+  speechLeadFrames,
+} from "./episode";
 
 const defaultProps: CompProps = {
   audioSrc: "",
@@ -47,8 +52,10 @@ export const RemotionRoot: React.FC = () => {
           });
           // + đuôi nhạc nền cuối (music-only outro tail) sau khi hết tiếng nói.
           const tail = outroTailFrames(props.episode, FPS);
+          // + đoạn mở đầu chỉ có nhạc (intro + hook) — giọng nói bắt đầu sau đó.
+          const lead = speechLeadFrames(props.episode, FPS);
           return {
-            durationInFrames: Math.ceil(slowDurationInSeconds * FPS) + tail,
+            durationInFrames: lead + Math.ceil(slowDurationInSeconds * FPS) + tail,
             ...size,
           };
         }}

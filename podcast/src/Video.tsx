@@ -3,7 +3,6 @@ import {
   Audio,
   Sequence,
   staticFile,
-  useCurrentFrame,
   useVideoConfig,
 } from "remotion";
 import { Background } from "./components/Background";
@@ -11,7 +10,7 @@ import { BGMTrack } from "./components/BGMTrack";
 import { Captions } from "./components/Captions";
 import { EditorialOverlay } from "./components/EditorialOverlay";
 import { FootageLayer, type FootageClip } from "./components/FootageLayer";
-import { Hook, HOOK_DURATION_FRAMES } from "./components/Hook";
+import { Hook, hookDurationFrames } from "./components/Hook";
 import { IntroCard, INTRO_DURATION_FRAMES } from "./components/IntroCard";
 import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
 import { SceneLayer } from "./components/SceneLayer";
@@ -49,14 +48,13 @@ export const Video: React.FC<CompProps> = ({
   overlayMode = false,
   episode,
 }) => {
-  const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const mood = episode.moodOverride ?? "positive";
   const plan = useScenePlan(planSrc);
   const scenes = plan?.scenes ?? [];
 
   const introFrames = episode.showIntro ? INTRO_DURATION_FRAMES : 0;
-  const hookFrames = episode.hook ? HOOK_DURATION_FRAMES : 0;
+  const hookFrames = episode.hook ? hookDurationFrames(episode.hook) : 0;
   // Đuôi nhạc nền cuối (music-only). Nếu có → thẻ outro trải KÍN đuôi này (giọng
   // đã im, chỉ nhạc + card rồi fade). Không có tail → giữ outro cũ 4s cuối tiếng.
   const tailFrames = outroTailFrames(episode, fps);
@@ -68,13 +66,10 @@ export const Video: React.FC<CompProps> = ({
   const mainStartFrame = introFrames + hookFrames;
   const mainEndFrame = durationInFrames - outroFrames;
 
-  const hookStartMs = (introFrames / fps) * 1000;
-  const hookEndMs = ((introFrames + hookFrames) / fps) * 1000;
-  const captionHideRanges = episode.hook
-    ? [{ startMs: hookStartMs, endMs: hookEndMs }]
-    : [];
-
-  const inMain = frame >= mainStartFrame && frame < mainEndFrame;
+  // Intro + hook = đoạn mở đầu CHỈ CÓ NHẠC. Giọng nói + mọi lớp bám giọng
+  // (caption, sóng, cảnh, editorial) nằm trong <Sequence from={mainStartFrame}>
+  // → frame bên trong tính từ lúc giọng bắt đầu, khớp mốc ms của transcript.
+  // (= speechLeadFrames(episode) — Root cộng đoạn này vào tổng duration.)
   const outroStartMs = (mainEndFrame / fps) * 1000;
   const mainStartMs = (mainStartFrame / fps) * 1000;
   const totalMs = (durationInFrames / fps) * 1000;
@@ -89,7 +84,11 @@ export const Video: React.FC<CompProps> = ({
 
   return (
     <AbsoluteFill style={overlayMode ? { backgroundColor: "transparent" } : undefined}>
-      {overlayMode ? null : <Background mood={mood} scenes={scenes} />}
+      {overlayMode ? null : (
+        <Sequence from={mainStartFrame}>
+          <Background mood={mood} scenes={scenes} />
+        </Sequence>
+      )}
       {useFootage ? (
         <FootageLayer
           clips={footageClips}
@@ -98,7 +97,11 @@ export const Video: React.FC<CompProps> = ({
           mainEndMs={outroStartMs}
         />
       ) : null}
-      {audioSrc ? <Audio src={staticFile(audioSrc)} /> : null}
+      {audioSrc ? (
+        <Sequence from={mainStartFrame} layout="none">
+          <Audio src={staticFile(audioSrc)} />
+        </Sequence>
+      ) : null}
 
       {bgmSrc ? (
         <BGMTrack
@@ -106,25 +109,25 @@ export const Video: React.FC<CompProps> = ({
           transcriptSrc={transcriptSrc}
           baseVolumeDb={episode.bgmVolumeDb}
           fadeOutFromMs={bgmFadeOutFromMs}
-          speechOffsetMs={0}
+          speechOffsetMs={mainStartMs}
         />
       ) : null}
 
-      {audioSrc ? (
-        <AbsoluteFill style={{ opacity: inMain ? 1 : 0 }}>
+      {audioSrc && mainEndFrame > mainStartFrame ? (
+        <Sequence from={mainStartFrame} durationInFrames={mainEndFrame - mainStartFrame}>
           {hideStickers ? null : <SceneLayer scenes={scenes} audioSrc={audioSrc} />}
           <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} accentColor={episode.accentColor} />
-          <Captions transcriptSrc={transcriptSrc} hideRanges={captionHideRanges} accentColor={episode.accentColor} />
+          <Captions transcriptSrc={transcriptSrc} accentColor={episode.accentColor} />
           <Watermark episodeNumber={episode.episodeNumber} accentColor={episode.accentColor} />
           {episode.showEditorial ? (
             <EditorialOverlay
               editorialSrc={editorialSrc}
               speechOffsetMs={0}
-              revealMs={(mainStartFrame / fps) * 1000}
+              revealMs={0}
               accentColor={episode.accentColor}
             />
           ) : null}
-        </AbsoluteFill>
+        </Sequence>
       ) : null}
 
       {episode.showIntro ? (
@@ -142,7 +145,7 @@ export const Video: React.FC<CompProps> = ({
       {episode.hook ? (
         <Sequence
           from={introFrames}
-          durationInFrames={HOOK_DURATION_FRAMES}
+          durationInFrames={hookFrames}
           layout="none"
         >
           <Hook hook={episode.hook} />

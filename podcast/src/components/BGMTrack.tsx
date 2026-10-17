@@ -108,7 +108,10 @@ export const BGMTrack: React.FC<Props> = ({
     // Fallback an toàn: KHÔNG có speech ranges (transcript thiếu/fetch lỗi)
     // → duck liên tục thay vì để nhạc phát full, tránh nuốt tiếng nói.
     let speechGain = DUCK_FACTOR;
-    if (speechRanges.length > 0) {
+    if (t < speechOffsetMs) {
+      // Đoạn mở đầu (intro + hook) chỉ có nhạc — giọng chưa vào → không duck.
+      speechGain = 1;
+    } else if (speechRanges.length > 0) {
       const tAdj = t - speechOffsetMs;
       let nearest = 0;
       for (const r of speechRanges) {

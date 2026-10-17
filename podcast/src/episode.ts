@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MOOD_ACCENTS, SCENE_TYPES } from "./theme";
+import { INTRO_SECONDS, hookSeconds } from "./timing";
 
 export const MoodKeySchema = z.enum(
   Object.keys(MOOD_ACCENTS) as [keyof typeof MOOD_ACCENTS, ...Array<keyof typeof MOOD_ACCENTS>],
@@ -157,6 +158,19 @@ export const outroTailFrames = (
   episode.bgm && episode.outroTailSec > 0
     ? Math.round(episode.outroTailSec * fps)
     : 0;
+
+/**
+ * Số FRAME mở đầu CHỈ CÓ NHẠC (intro + hook) trước khi giọng nói bắt đầu.
+ * Audio trò chuyện + caption/sóng/cảnh/editorial được dời đúng chừng này; nhạc
+ * nền chạy từ frame 0. Dùng chung Root (tổng duration), Video (Sequence giọng)
+ * và pipeline footage (pad im lặng đầu voice trước khi mix nhạc).
+ */
+export const speechLeadFrames = (
+  episode: Pick<EpisodeConfig, "showIntro" | "hook">,
+  fps: number,
+): number =>
+  (episode.showIntro ? Math.round(fps * INTRO_SECONDS) : 0) +
+  (episode.hook ? Math.round(fps * hookSeconds(episode.hook)) : 0);
 
 export const buildEpisodeTemplate = (
   name: string,

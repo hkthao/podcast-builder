@@ -236,3 +236,20 @@ export function makeYoutubeThumb(coverAbs: string, outPath: string): void {
     "-frames:v", "1", "-q:v", "3", outPath,
   ]);
 }
+
+/**
+ * Chèn `leadSec` giây im lặng vào ĐẦU file giọng → giọng bắt đầu sau intro +
+ * hook (đoạn mở đầu chỉ có nhạc). Mix nhạc nền SAU bước này để sidechain không
+ * duck nhạc ở đoạn im lặng. leadSec ≤ 0 → trả nguyên file gốc.
+ */
+export function padLeadingSilence(voiceWav: string, leadSec: number, outPath: string): string {
+  if (leadSec <= 0) return voiceWav;
+  const ms = Math.round(leadSec * 1000);
+  execFileSync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-i", voiceWav,
+    "-af", `adelay=delays=${ms}:all=1`,
+    outPath,
+  ]);
+  return outPath;
+}

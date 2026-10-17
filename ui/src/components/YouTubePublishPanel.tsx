@@ -44,9 +44,34 @@ const YT_TAGS_MAX_CHARS = 500;
 const YT_HASHTAGS_SHOWN = 3;
 
 const DEFAULT_YT_HASHTAGS = ["podcast", "triethoc", "tamlyhoc"];
-/** Thời lượng intro + hook (giây) — khớp podcast/src/timing.ts. */
+/** Thời lượng intro + hook (giây) — PHẢI khớp podcast/src/timing.ts. */
 const INTRO_SECONDS = 3.0;
-const HOOK_SECONDS = 3.5;
+
+/** Bản sao splitHookLines + hookSeconds của podcast/src/timing.ts (UI không import được ngoài src/). */
+const splitHookLines = (text: string): string[] => {
+  const cleaned = text.trim();
+  if (cleaned.includes(",")) {
+    return cleaned.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3);
+  }
+  const words = cleaned.split(/\s+/);
+  if (words.length <= 5) return [cleaned];
+  if (words.length <= 10) {
+    const mid = Math.ceil(words.length / 2);
+    return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
+  }
+  const third = Math.ceil(words.length / 3);
+  return [
+    words.slice(0, third).join(" "),
+    words.slice(third, third * 2).join(" "),
+    words.slice(third * 2).join(" "),
+  ];
+};
+const hookSeconds = (hook: string | null | undefined): number => {
+  if (!hook?.trim()) return 0;
+  const words = splitHookLines(hook).join(" ").split(/\s+/).filter(Boolean).length;
+  const sec = 1.5 + words / 3;
+  return Math.round(Math.min(10, Math.max(3.5, sec)) * 10) / 10;
+};
 /** YouTube: mỗi chapter tối thiểu 10s, cần ≥3 chapter, chapter đầu = 00:00. */
 const CHAPTER_MIN_MS = 10_000;
 
@@ -65,8 +90,7 @@ const fmtTs = (ms: number): string => {
 
 /**
  * Dựng chapter YouTube từ editorial (tmp/<slug>.editorial.json). Mốc chương
- * trước khi nội dung hiện (intro + hook) dời về mốc reveal — giống
- * EditorialOverlay. Trả null nếu không đủ 3 chapter hợp lệ.
+ * theo transcript → cộng đoạn mở đầu chỉ có nhạc (intro + hook) để ra mốc video. Trả null nếu không đủ 3 chapter hợp lệ.
  */
 function buildChapters(
   editorial: Editorial | null | undefined,
@@ -74,10 +98,11 @@ function buildChapters(
 ): string | null {
   if (!editorial?.chapters?.length) return null;
   const revealMs =
-    ((cfg.showIntro ? INTRO_SECONDS : 0) + (cfg.hook ? HOOK_SECONDS : 0)) * 1000;
+    ((cfg.showIntro ? INTRO_SECONDS : 0) + hookSeconds(cfg.hook)) * 1000;
   const list: Array<{ ms: number; title: string }> = [{ ms: 0, title: "Mở đầu" }];
   for (const c of [...editorial.chapters].sort((a, b) => a.atMs - b.atMs)) {
-    const ms = Math.max(c.atMs, revealMs);
+    // Giọng bắt đầu SAU intro + hook (đoạn đầu chỉ có nhạc) → mốc video = lead + mốc transcript.
+    const ms = revealMs + c.atMs;
     const title = c.title.trim();
     if (!title) continue;
     // Chương sát đầu video → thay nhãn "Mở đầu" ở 00:00.

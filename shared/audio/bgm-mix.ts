@@ -75,6 +75,12 @@ export type MixBgmInput = {
    * (đuôi). Đoạn GIỮA KHÔNG có nhạc. Không set → nhạc chạy suốt (ducking) như cũ.
    */
   headSec?: number;
+  /**
+   * Số giây MỞ ĐẦU CHỈ CÓ NHẠC (intro + hook) — voice đã được pad im lặng đầu
+   * tương ứng. Nhạc được boost (+DEFAULT_LEAD_BUMP_DB ≈ mức đuôi nhạc) suốt
+   * đoạn này rồi hạ mượt 1s trước khi giọng vào (thay cho bump intro 3s).
+   */
+  leadSec?: number;
 };
 
 export type MixBgmResult = {
@@ -87,6 +93,11 @@ const DEFAULT_INTRO_OUTRO_SEC = 3;
 const DEFAULT_INTRO_OUTRO_BUMP_DB = 10;
 /** Bump cho đuôi nhạc-only (to hơn intro vì phải nghe rõ, không có giọng đè). */
 const DEFAULT_TAIL_BUMP_DB = 12;
+/**
+ * Boost đoạn MỞ ĐẦU chỉ-nhạc (intro + hook). Cao hơn đuôi vì đầu bản nhạc
+ * thường dạo nhẹ (vd "Felicity" ~10dB nhỏ hơn đoạn giữa) — đo: +22dB ≈ mức đuôi (~-27dB mean).
+ */
+const DEFAULT_LEAD_BUMP_DB = 22;
 /** Boost đuôi nhạc trong LỊCH NHẠC (dB, chuyển sang hệ số tuyến tính cho envelope). */
 const DEFAULT_TAIL_BOOST_DB = 12;
 
@@ -156,6 +167,16 @@ export async function mixBgmIntoVoice(
 
   const useSchedule = typeof input.headSec === "number" && input.headSec > 0;
 
+  // Boost đoạn mở đầu chỉ-nhạc: gain tuyến tính B tới (L-1)s, hạ dần về 1 ở L.
+  const leadSec = Math.max(0, input.leadSec ?? 0);
+  const leadBoost = (() => {
+    if (leadSec <= 0) return null;
+    const L = leadSec.toFixed(3);
+    const L1 = Math.max(0, leadSec - 1).toFixed(3);
+    const B = Math.pow(10, DEFAULT_LEAD_BUMP_DB / 20).toFixed(3);
+    return `if(lt(t,${L1}),${B},if(lt(t,${L}),${B}-(${B}-1)*(t-${L1})/(${L}-${L1}),1))`;
+  })();
+
   // Filter áp lên [ducked] (nhạc sau ducking) + filter áp sau amix.
   let bgmFinalExtra: string;
   let amixTail: string;
@@ -177,11 +198,14 @@ export async function mixBgmIntoVoice(
         ? `${TB}*max(0,min(min(1,(t-${VD})/1.0),(${TD}-t)/${tfo}))`
         : "0";
     const env = `if(lt(t,${HS}),${headG},if(lt(t,${VD}),0,${tailG}))`;
-    bgmFinalExtra = `,volume=eval=frame:volume='${env}'`;
+    bgmFinalExtra = leadBoost
+      ? `,volume=eval=frame:volume='(${env})*(${leadBoost})'`
+      : `,volume=eval=frame:volume='${env}'`;
     amixTail = "";
   } else {
     // CŨ: nhạc chạy suốt + bump intro/outro + (nếu có) đuôi + fade cuối.
-    const introExpr = introSec > 0 ? `between(t,0,${introSec})` : null;
+    // Có đoạn mở đầu chỉ-nhạc → boost riêng (leadBoost) thay cho bump intro 3s.
+    const introExpr = introSec > 0 && !leadBoost ? `between(t,0,${introSec})` : null;
     const outroExpr =
       introSec > 0 && tailSec === 0
         ? `between(t,${(voiceDur - introSec).toFixed(3)},${voiceDur.toFixed(3)})`
@@ -195,6 +219,7 @@ export async function mixBgmIntoVoice(
       bumpFilter += `,volume=enable='${tailExpr}':volume=${DEFAULT_TAIL_BUMP_DB}dB`;
     }
     const fadeDur = tailSec > 0 ? Math.min(2.5, tailSec) : 0;
+    if (leadBoost) bumpFilter = `,volume=eval=frame:volume='${leadBoost}'` + bumpFilter;
     bgmFinalExtra = bumpFilter;
     amixTail =
       fadeDur > 0

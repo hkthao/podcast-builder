@@ -12,9 +12,10 @@ import dotenv from "dotenv";
 import {
   buildEpisodeTemplate,
   EpisodeConfigSchema,
+  speechLeadFrames,
   type EpisodeConfig,
 } from "../src/episode";
-import { INTRO_SECONDS, HOOK_SECONDS, HEAD_MUSIC_EXTRA_SECONDS } from "../src/timing";
+import { INTRO_SECONDS, hookSeconds, HEAD_MUSIC_EXTRA_SECONDS } from "../src/timing";
 import { processAudio } from "../../shared/audio/process-audio";
 import { transcribeAudio } from "../../shared/transcribe/transcribe";
 import { getModel } from "../../shared/transcribe/whisper-config";
@@ -28,6 +29,7 @@ import {
   muxAudio,
   concatVideos,
   makeYoutubeThumb,
+  padLeadingSilence,
 } from "./footage-composite";
 import { FORMATS } from "../src/layout";
 import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
@@ -404,7 +406,14 @@ async function main() {
       // voice trước (footage path KHÔNG dùng BGMTrack của Remotion).
       const silentVideo = path.join(workDir, `silent.mp4`);
       concatVideos(videoChunks, silentVideo);
-      let audioForMux = renderWav;
+      // Giọng bắt đầu SAU intro + hook (đoạn đầu chỉ có nhạc) — khớp Video.tsx.
+      const leadSec = speechLeadFrames(episode, overlayComposition.fps) / overlayComposition.fps;
+      const leadVoice = padLeadingSilence(
+        renderWav,
+        leadSec,
+        path.join(TMP_DIR, `${outBase}.voice-lead.wav`),
+      );
+      let audioForMux = leadVoice;
       if (episode.bgm) {
         const bgmAbs = path.resolve(path.dirname(args.audioPath), episode.bgm);
         if (fs.existsSync(bgmAbs)) {
@@ -413,11 +422,12 @@ async function main() {
           const headMusicSec =
             episode.bgmMode === "headtail"
               ? (episode.showIntro ? INTRO_SECONDS : 0) +
-                (episode.hook ? HOOK_SECONDS : 0) +
+                hookSeconds(episode.hook) +
                 HEAD_MUSIC_EXTRA_SECONDS
               : undefined;
           const mixed = await mixBgmIntoVoice({
-            voicePath: renderWav,
+            voicePath: leadVoice,
+            leadSec,
             bgmPath: bgmAbs,
             episodeName: outBase,
             bgmVolumeDb: episode.bgmVolumeDb,
@@ -430,6 +440,7 @@ async function main() {
         }
       }
       muxAudio(silentVideo, audioForMux, outputPath);
+      if (leadVoice !== renderWav) fs.rmSync(leadVoice, { force: true });
       fs.rmSync(workDir, { recursive: true, force: true });
       fs.rmSync(footageBg, { force: true });
     } else {
