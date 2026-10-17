@@ -1,7 +1,19 @@
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { promisify } from "node:util";
+
+/**
+ * Mọi lệnh ffmpeg/ffprobe chạy BẤT ĐỒNG BỘ: file này được render-runner gọi
+ * TRONG server — lệnh đồng bộ chặn event loop vài phút (dựng nền footage 15')
+ * → API/SSE không trả lời, UI đứng hình mất tiến trình.
+ */
+const execFileP = promisify(execFile);
+const ffmpeg = async (args: string[]): Promise<void> => {
+  await execFileP("ffmpeg", args, { maxBuffer: 64 * 1024 * 1024 });
+};
 
 /**
  * 2-pass footage: ghép nền footage (ffmpeg) + lớp đồ hoạ trong suốt (Remotion
@@ -9,17 +21,12 @@ import os from "node:os";
  * cách reel dùng — ffmpeg xử lý video native, ổn định. Xem make.ts.
  */
 
-const ffprobeSec = (f: string): number => {
+const ffprobeSec = async (f: string): Promise<number> => {
   try {
-    return (
-      Number(
-        execFileSync(
-          "ffprobe",
-          ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", f],
-          { encoding: "utf-8" },
-        ).trim(),
-      ) || 0
-    );
+    const { stdout } = await execFileP("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", f,
+    ]);
+    return Number(stdout.trim()) || 0;
   } catch {
     return 0;
   }
@@ -83,14 +90,16 @@ export type FootageBgOpts = {
  * theo opts.size (mặc định 1080×1920). Nếu tổng clip ≥ durationSec → mỗi clip hiện ĐÚNG 1 LẦN (không lặp);
  * thiếu thì mới lặp cho đủ. Nếu có themeColor → color grade về tông màu chủ đề.
  */
-export function buildFootageBg(
+export async function buildFootageBg(
   footageAbs: string[],
   durationSec: number,
   outPath: string,
   opts?: FootageBgOpts,
-): void {
+): Promise<void> {
   if (footageAbs.length === 0) throw new Error("Không có footage để dựng nền");
-  const durs = footageAbs.map(ffprobeSec);
+  // Probe tuần tự (150+ clip — đừng spawn đồng loạt).
+  const durs: number[] = [];
+  for (const f of footageAbs) durs.push(await ffprobeSec(f));
   const sum = durs.reduce((s, d) => s + d, 0) || 1;
   // Đủ clip (sum ≥ duration) → repeats=1, -t trim trong lần 1 → KHÔNG lặp clip.
   const repeats = Math.max(1, Math.ceil(durationSec / sum));
@@ -139,7 +148,7 @@ export function buildFootageBg(
   chains.push(`[${last}]format=yuv420p[bg]`);
   const filter = chains.join(";");
 
-  execFileSync("ffmpeg", [
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     ...inputs,
     "-filter_complex", filter,
@@ -157,27 +166,31 @@ export function buildFootageBg(
  * timeline 0..durSec) → 1 chunk video H.264 (KHÔNG audio — audio mux 1 lần cuối
  * để tránh click ở ranh giới). overlay ProRes 4444 có alpha → ffmpeg đọc tự động.
  */
-export function compositeChunk(
+export async function compositeChunk(
   footageBg: string,
   startSec: number,
   durSec: number,
   overlayMov: string,
   outPath: string,
-): void {
-  execFileSync("ffmpeg", [
+): Promise<void> {
+  // Ghi ra file tạm rồi mới đổi tên → đoạn bị ngắt giữa chừng KHÔNG bị coi là
+  // đã xong khi render tiếp (chunkDone chỉ thấy file hoàn chỉnh).
+  const partPath = `${outPath}.part.mp4`;
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-ss", String(startSec), "-t", String(durSec), "-i", footageBg,
     "-i", overlayMov,
     "-filter_complex", "[0:v][1:v]overlay=format=auto[v]",
     "-map", "[v]", "-an",
     "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
-    outPath,
+    partPath,
   ]);
+  fs.renameSync(partPath, outPath);
 }
 
 /** Mux audio (voice wav) vào video đã ghép → mp4 cuối. */
-export function muxAudio(videoPath: string, audioWav: string, outPath: string): void {
-  execFileSync("ffmpeg", [
+export async function muxAudio(videoPath: string, audioWav: string, outPath: string): Promise<void> {
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-i", videoPath, "-i", audioWav,
     "-map", "0:v:0", "-map", "1:a:0",
@@ -187,13 +200,13 @@ export function muxAudio(videoPath: string, audioWav: string, outPath: string): 
 }
 
 /** Nối nhiều file video cùng codec/params (stream copy) → 1 file. */
-export function concatVideos(parts: string[], outPath: string): void {
+export async function concatVideos(parts: string[], outPath: string): Promise<void> {
   const listFile = path.join(os.tmpdir(), `concat-${path.basename(outPath)}.txt`);
   fs.writeFileSync(
     listFile,
     parts.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"),
   );
-  execFileSync("ffmpeg", [
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-f", "concat", "-safe", "0", "-i", listFile,
     "-c", "copy", outPath,
@@ -205,13 +218,13 @@ export function concatVideos(parts: string[], outPath: string): void {
  * Phủ lớp đồ hoạ (VP8 webm ALPHA) lên nền footage + audio từ voice wav → mp4.
  * `-c:v libvpx` để ffmpeg giải mã kênh alpha của VP8 webm.
  */
-export function compositeOverlay(
+export async function compositeOverlay(
   footageBg: string,
   overlayWebm: string,
   audioWav: string,
   outPath: string,
-): void {
-  execFileSync("ffmpeg", [
+): Promise<void> {
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-i", footageBg,
     "-c:v", "libvpx", "-i", overlayWebm,
@@ -228,8 +241,8 @@ export function compositeOverlay(
  * Thumbnail YouTube từ ảnh cover 16:9 → JPEG 1280×720 (crop cover). YouTube
  * giới hạn thumbnail 2MB; 1280×720 q3 thường ~200-400KB.
  */
-export function makeYoutubeThumb(coverAbs: string, outPath: string): void {
-  execFileSync("ffmpeg", [
+export async function makeYoutubeThumb(coverAbs: string, outPath: string): Promise<void> {
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-i", coverAbs,
     "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
@@ -242,10 +255,10 @@ export function makeYoutubeThumb(coverAbs: string, outPath: string): void {
  * hook (đoạn mở đầu chỉ có nhạc). Mix nhạc nền SAU bước này để sidechain không
  * duck nhạc ở đoạn im lặng. leadSec ≤ 0 → trả nguyên file gốc.
  */
-export function padLeadingSilence(voiceWav: string, leadSec: number, outPath: string): string {
+export async function padLeadingSilence(voiceWav: string, leadSec: number, outPath: string): Promise<string> {
   if (leadSec <= 0) return voiceWav;
   const ms = Math.round(leadSec * 1000);
-  execFileSync("ffmpeg", [
+  await ffmpeg([
     "-hide_banner", "-loglevel", "error", "-y",
     "-i", voiceWav,
     "-af", `adelay=delays=${ms}:all=1`,
@@ -253,3 +266,63 @@ export function padLeadingSilence(voiceWav: string, leadSec: number, outPath: st
   ]);
   return outPath;
 }
+
+// ═══════════ RENDER TIẾP TỪ CHỖ DỪNG (2-pass footage) ═══════════
+// Server restart / huỷ giữa chừng → lần render sau GIỮ nền footage + các đoạn
+// đã ghép xong nếu đầu vào không đổi (so mã render), chỉ làm phần còn thiếu.
+
+/** Field config KHÔNG ảnh hưởng hình (data đăng/ghi công/prompt) — bỏ khỏi mã render. */
+const NON_VISUAL_KEY = /^(publish|yt|fb|scheduled|sources$|scriptCredit$|musicCredit$|footageCredit|aiAssisted$|coverPrompt|essayId$)/;
+
+/**
+ * Mã render = hash(props ảnh hưởng hình + kích thước/mtime các file đầu vào +
+ * tham số đoạn). Đổi transcript/plan/editorial/cover/footage/config hình →
+ * mã khác → làm lại từ đầu; chỉ sửa caption FB/YouTube → vẫn render tiếp.
+ */
+export function renderResumeKey(parts: {
+  props: Record<string, unknown>;
+  files: string[];
+  extra: unknown;
+}): string {
+  const h = crypto.createHash("sha256");
+  const ep = (parts.props.episode ?? {}) as Record<string, unknown>;
+  const visualEp = Object.fromEntries(Object.entries(ep).filter(([k]) => !NON_VISUAL_KEY.test(k)));
+  h.update(JSON.stringify({ ...parts.props, episode: visualEp }));
+  for (const f of parts.files) {
+    try {
+      const st = fs.statSync(f);
+      h.update(`${f}|${st.size}|${st.mtimeMs}`);
+    } catch {
+      h.update(`${f}|missing`);
+    }
+  }
+  h.update(JSON.stringify(parts.extra));
+  return h.digest("hex");
+}
+
+/**
+ * Mở thư mục đoạn: mã khớp lần trước → giữ nguyên (render tiếp); khác/chưa có
+ * → xoá đoạn + nền footage cũ, tạo mới, ghi mã. Trả resumed=true khi tiếp tục.
+ */
+export function openChunkWorkDir(workDir: string, footageBg: string, key: string): { resumed: boolean } {
+  const keyFile = path.join(workDir, "key.json");
+  try {
+    if (JSON.parse(fs.readFileSync(keyFile, "utf-8")).key === key) return { resumed: true };
+  } catch {
+    /* chưa có / hỏng → làm mới */
+  }
+  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(footageBg, { force: true });
+  fs.mkdirSync(workDir, { recursive: true });
+  fs.writeFileSync(keyFile, JSON.stringify({ key, createdAt: new Date().toISOString() }));
+  return { resumed: false };
+}
+
+/** Đoạn đã ghép xong (file hoàn chỉnh, không phải .part). */
+export const chunkDone = (p: string): boolean => {
+  try {
+    return fs.statSync(p).size > 0;
+  } catch {
+    return false;
+  }
+};

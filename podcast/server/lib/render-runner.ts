@@ -22,6 +22,9 @@ import {
   concatVideos,
   makeYoutubeThumb,
   padLeadingSilence,
+  renderResumeKey,
+  openChunkWorkDir,
+  chunkDone,
 } from "../../scripts/footage-composite";
 import { speechLeadFrames } from "../../src/episode";
 import { FORMATS, type VideoFormat } from "../../src/layout";
@@ -612,8 +615,6 @@ async function runJob(job: JobInternal): Promise<void> {
         // trên UI theo từng đoạn. Xem footage-composite.ts.
         const footageBg = path.join(PATHS.TMP_DIR, `${outBase}.footagebg.mp4`);
         const workDir = path.join(PATHS.TMP_DIR, `${outBase}.fchunks`);
-        fs.rmSync(workDir, { recursive: true, force: true });
-        ensureDir(workDir);
         const overlayInputProps = {
           ...inputProps,
           overlayMode: true,
@@ -626,23 +627,55 @@ async function runJob(job: JobInternal): Promise<void> {
         });
         const total = overlayComposition.durationInFrames;
         const durationSec = total / overlayComposition.fps;
-        setPhase(job, "render", 46, "Dựng nền footage (ffmpeg)…");
         const footageAbs = (landscape ? episodeConfig.footageLandscape : episodeConfig.footage)
           .map((f) => path.join(PATHS.INPUT_DIR, "footage", f))
           .filter((f) => fs.existsSync(f));
-        buildFootageBg(footageAbs, durationSec, footageBg, {
-          themeColor: episodeConfig.accentColor,
-          size: FORMATS[job.format],
-        });
-        checkAbort();
-
         const OCHUNK = Number(process.env.RENDER_OVERLAY_CHUNK ?? 1500);
         const nOchunks = Math.ceil(total / OCHUNK);
+
+        // Render TIẾP: đầu vào không đổi so với lần dở trước (server restart /
+        // huỷ) → giữ nền footage + đoạn đã ghép, chỉ làm phần còn thiếu.
+        const resumeKey = renderResumeKey({
+          props: overlayInputProps as unknown as Record<string, unknown>,
+          files: [
+            transcriptSource,
+            planJsonPath,
+            planJsonPath.replace(/\.plan\.json$/, ".editorial.json"),
+            renderWav,
+            // Cover GỐC trong input/ (bản copy public/ đổi mtime mỗi lần render).
+            ...[ep.config.coverImage, ep.config.coverImageLandscape]
+              .filter((f): f is string => !!f)
+              .map((f) => path.join(PATHS.INPUT_DIR, f)),
+            ...footageAbs,
+          ],
+          extra: { total, OCHUNK, format: job.format, footageAbs },
+        });
+        const { resumed } = openChunkWorkDir(workDir, footageBg, resumeKey);
+        const doneBefore = Array.from({ length: nOchunks }, (_, k) =>
+          chunkDone(path.join(workDir, `v-${String(k).padStart(3, "0")}.mp4`)),
+        ).filter(Boolean).length;
+
+        if (resumed && fs.existsSync(footageBg)) {
+          setPhase(job, "render", 46, `Render tiếp: giữ nền footage + ${doneBefore}/${nOchunks} đoạn đã xong`);
+        } else {
+          setPhase(job, "render", 46, "Dựng nền footage (ffmpeg)…");
+          await buildFootageBg(footageAbs, durationSec, footageBg, {
+            themeColor: episodeConfig.accentColor,
+            size: FORMATS[job.format],
+          });
+        }
+        checkAbort();
+
         const videoChunks: string[] = [];
         for (let start = 0, idx = 0; start < total; start += OCHUNK, idx++) {
           const end = Math.min(total - 1, start + OCHUNK - 1);
           const prChunk = path.join(workDir, `pr-${String(idx).padStart(3, "0")}.mov`);
           const vChunk = path.join(workDir, `v-${String(idx).padStart(3, "0")}.mp4`);
+          if (chunkDone(vChunk)) {
+            videoChunks.push(vChunk);
+            setPhase(job, "render", 46 + ((idx + 1) / nOchunks) * 44, `footage đoạn ${idx + 1}/${nOchunks} (đã có)`);
+            continue;
+          }
           await renderMedia({
             serveUrl,
             composition: overlayComposition,
@@ -657,7 +690,7 @@ async function runJob(job: JobInternal): Promise<void> {
             concurrency: Number(process.env.RENDER_OVERLAY_CONCURRENCY ?? 2),
             timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS ?? 300000),
           });
-          compositeChunk(
+          await compositeChunk(
             footageBg,
             start / overlayComposition.fps,
             (end - start + 1) / overlayComposition.fps,
@@ -675,11 +708,11 @@ async function runJob(job: JobInternal): Promise<void> {
           checkAbort();
         }
         const silentVideo = path.join(workDir, "silent.mp4");
-        concatVideos(videoChunks, silentVideo);
+        await concatVideos(videoChunks, silentVideo);
         // Có BGM → mix nhạc nền (ducking) vào voice (footage path không dùng BGMTrack).
         // Giọng bắt đầu SAU intro + hook (đoạn đầu chỉ có nhạc) — khớp Video.tsx.
         const leadSec = speechLeadFrames(episodeConfig, overlayComposition.fps) / overlayComposition.fps;
-        const leadVoice = padLeadingSilence(
+        const leadVoice = await padLeadingSilence(
           renderWav,
           leadSec,
           path.join(PATHS.TMP_DIR, `${outBase}.voice-lead.wav`),
@@ -707,7 +740,7 @@ async function runJob(job: JobInternal): Promise<void> {
             audioForMux = mixed.outputPath;
           }
         }
-        muxAudio(silentVideo, audioForMux, outputPath);
+        await muxAudio(silentVideo, audioForMux, outputPath);
         if (leadVoice !== renderWav) fs.rmSync(leadVoice, { force: true });
         fs.rmSync(workDir, { recursive: true, force: true });
         fs.rmSync(footageBg, { force: true });
@@ -740,7 +773,7 @@ async function runJob(job: JobInternal): Promise<void> {
         );
         if (landscapeCoverAbs) {
           // YouTube: thumbnail = chính cover 16:9 (1280×720, <2MB).
-          makeYoutubeThumb(landscapeCoverAbs, thumbPath);
+          await makeYoutubeThumb(landscapeCoverAbs, thumbPath);
         } else {
           const thumbFrame = Math.min(
             composition.durationInFrames - 1,
