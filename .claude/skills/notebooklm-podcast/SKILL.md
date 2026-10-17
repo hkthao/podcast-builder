@@ -1,11 +1,13 @@
 ---
 name: notebooklm-podcast
-description: Tạo video podcast từ NotebookLM Audio Overview. Dùng khi user muốn biến một bài luận/chủ đề thành podcast tiếng Việt qua NotebookLM rồi render thành video bằng pipeline repo này. Quy trình: tìm nguồn → upload notebook → gen audio (giọng Bắc) → QC → render → đăng thẳng lên Facebook Reel (có lên lịch). Bao gồm cú pháp `nlm` CLI và các bẫy đã biết.
+description: Tạo video podcast từ NotebookLM Audio Overview. Dùng khi user muốn biến một bài luận/chủ đề thành podcast tiếng Việt qua NotebookLM rồi render thành video bằng pipeline repo này. Quy trình: tìm nguồn → upload notebook → gen audio (giọng Bắc) → QC → render bản Facebook 9:16 (+ tuỳ chọn bản YouTube 16:9) → đăng thẳng lên Facebook Reel (có lên lịch) / soạn sẵn data đăng YouTube (upload tay). Bao gồm cú pháp `nlm` CLI và các bẫy đã biết.
 ---
 
 # NotebookLM → Video Podcast
 
 Biến 1 bài luận/chủ đề thành video podcast: research nguồn → nạp NotebookLM → gen Audio Overview tiếng Việt → QC → render qua `make.ts`.
+
+**2 khung từ CÙNG 1 audio:** bản **Facebook 9:16** (`output/<slug>.mp4`, mặc định) và bản **YouTube 16:9** (`output/<slug>.yt.mp4`, tuỳ chọn — Bước 8.5/9/11). Mỗi khung có cover, footage, data đăng RIÊNG; transcript/plan/editorial dùng chung. Upload YouTube làm TAY (không có API) — app chỉ soạn data + lưu link. [[youtube-landscape-16x9]]
 
 ## CÔNG CỤ: dùng `nlm` CLI (jacob-bd/notebooklm-mcp-cli), KHÔNG dùng MCP cũ
 
@@ -182,33 +184,31 @@ NotebookLM audio tiếng Việt KHÔNG ổn định: **hay lẫn giọng Nam/B�
    ```bash
    npm run make -- input/<slug>.m4a --plan-only
    ```
-   Đọc `tmp/<slug>.corrected.json` / `tmp/<slug>.plan.json`, kiểm đủ các beat/chương chính của kịch bản. Thiếu chương → flag.
-3. **Sửa transcript** (whisper tiếng Việt hỏng nặng: ký tự `�`, nghe nhầm tên riêng, dấu sai; `spell-fix` gốc bị BUG nhân đôi câu). Có 2 cách — **ưu tiên cách A (không tốn tiền + chính xác nhất)**:
-
-   **A) KHÔNG gọi GPT — Claude Code tự sửa (dump/apply, dùng bài luận gốc làm chuẩn):**
+   Chạy local hoàn toàn (normalize + whisper + gom câu + plan — KHÔNG gọi OpenAI). Đọc `tmp/<slug>.corrected.json` / `tmp/<slug>.plan.json`, kiểm đủ các beat/chương chính của kịch bản. Thiếu chương → flag.
+3. **Sửa transcript — CLAUDE CODE TỰ SỬA, KHÔNG GỌI OPENAI (bắt buộc, miễn phí).** Whisper tiếng Việt hỏng nặng (ký tự `�`, nghe nhầm tên riêng, sai dấu). Pipeline (`spellFix` trong make.ts / render-runner) **mặc định KHÔNG gọi OpenAI** — chỉ gom token → câu, ghi `corrected.json` CHƯA sửa (log: `KHÔNG gọi OpenAI. Sửa chính tả bằng Claude`). Việc sửa do Claude làm:
    ```bash
    npx tsx podcast/scripts/spell-fix-manual.ts dump <slug>     # → tmp/<slug>.sentences.json [{id,text}]
-   # Claude ĐỌC tmp/<slug>.sentences.json + input/<slug>.essay.txt (nguồn chuẩn) → sửa chính tả/tên riêng,
-   #   GIỮ NGUYÊN id + số câu, ghi tmp/<slug>.sentences.corrected.json (cùng dạng [{id,text}]).
-   npx tsx podcast/scripts/spell-fix-manual.ts apply <slug>    # → tmp/<slug>.corrected.json (make cache-skip OpenAI)
+   # Claude ĐỌC tmp/<slug>.sentences.json + input/<slug>.essay.txt (nguồn chuẩn) + input/_common-terms.txt
+   #   → sửa chính tả/dấu/tên riêng, GIỮ NGUYÊN id + số câu + ý nghĩa (KHÔNG viết lại câu),
+   #   ghi tmp/<slug>.sentences.corrected.json (cùng dạng [{id,text}]).
+   npx tsx podcast/scripts/spell-fix-manual.ts apply <slug>    # → tmp/<slug>.corrected.json (mtime mới → make cache-skip)
+   rm -f tmp/<slug>.plan.json                                   # caption/plan phải đọc lại bản đã sửa
    ```
-   Cách này chính xác nhất vì Claude đối chiếu trực tiếp bài luận (tên nước ngoài, thuật ngữ) + không tốn API. Xem memory [[spell-fix-bang-claude-khong-openai]].
+   - Dump đọc transcript RAW (`tmp/<slug>.json`), nên chạy được cả khi `corrected.json` (chưa sửa) đã có từ `--plan-only`.
+   - Transcript dài (~400-600 câu) → đọc + sửa theo từng khúc, nhưng ghi ĐỦ mọi id vào file corrected (câu không đổi vẫn ghi lại nguyên văn).
+   - Ưu tiên: hết `�` → tên riêng/thuật ngữ đúng theo bài luận (tên nước ngoài giữ gốc tiếng Anh) → dấu thanh/từ nghe nhầm. KHÔNG sửa văn phong nói của host (vẫn là lời nói, không phải văn viết).
+   - **Glossary CHUNG** `input/_common-terms.txt` (lỗi Whisper hay gặp: Chuẩn/chuyển/chuyện, con→còn, tên Semir Zeki/Schopenhauer/Tanha/Upeksha...) — Claude đọc làm tham chiếu; **gặp lỗi mới → THÊM vào file này**. Glossary riêng tập: `input/<slug>.terms.txt` (`sai => đúng`).
+   - Xem [[spell-fix-bang-claude-khong-openai]].
 
-   **B) Gọi GPT tự động (nhanh, nhiều câu):**
-   ```bash
-   npx tsx podcast/scripts/transcript-correct.ts <slug>
-   ```
-   ⚠️ Mặc định NAY là **gpt-4o** (KHÔNG phải gpt-4o-mini — mini sót rất nhiều tên riêng/dấu) và **tự nạp `input/<slug>.essay.txt` làm nguồn chuẩn** để sửa đúng tên (vd "Semizeki"→"Semir Zeki", "đọc lớt"→"đọc lướt", "chật trội"→"chật chội"). Glossary riêng tập: `input/<slug>.terms.txt` (mỗi dòng `sai => đúng`).
-
-   **Glossary CHUNG tái dùng mọi tập:** `input/_common-terms.txt` (lỗi Whisper hay gặp: Chuẩn/chuyển/chuyện, con→còn, trở bàn tay, tước bỏ, tên riêng Semir Zeki/Schopenhauer/Tanha/Upeksha...) — transcript-correct tự nạp. **Gặp lỗi mới → THÊM vào file này** để lần sau tự sửa.
-
-   **⭐ C) USER ĐÁNH DẤU LỖI trên UI (tab Transcript) → AI review đúng câu đó:** user bấm biểu tượng **cờ** ở đầu mỗi câu sai (lưu `tmp/<slug>.flags.json` = index câu; nút "chỉ hiện câu đánh dấu" + "copy cờ cho AI"). AI xem đúng các câu đó rồi sửa trong `tmp/<slug>.corrected.json`:
+   **⭐ USER ĐÁNH DẤU LỖI trên UI (tab Transcript) → Claude sửa đúng câu đó:** user bấm **cờ** ở câu sai (lưu `tmp/<slug>.flags.json`). Claude xem rồi sửa trong `tmp/<slug>.corrected.json` (hoặc trong sentences.corrected.json rồi apply lại):
    ```bash
    npx tsx podcast/scripts/spell-fix-manual.ts flags <slug>   # in các câu user đánh dấu (kèm ngữ cảnh)
    ```
-   Sửa xong → bảo user bỏ cờ trên UI. (Đây là kênh nhanh nhất để bắt lỗi user nghe thấy mà scan tự động bỏ sót.)
+   Sửa xong → bảo user bỏ cờ trên UI. Đây là kênh nhanh nhất bắt lỗi user nghe thấy mà scan tự động bỏ sót.
 
-   Sau cả 2 cách: quét lỗi còn sót (`node -e` đếm `�`, câu lặp, tên riêng sai) + vá tay các lỗi confident bằng replace trong `corrected.json`. **QUAN TRỌNG:** `corrected.json` mới hơn raw → `make` full skip spell-fix và DÙNG bản đã sửa. Nếu đã render/plan trước đó → xoá `tmp/<slug>.plan.json` để regen caption ([[plan-json-cache-after-correct]]).
+   Sau khi apply: quét lỗi còn sót (`node -e` đếm `�`, câu lặp, tên riêng sai) + vá tay lỗi confident trong `corrected.json`. Đã render/plan trước đó → render lại với `regenPlan=true, regenTranscribe=false` ([[plan-json-cache-after-correct]]). **ĐỪNG tick "Tạo lại transcript" trên UI** sau khi đã sửa — nó chạy lại whisper + ghi đè `corrected.json` bằng bản chưa sửa.
+
+   > ⛔ **KHÔNG dùng** `transcript-correct.ts` (gọi GPT-4o, tốn phí) hay `SPELL_FIX_OPENAI=1` — chỉ khi user yêu cầu rõ.
 4. **User nghe** xác nhận: (a) giọng Bắc nhất quán (máy khó tự bắt accent); (b) **xưng hô đúng giới tính** — host nam xưng "Tôi"/gọi nữ là "Chị", host nữ xưng "Tôi"/gọi nam là "Anh"; audio hay bị ĐẢO (nam gọi nữ là "anh", nữ gọi nam là "chị"). Cả 2 lỗi này nằm trong tiếng nói nên KHÔNG sửa được ở transcript/caption cho khớp.
 5. Đạt → Bước 8. Lỗi giọng HOẶC đảo xưng hô → quay lại Bước 5 regenerate (`nlm audio create` lại / roll bản khác), KHÔNG render.
 
@@ -223,8 +223,20 @@ Tạo `input/<slug>.json` (chỉ `title` + `episodeNumber` bắt buộc; còn l�
 `episodeNumber`: `grep -h '"episodeNumber"' input/*.json | grep -oE '[0-9]+' | sort -n | tail -1` rồi +1.
 
 **⭐ CHỌN PLAYLIST — CLAUDE TỰ CHỌN, KHÔNG GỌI OPENAI (miễn phí):** khi chạy qua skill này, ĐỪNG dùng nút "Gợi ý AI" trên UI (nút đó gọi OpenAI, tốn phí). Thay vào đó **Claude tự đọc `input/_fb-playlists.json`** (mỗi playlist có `id`/`title`/`desc`) + tiêu đề/hook/bài luận của tập, rồi tự chọn playlist KHỚP chủ đề nhất và **điền `fbPlaylistId` + `fbPlaylistName`** vào config trên. Nếu không playlist nào khớp → để trống 2 field đó và **báo user nên tạo playlist mới** (đề xuất tên), rồi thêm vào `input/_fb-playlists.json`. Đã điền sẵn trong config thì tab Đăng tự chọn đúng playlist — user chỉ việc đăng. (⚠️ Nhắc lại: Graph API không tự thêm Reel vào playlist → vẫn phải thêm tay sau khi đăng.)
-> **UI (EpisodeEdit) — tab đã sắp lại:** panel **Audio / Nhạc nền / Cover** gom vào tab **"Âm thanh & Ảnh"** (tập chưa có audio thì tự mở tab này). Tab **"Ghép take"** đã gỡ khỏi UI. Các tab còn lại: Âm thanh & Ảnh · Nội dung · Render · Footage · Đăng.
-**Cover:** set `"coverImage": "<tên-file>.cover.png"` (ảnh đặt trong `input/`, ~9:16). Nếu thiếu cover → video không có ảnh bìa/intro. Kiểm `ls input/*.cover.png` xem có sẵn ảnh đúng chủ đề chưa.
+> **UI (EpisodeEdit) — tab:** Âm thanh (Audio + Nhạc nền) · Nội dung · **Footage** · **Render** · **Đăng**. Footage / Render / Đăng đều chia 2 tab con **Facebook 9:16 | YouTube 16:9**. **Ảnh cover + "Prompt tạo ảnh cover" nằm trong tab Render, đúng tab khung** (không còn ở tab Âm thanh / Cấu hình). Tab "Ghép take" đã gỡ.
+**Cover 9:16:** set `"coverImage": "<slug>.cover.png"` (ảnh trong `input/`, ~9:16). Thiếu cover → video không có ảnh bìa/intro. Kiểm `ls input/*.cover.png`.
+**Cover 16:9 (bản YouTube, tuỳ chọn):** `"coverImageLandscape": "<slug>.cover-yt.png"` (upload ở Render → YouTube 16:9 → "Ảnh cover YouTube (16:9)"). Dùng làm intro bản ngang + **thumbnail YouTube** (tự xuất `output/<slug>.yt.thumb.jpg` 1280×720). Thiếu → bản 16:9 dùng cover dọc (contain + nền mờ), thumbnail lấy frame hook. Prompt thumbnail YouTube (key `podcast.cover-prompt-yt`) dùng **ĐÚNG NGUYÊN VĂN tiêu đề tập** (viết hoa, ngắt dòng) + 1 vật kể chuyện, bố cục trái-phải, giữ `accentColor` của tập. ⚠️ Model ảnh hay sai dấu tiếng Việt khi chữ dài → soát chính tả trên ảnh trước khi upload.
+**⭐ PROMPT TẠO ẢNH COVER — CLAUDE CODE TỰ VIẾT, KHÔNG GỌI OPENAI (miễn phí):** đừng bấm gen qua API trên UI (ẩn sau nút "Gen qua API (tốn phí)"). Claude tự làm cho mỗi khung cần:
+```bash
+npx tsx podcast/scripts/cover-prompt.ts brief <slug>              # cover Reels 9:16 — in system prompt hiệu lực (có override /prompts) + tiêu đề/hook
+npx tsx podcast/scripts/cover-prompt.ts brief <slug> --landscape  # thumbnail YouTube 16:9
+# Claude đọc brief (+ input/<slug>.essay.txt để hiểu chủ đề), viết output ĐÚNG quy tắc R0-R6 của system prompt:
+#   dòng 1 "THEME_COLOR: #RRGGBB — <tên màu>", rồi prompt tiếng Anh đầy đủ (giữ nguyên các section style/negative),
+#   ghi vào tmp/<slug>.cover-prompt.txt (hoặc .cover-prompt.yt.txt)
+npx tsx podcast/scripts/cover-prompt.ts apply <slug> tmp/<slug>.cover-prompt.txt
+npx tsx podcast/scripts/cover-prompt.ts apply <slug> tmp/<slug>.cover-prompt.yt.txt --landscape
+```
+`apply` lưu vào `coverPrompt` / `coverPromptLandscape` (bản 9:16: tập chưa có `accentColor` → set luôn THEME_COLOR làm màu sóng). Prompt hiện ở **Render → tab khung → "Prompt tạo ảnh cover"** để user bấm Copy, dán vào Midjourney/Flux. Bản 16:9: dùng ĐÚNG `accentColor` đã có (brief truyền sẵn) + TITLE đúng nguyên văn tiêu đề tập.
 **⭐ NHẠC NỀN — KẾ THỪA BẢN CHỌN GẦN NHẤT:** không phải chọn lại mỗi tập. Nhạc mặc định lưu ở `input/_music-default.json` (+ file dùng chung `input/_default.bgm.<ext>`); tập mới tự điền `bgm`/`bgmVolumeDb`/`bgmMode`/`musicCredit` từ đó (createEmptyEpisode gọi `applyMusicDefaults`). Khi user upload bgm mới cho 1 tập (UI) → tự cập nhật làm default cho các tập sau. Khi tạo config tay cho tập mới, đọc `input/_music-default.json` và điền theo (nếu có). Đổi nhạc mặc định = upload bgm mới, hoặc sửa `input/_music-default.json`.
 
 ## Bước 8.5 — Hình ảnh nâng cấp originality (footage · màu chủ đề · biên tập · công bố AI)
@@ -240,6 +252,16 @@ npx tsx podcast/scripts/footage-plan.ts <slug> --apply --all-pexels
 - **KHÔNG lặp clip:** tải đủ clip cảnh (mỗi clip 1 lần, không trùng id) tới khi tổng thời lượng ≥ audio → `--all-pexels` fill kín.
 - Tự ghi `episode.footage` + `footageCredit` (ghi công tác giả Pexels). Xem báo cáo `tmp/<slug>.footage-plan.json` trước khi render; tab **Footage** trong UI để user xem trước.
 - Pexels API: `docs/pexels-api.md` (200 req/giờ; client `podcast/scripts/pexels.ts`). Clip tự quay (nếu có): `prep-footage.ts` (bỏ tiếng + chuẩn hoá 1080×1920). Bài học: [[footage-plan-pexels]] [[footage-pool-and-prep]].
+- **Sổ clip đã dùng** `input/_footage-used.json`: tập mới KHÔNG lấy lại clip Pexels của tập cũ (tự loại). **Blocklist bản quyền** `input/_footage-blocklist.json` (tác giả/clip bị Meta chặn) tự loại khỏi search. [[footage-copyright-blocklist]]
+
+### ⭐ FOOTAGE NGANG cho bản YouTube 16:9 (chỉ khi làm bản YouTube)
+```bash
+npx tsx podcast/scripts/footage-plan.ts <slug> --landscape --apply
+```
+- Luôn 100% Pexels NGANG (pool tự quay đang là dọc → không dùng được), lấp đủ thời lượng, cùng luật KHÔNG người + không lặp. Clip lưu `input/footage/pexels-yt/`, ghi `episode.footageLandscape` + **`footageCreditLandscape`** (credit riêng — `footageCredit` giữ cho bản FB). Sổ clip khoá `<slug>#yt` nên chạy lại không xoá dòng bản dọc. Báo cáo `tmp/<slug>.yt.footage-plan.json`.
+- ~15-20' footage → tải ~30-35 clip, mất vài phút (gpt-4o shot-list + vision people-check mỗi clip → tốn chút OpenAI).
+- Clip tự quay ngang (nếu có): `npx tsx podcast/scripts/prep-footage.ts --landscape <file...>` → `input/footage/yt/` rồi thêm tay `"yt/<tên>.mp4"` vào `footageLandscape`.
+- **Bản 16:9 CHỈ chạy nền footage** (scene sticker vẽ cố định cho khung dọc) — thiếu `footageLandscape` thì nút render YouTube bị khoá.
 - **Treatment mặc định TẮT** (giữ chất lượng/màu gốc). Chỉnh qua env `FOOTAGE_BLUR/BRIGHTNESS/SATURATION/INK` nếu muốn tối/blur.
 
 ### ⭐ MÀU CHỦ ĐỀ (cover + sóng đồng bộ)
@@ -262,6 +284,9 @@ curl -s -X POST http://localhost:3000/api/render \
   -d '{"episodeName":"<slug>","preview":false,"regenTranscribe":false,"regenPlan":true}'
 # poll tiến trình:  curl -s http://localhost:3000/api/render/jobs/<job-id>
 ```
+**Bản YouTube 16:9:** thêm `"format":"landscape"` vào body (mặc định `"vertical"`) → `output/<slug>.yt.mp4` + `.yt.thumb.jpg` (mọi file tmp/public cũng tiền tố `<slug>.yt` → không đè bản dọc). CLI: `npm run make -- input/<slug>.m4a --landscape`. Trên UI: tab **Render → YouTube 16:9**.
+- **2 khung render SONG SONG được** (mỗi tab có job/tiến trình riêng; server chạy tối đa `STUDIO_RENDER_PARALLEL`=2). Job sau của cùng tập tự CHỜ job trước chuẩn bị xong (khoá theo tập cho audio/transcript/plan/editorial dùng chung) rồi mới render song song. ⚠️ Tập dài 15-20' chạy 2 Chrome Remotion cùng lúc dễ thiếu RAM → nếu crash thì render lần lượt.
+
 Hoặc bảo user bấm nút Render trong tab **Render** của UI. Server (`render-runner.ts`) đã hỗ trợ **footage 2-pass ProRes có báo % theo từng đoạn** lên UI (`setPhase` "footage đoạn i/N"). Sau khi sửa `corrected.json` → `regenPlan=true`, `regenTranscribe=false` ([[render-qua-api-regen-plan]]).
 
 CLI (chỉ khi KHÔNG cần UI progress, hoặc debug) — ghi log ra file để theo dõi, ĐỪNG pipe `| tail`:
@@ -272,9 +297,10 @@ npm run make -- input/<slug>.m4a --preview
 - **Có footage (`episode.footage` != [])** → CẢ make.ts LẪN render-runner (UI) tự dùng **2-pass ProRes per-chunk** (ffmpeg dựng nền footage + Remotion render đồ hoạ trong suốt ProRes alpha từng đoạn 1500 frame + ghép + xoá ProRes ngay). ~30', ổn định. KHÔNG render footage 1 lượt (crash browser Remotion). Chi tiết [[footage-full-render-not-viable]].
 - **Đĩa:** cần THOÁNG (>10Gi lý tưởng). Đĩa <9Gi → macOS thrash (StorageManagement/CacheDelete) làm render chậm/erratic/ENOSPC — KHÔNG phải lỗi code; dọn đĩa hoặc đợi OS purge rồi chạy lại; đặt `RENDER_TIMEOUT_MS=600000` cho chắc.
 - **Bẫy theo dõi:** đừng `npm run make ... | tail -N` (buffer hết output tới khi xong) — ghi log ra file rồi `tail -f`.
+- **⚠️ KHÔNG `git checkout`/đổi branch/merge khi đang render qua UI:** server chạy `tsx watch` → file đổi (dù tích tắc) là restart → mất job ("Server lost track of this job") + Chrome Remotion mồ côi. Đợi render xong; lỡ rồi thì kill `chrome-headless-shell` PPID 1, xoá `tmp/<slug>[.yt].fchunks` + `footagebg.mp4` + `public/<slug>[.yt].*`, render lại. [[git-checkout-kills-render]]
 Yêu cầu: ffmpeg, whisper `whisper.cpp/ggml-medium.bin`, `OPENAI_API_KEY` + `PEXELS_API_KEY` trong `.env`.
 
-## Bước 10 — Đăng lên Facebook Reel (tab Đăng)
+## Bước 10 — Đăng lên Facebook Reel (tab Đăng → Facebook 9:16)
 
 Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — không cần copy-paste tay. [[fb-reel-publish-feature]].
 
@@ -293,5 +319,19 @@ Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — 
 
 **Điều kiện:** phải có video render (`output/<slug>.mp4`) — chưa render thì nút bị khoá, sang Bước 9 trước. Backend: `GET /api/episodes/:name/publish` (SSE) + `GET /api/episodes/_/facebook-playlists`; lib `shared/studio-core/facebook.ts` (resumable start → upload → finish, poll ready trừ khi lên lịch).
 
+## Bước 11 — Đăng YouTube (tab Đăng → YouTube 16:9, upload TAY)
+
+Chỉ khi đã render bản 16:9 (`output/<slug>.yt.mp4`). Không có API upload (Google chưa audit project → video API bị khoá private) → **user tự upload trong YouTube Studio**; app soạn sẵn data để copy + lưu kết quả. Data YouTube TÁCH khỏi data FB (caption/hashtag/trạng thái riêng).
+
+**⭐ CLAUDE TỰ SOẠN DATA YOUTUBE — KHÔNG GỌI OPENAI (miễn phí), giống chọn playlist ở Bước 8:** điền thẳng vào `input/<slug>.json`:
+- `ytTitle` (≤100 ký tự; để null = dùng `title`; từ khoá chính lên đầu vì YouTube cắt ~60-70 ký tự)
+- `ytDescription`: 2-3 câu đầu (hiện trước "Xem thêm") nêu câu hỏi của tập + lý do nên xem; KHÔNG tự viết mục lục/công bố/hashtag (app tự ghép)
+- `ytTags`: 10-15 thẻ (≤500 ký tự tổng) — có cả biến thể KHÔNG DẤU của từ khoá chính
+- `ytHashtags`: 3-5 cái, 3 cái đầu quan trọng nhất (hiện trên tiêu đề video)
+
+App tự ghép **mô tả đầy đủ** = mô tả + **Mục lục** (chapter tự sinh từ `tmp/<slug>.editorial.json`, đúng mốc chương hiện trên video: 00:00 đầu, ≥10s/chương, cần ≥3 chương) + **khối công bố AI** (dùng `footageCreditLandscape`; người biên soạn/nhạc/nguồn dùng chung với FB) + hashtag. User bấm Copy tiêu đề / mô tả / thẻ, tải video + thumbnail ở card "Asset cần upload".
+
+**Checklist trong Studio** (có sẵn trên UI): không dành cho trẻ em · "Altered/synthetic content" = **Có** (giọng AI) · playlist theo series · end screen · ngôn ngữ Tiếng Việt · công khai/lên lịch. Upload xong → dán link vào ô cuối → **"Đánh dấu đã đăng"** (`ytPublishStatus=published`, `ytUrl`, `ytPublishedAt` — không đụng `publishStatus` của FB).
+
 ## Tóm tắt 1 dòng mỗi bước
-research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + user nghe) → viết `input/<slug>.json` → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động) → **đăng FB Reel** ở tab Đăng (token ở Settings; caption+công bố tự dựng; **Claude tự chọn playlist** từ `_fb-playlists.json` điền sẵn config — KHÔNG gọi OpenAI; đăng ngay hoặc **lên lịch**).
+research → viết/mở rộng essay → **review essay (bỏ tiêu đề cứng + giảm mật độ triết gia ≤6 tên + câu đệm)** → `nlm source add` (essay + 10 URL) → `nlm audio create --language vi --length default --focus "<giọng Bắc + khung>"` → poll + `nlm download audio` vào `input/` → QC (thời lượng + `--plan-only` + **Claude sửa chính tả bằng spell-fix-manual dump/apply — KHÔNG OpenAI** + user nghe) → viết `input/<slug>.json` → **Claude tự viết prompt cover (cover-prompt.ts brief/apply — KHÔNG OpenAI)** → **footage-plan --all-pexels (cảnh hợp chủ đề, KHÔNG người, không lặp) + derive-accent + (editorial tự chạy)** → **render qua UI API** `POST /api/render` (hiện tiến trình trên UI; footage → 2-pass ProRes tự động) → **đăng FB Reel** ở tab Đăng (token ở Settings; caption+công bố tự dựng; **Claude tự chọn playlist** từ `_fb-playlists.json` điền sẵn config — KHÔNG gọi OpenAI; đăng ngay hoặc **lên lịch**). **Bản YouTube (tuỳ chọn):** cover 16:9 + `footage-plan --landscape --apply` → render `format:"landscape"` (song song được, ĐỪNG git checkout lúc render) → Claude điền `ytTitle/ytDescription/ytTags/ytHashtags` → user upload tay theo tab Đăng → YouTube 16:9 rồi đánh dấu đã đăng.
