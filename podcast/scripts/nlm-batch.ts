@@ -1,0 +1,189 @@
+/**
+ * nlm-batch.ts — phần MÁY MÓC của pipeline NotebookLM (ByteCast) gói trong 1 lệnh, để Claude
+ * không tốn token poll/tải/chọn bản. Claude chỉ viết 3 file đầu vào:
+ *   input/<slug>.essay.txt     bài luận (theo notebooklm-podcast/references/essay-pattern.md)
+ *   input/<slug>.focus.txt     prompt --focus (tiếng Anh, chuỗi Việt trong "...")
+ *   input/<slug>.sources.txt   URL nguồn, mỗi dòng 1 URL (đã kiểm crawl được)
+ *
+ * Script: tạo notebook (hoặc dùng --notebook=<id>) → nạp bài luận + URL → gen N bản audio
+ * (--takes, mặc định 2) → poll `studio status --json` → tải từng bản → cắt đuôi im lặng →
+ * chọn bản 14–18' gần 16' nhất → input/<slug>.m4a. Trạng thái lưu tmp/<slug>.nlm.json
+ * → chạy lại tiếp tục được (không tạo notebook/nạp nguồn lại; --takes=N gen THÊM N bản).
+ *
+ * Usage: npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>] [--force]
+ * Exit: 0 = đã chọn được bản đạt · 2 = chưa có bản 14–18' (chạy lại với --takes=1 / đổi profile) · 1 = lỗi.
+ *
+ * Quota (user xác nhận 2026-10-18): Plus 6 audio / 5 giờ; tài khoản khác 3. "Rate limited" khi
+ * create vẫn có thể đã tạo bản ma → script KHÔNG tự create lại, đọc status để đếm.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+
+const MIN_MIN = 14;
+const MAX_MIN = 18;
+const TARGET_MIN = 16;
+const POLL_SEC = 45;
+const POLL_MAX_MIN = 40;
+
+const ENV = { ...process.env, PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:${process.env.PATH}` };
+
+const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
+const log = (m: string) => console.log(`[nlm-batch] ${m}`);
+
+function nlm(args: string[], opts: { json?: boolean } = {}): string {
+  const r = spawnSync("nlm", args, { env: ENV, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`nlm ${args[0]} ${args[1] ?? ""}: ${(r.stderr || r.stdout).trim().slice(0, 400)}`);
+  return opts.json ? r.stdout.slice(r.stdout.search(/[[{]/)) : r.stdout;
+}
+
+const durationMin = (f: string) =>
+  Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f], { encoding: "utf-8" })) / 60;
+
+/** Cắt đuôi im lặng ≥3s (NotebookLM hay để ~90s dead air sau outro) — giữ 1.5s đệm. */
+function trimTrailingSilence(f: string): number {
+  const out = spawnSync("ffmpeg", ["-i", f, "-af", "silencedetect=n=-40dB:d=3", "-f", "null", "-"], { encoding: "utf-8" }).stderr;
+  const starts = [...out.matchAll(/silence_start: ([\d.]+)/g)].map((m) => Number(m[1]));
+  const ends = [...out.matchAll(/silence_end: ([\d.]+)/g)].map((m) => Number(m[1]));
+  const total = durationMin(f) * 60;
+  const last = starts[starts.length - 1];
+  // Khoảng lặng cuối không có silence_end (kéo tới hết file) → cắt.
+  if (last === undefined || ends.length >= starts.length || total - last < 3) return 0;
+  const tmp = f.replace(/\.m4a$/, ".trim.m4a");
+  execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", f, "-t", String(last + 1.5), "-c", "copy", tmp]);
+  fs.renameSync(tmp, f);
+  return total - (last + 1.5);
+}
+
+type State = { notebookId: string; sourcesAdded: boolean; artifacts: string[]; takes: Record<string, { file: string; minutes: number }> };
+
+async function main() {
+  const slug = process.argv[2];
+  if (!slug) {
+    console.error("Usage: npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>] [--force]");
+    process.exit(1);
+  }
+  const input = path.resolve("input");
+  const statePath = path.resolve("tmp", `${slug}.nlm.json`);
+  const read = (ext: string) => {
+    const p = [path.join(input, `${slug}.${ext}`), path.resolve("tmp", `${slug}.${ext}`)].find((x) => fs.existsSync(x));
+    return p ? fs.readFileSync(p, "utf-8").trim() : null;
+  };
+  const essay = read("essay.txt");
+  const focus = read("focus.txt");
+  const urls = (read("sources.txt") ?? "").split(/\s+/).filter((u) => /^https?:\/\//.test(u));
+  if (!essay || !focus) throw new Error(`Thiếu input/${slug}.essay.txt hoặc ${slug}.focus.txt`);
+
+  const profile = arg("profile");
+  if (profile) {
+    nlm(["login", "switch", profile]); // download audio KHÔNG có --profile → đổi default
+    log(`profile mặc định: ${profile}`);
+  }
+
+  let st: State = fs.existsSync(statePath)
+    ? JSON.parse(fs.readFileSync(statePath, "utf-8"))
+    : { notebookId: arg("notebook") ?? "", sourcesAdded: !!arg("notebook"), artifacts: [], takes: {} };
+  const save = () => fs.writeFileSync(statePath, JSON.stringify(st, null, 2));
+
+  // 1. Notebook
+  if (!st.notebookId) {
+    const title = (essay.split("\n")[0] || slug).slice(0, 90);
+    const nb = JSON.parse(nlm(["notebook", "create", title, "--json"], { json: true }));
+    st.notebookId = nb.id ?? nb.notebook_id ?? nb.notebook?.id;
+    if (!st.notebookId) throw new Error("Không đọc được id notebook mới");
+    save();
+    log(`tạo notebook ${st.notebookId}`);
+  }
+  const NB = st.notebookId;
+
+  // 2. Nguồn
+  if (!st.sourcesAdded) {
+    nlm(["source", "add", NB, "--text", essay, "--title", "Bài luận gốc", "--wait"]);
+    if (urls.length) nlm(["source", "add", NB, ...urls.flatMap((u) => ["--url", u]), "--wait", "--wait-timeout", "600"]);
+    st.sourcesAdded = true;
+    save();
+    log(`nạp bài luận + ${urls.length} URL`);
+  }
+
+  const audioArtifacts = () =>
+    (JSON.parse(nlm(["studio", "status", NB, "--json"], { json: true })) as Array<{ id: string; type: string; status: string }>).filter(
+      (a) => a.type === "audio",
+    );
+
+  // 3. Gen thêm N bản (đếm qua status, không tin exit code create — bẫy bản ma)
+  const want = Number(arg("takes") ?? (st.artifacts.length ? 0 : 2));
+  for (let i = 0; i < want; i++) {
+    const before = new Set(audioArtifacts().map((a) => a.id));
+    try {
+      nlm(["audio", "create", NB, "--language", "vi", "--format", "deep_dive", "--length", "default", "--focus", focus, "--confirm"]);
+    } catch (e) {
+      log(`⚠ audio create báo lỗi (có thể hết quota): ${(e as Error).message.slice(0, 160)}`);
+    }
+    const added = audioArtifacts().filter((a) => !before.has(a.id)).map((a) => a.id);
+    if (!added.length) {
+      log("Không tạo thêm được bản nào — dừng gen (quota?).");
+      break;
+    }
+    st.artifacts.push(...added.filter((id) => !st.artifacts.includes(id)));
+    save();
+    log(`đã yêu cầu bản ${st.artifacts.length} (${added.join(",")})`);
+  }
+
+  // 4+5. Poll → tải từng bản khi xong. Status "unknown" (nlm bản cũ luôn vậy — memory
+  // nlm-studio-status-unknown-poll-by-download) → thử tải luôn, tải được = xong.
+  const tryDownload = (id: string): boolean => {
+    if (st.takes[id]) return true;
+    const n = Object.keys(st.takes).length + 1;
+    const file = path.join(input, `${slug}.take${n}.m4a`);
+    try {
+      nlm(["download", "audio", NB, "--id", id, "--output", file, "--no-progress"]);
+    } catch {
+      return false;
+    }
+    if (!fs.existsSync(file) || fs.statSync(file).size < 100_000) return false;
+    const cut = trimTrailingSilence(file);
+    st.takes[id] = { file: path.basename(file), minutes: Math.round(durationMin(file) * 10) / 10 };
+    save();
+    log(`bản ${n}: ${st.takes[id].minutes}'${cut > 1 ? ` (cắt ${cut.toFixed(0)}s đuôi im lặng)` : ""}`);
+    return true;
+  };
+  const deadline = Date.now() + POLL_MAX_MIN * 60_000;
+  for (;;) {
+    const mine = audioArtifacts().filter((a) => st.artifacts.includes(a.id));
+    let pending = 0;
+    for (const a of mine) {
+      if (st.takes[a.id] || /failed|error/i.test(a.status)) continue;
+      if (/completed/i.test(a.status) || /unknown/i.test(a.status)) {
+        if (tryDownload(a.id)) continue;
+      }
+      pending++;
+    }
+    if (!pending || Date.now() > deadline) break;
+    log(`chờ ${pending}/${mine.length} bản đang gen…`);
+    await new Promise((r) => setTimeout(r, POLL_SEC * 1000));
+  }
+
+  // 6. Chọn bản 14–18' gần 16' nhất
+  const ok = Object.values(st.takes)
+    .filter((t) => t.minutes >= MIN_MIN && t.minutes <= MAX_MIN)
+    .sort((x, y) => Math.abs(x.minutes - TARGET_MIN) - Math.abs(y.minutes - TARGET_MIN));
+  const result = { notebookId: NB, takes: Object.values(st.takes), chosen: ok[0] ?? null };
+  if (ok[0]) {
+    const dest = path.join(input, `${slug}.m4a`);
+    if (fs.existsSync(dest) && !process.argv.includes("--force")) {
+      log(`input/${slug}.m4a đã có — giữ nguyên (thêm --force để thay bằng ${ok[0].file})`);
+    } else {
+      fs.copyFileSync(path.join(input, ok[0].file), dest);
+      log(`✓ chọn ${ok[0].file} (${ok[0].minutes}') → input/${slug}.m4a`);
+    }
+  } else {
+    log(`✗ chưa có bản ${MIN_MIN}–${MAX_MIN}' — chạy lại với --takes=1 (hoặc --profile=<khác>).`);
+  }
+  console.log(JSON.stringify(result));
+  process.exit(ok[0] ? 0 : 2);
+}
+
+main().catch((e) => {
+  console.error("[nlm-batch] FAIL:", e instanceof Error ? e.message : e);
+  process.exit(1);
+});

@@ -66,6 +66,8 @@ export type SeriesInfo = {
    * hiện chồng 2 lớp chữ. Bật để thử SEO/accessibility trên 1 series.
    */
   fbUploadSrt: boolean;
+  /** false = tập mới KHÔNG có thẻ hook mở đầu (đọc tiêu đề rồi vào nội dung luôn). */
+  hookCard: boolean;
 };
 
 export const SERIES: Record<SeriesId, SeriesInfo> = {
@@ -85,6 +87,7 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     playlistsFile: "_fb-playlists.json",
     fbContentCategory: "LIFESTYLE",
     fbUploadSrt: false,
+    hookCard: true,
   },
   "chuyen-xua": {
     id: "chuyen-xua",
@@ -122,6 +125,7 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     playlistsFile: "_fb-playlists.chuyen-xua.json",
     fbContentCategory: "LIFESTYLE",
     fbUploadSrt: false,
+    hookCard: false, // user chốt: không hook, vào truyện luôn
   },
   "dong-ho-viet": {
     id: "dong-ho-viet",
@@ -161,6 +165,7 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     playlistsFile: "_fb-playlists.dong-ho-viet.json",
     fbContentCategory: "FAMILY",
     fbUploadSrt: false,
+    hookCard: true,
   },
 };
 

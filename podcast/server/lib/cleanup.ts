@@ -226,9 +226,13 @@ export function scanCleanup(): {
   };
 }
 
-export function runCleanup(ids: string[]): { freedBytes: number; deleted: number; skipped: string[] } {
+export function runCleanup(
+  ids: string[],
+  opts: { assumeIdle?: boolean } = {},
+): { freedBytes: number; deleted: number; skipped: string[] } {
   const files = collect();
-  const busy = renderBusy();
+  // assumeIdle: render-runner gọi đúng lúc KHÔNG có job nào chạy (job sắp chạy còn "queued").
+  const busy = opts.assumeIdle ? false : renderBusy();
   let freed = 0;
   let deleted = 0;
   const skipped: string[] = [];
@@ -251,4 +255,19 @@ export function runCleanup(ids: string[]): { freedBytes: number; deleted: number
     }
   }
   return { freedBytes: freed, deleted, skipped };
+}
+
+/** Ngưỡng tự dọn trước render (skill plan-week cũng dùng mốc này). */
+export const AUTO_CLEANUP_BELOW_BYTES = 25 * 1024 ** 3;
+
+/**
+ * Tự dọn các mục AN TOÀN (defaultSelected — không đụng footage/video tập cũ) khi ổ trống
+ * < 25GB. render-runner gọi lúc hàng đợi bắt đầu chạy từ trạng thái rảnh → render 15' cần
+ * ~8GB scratch không fail ENOSPC giữa chừng, Claude/user không phải nhớ dọn.
+ */
+export function autoCleanupIfLow(): { freedBytes: number } | null {
+  if (diskUsage().freeBytes >= AUTO_CLEANUP_BELOW_BYTES) return null;
+  const ids = Object.entries(META).filter(([, m]) => m.defaultSelected).map(([id]) => id);
+  const r = runCleanup(ids, { assumeIdle: true });
+  return { freedBytes: r.freedBytes };
 }

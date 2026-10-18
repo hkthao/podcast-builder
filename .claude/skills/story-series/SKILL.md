@@ -18,7 +18,7 @@ Luồng: **nội dung → story.json → Gemini TTS → user nghe QC → story-a
 Transcript = chữ kịch bản căn vào timing whisper + chương từ kịch bản → render BỎ QUA whisper sửa chữ, spell-fix, LLM editorial (không tốn OpenAI).
 
 ## Bước 1 — Tạo tập
-Tạo qua UI (trang danh sách của series → "Tạo tập mới") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Rồi sửa config: `"editorialLocked": true`, `hook` (hoặc `null` để vào thẳng nội dung).
+Tạo qua UI (trang danh sách của series → "Tạo tập mới"; ô kế hoạch → "Tạo tập") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Server tự điền mặc định series (`editorialLocked: true`; `hook: null` nếu series `hookCard: false` như Chuyện Xưa; nhạc nền gần nhất của series) — không cần sửa config.
 
 ## Bước 2 — Viết `input/<slug>.story.json`
 ```json
@@ -37,6 +37,11 @@ Tạo qua UI (trang danh sách của series → "Tạo tập mới") hoặc API 
 - Gemini PHẢI đọc đúng kịch bản để căn caption — phần nào đọc thêm/bớt câu → gen lại.
 
 ## Bước 3 — Gen audio Gemini
+**Mặc định 1 lệnh** (gồm cả Bước 3b + QC, tự gen lại khi trượt):
+```bash
+npx tsx story/scripts/story-audio.ts <slug> [--fresh]   # exit 0 = đạt (neo chữ ≥70% + giọng Bắc), 2 = trượt 3 lần
+```
+Các lệnh lẻ bên dưới để thử giọng / gen lại 1 phần / gỡ lỗi:
 ```bash
 npx tsx story/scripts/story-tts-gemini.ts <slug>                          # gen (≤900 chữ/lần → tập ~4' = 1 lần, giọng đều)
 npx tsx story/scripts/story-tts-gemini.ts <slug> --part=2                 # gen lại riêng 1 phần

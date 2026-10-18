@@ -8,7 +8,7 @@ import {
 import { PATHS } from "../../../shared/studio-core/paths";
 import { deleteAllScriptTurnAudio } from "../../../shared/studio-core/podcast-script-tts";
 import { getEssay } from "./essay-store";
-import { DEFAULT_SERIES, type SeriesId } from "../../src/series";
+import { DEFAULT_SERIES, getSeries, type SeriesId } from "../../src/series";
 import { getSession as getBrainstormSession } from "./brainstorm-store";
 
 const { INPUT_DIR, OUTPUT_DIR, TMP_DIR } = PATHS;
@@ -367,6 +367,11 @@ export async function createEmptyEpisode(input: {
 
   template.series = input.series ?? DEFAULT_SERIES;
   template.episodeNumber = await nextEpisodeNumber(style, template.series);
+  // Mặc định theo series — Claude/user khỏi sửa config sau khi tạo.
+  const seriesInfo = getSeries(template.series);
+  if (!seriesInfo.hookCard) template.hook = null;
+  // Series kể chuyện: chương lấy từ kịch bản → khoá editorial (render không gọi LLM ghi đè).
+  if (seriesInfo.tts) template.editorialLocked = true;
 
   // Kế thừa nhạc nền user chọn gần nhất (khỏi chọn lại mỗi tập).
   const withMusic = await applyMusicDefaults(template);
@@ -676,7 +681,13 @@ export async function saveTranscriptFlags(
 // User chốt 1 bản nhạc cho 1 tập → tự thành default cho MỌI tập mới (khỏi chọn
 // lại). Lưu file nhạc dùng chung input/_default.bgm.<ext> + cấu hình ở
 // input/_music-default.json. applyMusicDefaults() điền vào tập mới khi chưa có bgm.
-const MUSIC_DEFAULT_PATH = path.join(INPUT_DIR, "_music-default.json");
+// Mỗi series có default riêng (_music-default.<series>.json + _default.<series>.bgm.<ext>) để
+// nhạc ByteCast không lan sang Chuyện Xưa; ByteCast giữ tên file cũ. Series chưa chọn nhạc
+// lần nào → dùng default chung (ByteCast) như trước.
+const musicDefaultPath = (series?: string) =>
+  path.join(INPUT_DIR, !series || series === DEFAULT_SERIES ? "_music-default.json" : `_music-default.${series}.json`);
+const musicSharedName = (series: string | undefined, ext: string) =>
+  !series || series === DEFAULT_SERIES ? `_default.bgm.${ext}` : `_default.${series}.bgm.${ext}`;
 export type MusicDefaults = {
   bgm: string | null;
   bgmVolumeDb: number;
@@ -684,10 +695,12 @@ export type MusicDefaults = {
   musicCredit: string | null;
 };
 
-export async function getMusicDefaults(): Promise<MusicDefaults | null> {
-  if (!(await exists(MUSIC_DEFAULT_PATH))) return null;
+export async function getMusicDefaults(series?: string): Promise<MusicDefaults | null> {
+  let file = musicDefaultPath(series);
+  if (!(await exists(file))) file = musicDefaultPath();
+  if (!(await exists(file))) return null;
   try {
-    const d = JSON.parse(await fs.readFile(MUSIC_DEFAULT_PATH, "utf-8"));
+    const d = JSON.parse(await fs.readFile(file, "utf-8"));
     if (!d?.bgm) return null;
     return {
       bgm: String(d.bgm),
@@ -700,9 +713,9 @@ export async function getMusicDefaults(): Promise<MusicDefaults | null> {
   }
 }
 
-export async function saveMusicDefaults(d: MusicDefaults): Promise<void> {
+export async function saveMusicDefaults(d: MusicDefaults, series?: string): Promise<void> {
   await fs.mkdir(INPUT_DIR, { recursive: true });
-  await fs.writeFile(MUSIC_DEFAULT_PATH, JSON.stringify(d, null, 2));
+  await fs.writeFile(musicDefaultPath(series), JSON.stringify(d, null, 2));
 }
 
 /** Điền nhạc mặc định (bản chọn gần nhất) vào config KHI tập chưa đặt bgm. */
@@ -710,7 +723,7 @@ export async function applyMusicDefaults(
   config: EpisodeConfig,
 ): Promise<EpisodeConfig> {
   if (config.bgm) return config;
-  const d = await getMusicDefaults();
+  const d = await getMusicDefaults(config.series);
   if (!d?.bgm) return config;
   if (!(await exists(path.join(INPUT_DIR, d.bgm)))) return config; // file mất → bỏ qua
   return {
@@ -961,14 +974,17 @@ export async function uploadEpisodeBgm(
 
   // Ghi nhớ đây là NHẠC NỀN MẶC ĐỊNH mới (bản chọn gần nhất) cho các tập sau:
   // copy sang file dùng chung + lưu cấu hình volume/mode/credit hiện tại.
-  const sharedName = `_default.bgm.${ext}`;
+  const sharedName = musicSharedName(config.series, ext);
   await fs.writeFile(path.join(INPUT_DIR, sharedName), buffer);
-  await saveMusicDefaults({
-    bgm: sharedName,
-    bgmVolumeDb: config.bgmVolumeDb,
-    bgmMode: config.bgmMode,
-    musicCredit: config.musicCredit,
-  });
+  await saveMusicDefaults(
+    {
+      bgm: sharedName,
+      bgmVolumeDb: config.bgmVolumeDb,
+      bgmMode: config.bgmMode,
+      musicCredit: config.musicCredit,
+    },
+    config.series,
+  );
 
   const updated = await loadSummary(name);
   if (!updated) throw new Error(`BGM OK nhưng không load lại: ${name}`);

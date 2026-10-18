@@ -32,6 +32,7 @@ import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 import { getModel } from "../../../shared/transcribe/whisper-config";
 import { bus } from "../../../shared/studio-core/events";
 import { PATHS, type EpisodeStatus, getEpisode } from "./episode-store";
+import { autoCleanupIfLow } from "./cleanup";
 
 const COMPOSITION_ID = "Podcast";
 const PUBLIC_DIR = path.resolve("public");
@@ -301,6 +302,14 @@ export async function startPlan(episodeName: string): Promise<RenderJob> {
 }
 
 function processQueue() {
+  if (activeCount === 0 && queue.length > 0) {
+    try {
+      const r = autoCleanupIfLow();
+      if (r) console.log(`[render-runner] ổ trống < 25GB → tự dọn mục an toàn, giải phóng ${(r.freedBytes / 1024 ** 3).toFixed(1)}GB`);
+    } catch (e) {
+      console.warn("[render-runner] tự dọn ổ lỗi (bỏ qua):", e);
+    }
+  }
   while (activeCount < MAX_PARALLEL && queue.length > 0) {
     const jobId = queue.shift()!;
     const job = jobs.get(jobId);

@@ -24,6 +24,7 @@ import {
   Send,
   Trash2,
   X as XIcon,
+  FilePlus2,
 } from "lucide-react";
 import { api, planApi, type PlanIdea, type PlanSlot } from "@/lib/api";
 import { SERIES_OPTIONS, seriesInfo, type SeriesId } from "@/lib/series";
@@ -138,6 +139,23 @@ export function PlanPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["render-jobs"] }),
   });
 
+  // Tạo tập hàng loạt: ô đã có chủ đề nhưng chưa gắn tập (mặc định theo series do server điền).
+  const creatable = (q.data?.slots ?? []).filter((s) => s.title && !s.episode);
+  const createAllMut = useMutation({
+    mutationFn: async () => {
+      const errors: string[] = [];
+      for (const s of creatable) {
+        try {
+          await planApi.createEpisode(s.id);
+        } catch (e) {
+          errors.push(`${s.date} ${s.title}: ${(e as Error).message}`);
+        }
+      }
+      if (errors.length) throw new Error(errors.join(" · "));
+    },
+    onSettled: refresh,
+  });
+
   // Hẹn giờ hàng loạt: ô đã render, chưa hẹn/đăng, giờ đăng còn ≥ 15 phút.
   const postTime = q.data?.settings.postTime;
   const slotAt = (s: PlanSlot) => new Date(`${s.date}T${postTime?.[s.series] ?? "20:00"}:00`);
@@ -208,6 +226,16 @@ export function PlanPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => createAllMut.mutate()}
+            disabled={!creatable.length || createAllMut.isPending}
+            title="Tạo tập (config) cho mọi ô đã có chủ đề nhưng chưa gắn tập"
+          >
+            {createAllMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />} Tạo{" "}
+            {creatable.length} tập
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => renderMut.mutate()}
             disabled={!renderable.length || renderMut.isPending}
             title="Xếp hàng render các tập đã đủ kịch bản + audio + footage + cover (server chạy tối đa 2 job song song)"
@@ -221,7 +249,7 @@ export function PlanPage() {
         </div>
       </header>
 
-      {(activeCount > 0 || renderMut.error) && (
+      {(activeCount > 0 || renderMut.error || createAllMut.error) && (
         <Card className="mb-4 p-3 text-sm">
           {activeCount > 0 && (
             <span className="inline-flex items-center gap-2">
@@ -232,6 +260,7 @@ export function PlanPage() {
             </span>
           )}
           {renderMut.error && <div className="text-xs text-destructive">{String(renderMut.error)}</div>}
+          {createAllMut.error && <div className="text-xs text-destructive">{String(createAllMut.error)}</div>}
         </Card>
       )}
 

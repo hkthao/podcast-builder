@@ -3,8 +3,8 @@
  * Hẹn giờ đăng dùng lại SSE /api/episodes/:name/publish?scheduledAt=… ở UI.
  */
 import { Hono } from "hono";
-import { SERIES_IDS, getSeries, type SeriesId } from "../../src/series";
-import { createEmptyEpisode, getEpisode, saveEpisode } from "../lib/episode-store";
+import { SERIES_IDS, type SeriesId } from "../../src/series";
+import { createEmptyEpisode, getEpisode } from "../lib/episode-store";
 import {
   addDays,
   fillSlots,
@@ -107,11 +107,8 @@ planRoutes.post("/slots/:id/create-episode", async (c) => {
   if (slot.episode) return c.json({ error: `Ô đã gắn tập ${slot.episode}` }, 400);
   if (!slot.title) return c.json({ error: "Ô chưa có chủ đề" }, 400);
   try {
+    // Mặc định theo series (hook, editorialLocked, nhạc) do createEmptyEpisode điền.
     const ep = await createEmptyEpisode({ title: slot.title, hook: slot.hook, series: slot.series });
-    // Series kể chuyện: chương lấy từ kịch bản → khoá editorial (không gọi LLM ghi đè).
-    if (getSeries(slot.series).tts) {
-      await saveEpisode(ep.name, { ...ep.config, editorialLocked: true });
-    }
     slot.episode = ep.name;
     await writePlan(plan);
     return c.json(slot);

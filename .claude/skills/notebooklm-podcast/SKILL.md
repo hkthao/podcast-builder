@@ -166,20 +166,13 @@ TRANSITIONS: Seamlessly bridge segments using organic Vietnamese transitions: "N
 - **⚠️ GIỌNG NAM/BẮC KHÔNG ĐIỀU KHIỂN ĐƯỢC BẰNG PROMPT.** Đã thử nghiệm: focus ép giọng Bắc cực mạnh bằng tiếng Anh (`[TAG]` + "FORBIDDEN Southern" + linguistic anchors) VẪN ra audio giọng Nam 100%. NotebookLM **tự gán voice** cho mỗi lần gen — prompt chỉ chi phối nội dung/nhịp/phiên âm, KHÔNG chi phối vùng giọng. Lever thật sự để được giọng Bắc: **ACCOUNT + roll lại** — có account hay ra giọng Bắc (account chính thường cho giọng Bắc), có account hay ra giọng Nam (profile phụ/plus có hôm toàn Nam). Khi 1 account ra giọng Nam → **đổi account khác + tạo notebook mới + gen lại**, lặp tới khi được giọng Bắc. Nuốt chữ cũng là roll ngẫu nhiên. → BẮT BUỘC user nghe xác nhận giọng (Bước 7), đừng render mù.
 - **⭐ THỜI LƯỢNG BẮT BUỘC 14–18 PHÚT — cổng chặn cứng (user chốt 2026-10-18: chất lượng audio NotebookLM giờ đã tốt, chỉ cần chọn bản đúng thời lượng).** Audio dưới 14' hoặc trên 18' đều KHÔNG đạt, phải roll lại. `--length` KHÔNG đáng tin để canh: tiếng Việt chỉ có `default`, cùng `default` từng ra 9.8 / 12.6 / 13.6 / 16.1 / 21 phút (random mỗi lần gen). Cách làm: ghi `target 15-18 minute` trong focus + source đủ dày (bài luận ~1800–2200 chữ), rồi gen nhiều bản A/B trên CÙNG notebook (`nlm audio create` lặp lại → nhiều artifact, tải từng bản bằng `--id`), **chọn bản rơi vào 14–18'**. Bản <12' thường do nuốt phần → bỏ. KHÔNG dùng `long` (xem cảnh báo Bước 5 — `long` không tồn tại cho tiếng Việt, gây lỗi giả "rate limited").
 
-## Bước 6 — Chờ + tải audio
-Poll rồi tải vào `input/` (chạy nền):
+## Bước 6 — Chờ + tải + chọn bản (1 lệnh, KHÔNG poll tay)
 ```bash
-NB=<UUID>; OUT=/Users/kimthaohuynh/SourceCode/podcast-builder/input/<slug>.m4a
-for i in $(seq 1 40); do
-  st=$(nlm studio status $NB 2>/dev/null | grep -o '"status": "[^"]*"' | head -1)
-  echo "[poll $i] $st"
-  if echo "$st" | grep -qi "ready\|complete\|success"; then
-    nlm download audio $NB --output "$OUT" --no-progress; break
-  fi
-  sleep 45
-done
+npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>]
 ```
-`<slug>` = tên file không dấu, gạch ngang (vd `neu-ban-bien-mat-30-ngay`).
+Claude chỉ viết `input/<slug>.essay.txt`, `input/<slug>.focus.txt`, `input/<slug>.sources.txt` (URL mỗi dòng). Script tự: tạo notebook (hoặc `--notebook=` có sẵn) → nạp bài luận + URL → gen N bản (đếm bản mới qua `studio status --json`, không create lại khi lỗi → tránh bản ma) → poll → tải `input/<slug>.takeN.m4a` → cắt đuôi im lặng → chọn bản 14–18' gần 16' nhất → `input/<slug>.m4a`. Trạng thái `tmp/<slug>.nlm.json` → chạy lại = tiếp tục (`--takes=1` gen thêm 1 bản). Exit 0 = có bản đạt · 2 = chưa có (roll thêm / đổi profile) · 1 = lỗi. Chạy nền (Bash `run_in_background`), đợi thông báo xong — ĐỪNG poll.
+
+Lệnh `nlm` tay ở Bước 4–5 chỉ để gỡ lỗi / làm từng bước.
 
 ## Bước 7 — QC audio TRƯỚC khi render (BẮT BUỘC)
 NotebookLM audio tiếng Việt KHÔNG ổn định: **hay lẫn giọng Nam/Bắc** giữa chừng + **nuốt/mất câu**. Đừng render mù.
