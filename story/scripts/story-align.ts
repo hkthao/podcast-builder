@@ -68,7 +68,8 @@ async function main() {
       ...parts.flatMap((p) => ["-i", p]),
       "-filter_complex",
       parts.map((_, i) => `[${i}:a]aresample=48000,aformat=channel_layouts=mono[a${i}]`).join(";") +
-        ";" + parts.map((_, i) => `[a${i}]`).join("") + `concat=n=${parts.length}:v=0:a=1[out]`,
+        ";" + parts.map((_, i) => `[a${i}]`).join("") + `concat=n=${parts.length}:v=0:a=1` +
+        (story.tempo && story.tempo !== 1 ? `,atempo=${story.tempo}` : "") + "[out]",
       "-map", "[out]", "-c:a", "aac", "-b:a", "192k", m4a,
     ],
     { stdio: ["ignore", "ignore", "inherit"] },

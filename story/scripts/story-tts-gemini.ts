@@ -8,7 +8,9 @@ import "dotenv/config";
  * Xong → npx tsx story/scripts/story-align.ts <slug>
  *
  * API key: provider "gemini" ở trang Settings của app (DB), fallback GEMINI_API_KEY / GOOGLE_API_KEY trong .env.
- * Usage: npx tsx story/scripts/story-tts-gemini.ts <slug> [--part=N] [--model=...]
+ * Usage: npx tsx story/scripts/story-tts-gemini.ts <slug> [--part=N] [--model=...] [--voice=Charon --tag=charon] [--pace="..."]
+ *   --voice + --tag: gen bản thử giọng khác vào input/<slug>.parts-<tag>/ (không đè bản đang dùng).
+ *   --pace: thay câu "Pace: ..." trong director's note (vd nhịp nhanh hơn cho giọng trầm).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -89,7 +91,7 @@ async function main() {
   const slug = process.argv[2];
   const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
   if (!slug) {
-    console.error("Usage: npx tsx story/scripts/story-tts-gemini.ts <slug> [--part=N] [--model=...]");
+    console.error("Usage: npx tsx story/scripts/story-tts-gemini.ts <slug> [--part=N] [--model=...] [--voice=X --tag=Y]");
     process.exit(1);
   }
   const apiKey = getApiKey("gemini");
@@ -97,12 +99,15 @@ async function main() {
 
   const story = readStory(slug);
   const model = arg("model") ?? DEFAULT_MODEL;
-  const voice = story.geminiVoice ?? DEFAULT_VOICE;
-  const note = story.geminiDirectorNote ?? DEFAULT_NOTE;
+  const voice = arg("voice") ?? story.geminiVoice ?? DEFAULT_VOICE;
+  const tag = arg("tag");
+  const pace = arg("pace");
+  const baseNote = story.geminiDirectorNote ?? DEFAULT_NOTE;
+  const note = pace ? baseNote.replace(/Pace: [^.]*\./, `Pace: ${pace.replace(/\.$/, "")}.`) : baseNote;
   const only = arg("part") ? Number(arg("part")) : null;
 
   const parts = buildParts(story, PART_WORDS_API);
-  const dir = path.join(INPUT_DIR, `${slug}.parts`);
+  const dir = path.join(INPUT_DIR, tag ? `${slug}.parts-${tag}` : `${slug}.parts`);
   fs.mkdirSync(dir, { recursive: true });
   console.log(`[story-tts-gemini] ${slug}: ${parts.length} phần · ${model} · giọng ${voice}`);
 

@@ -1386,6 +1386,16 @@ export const api = {
 
   // ─── Đăng Facebook Reel trực tiếp ────────────────────────────────────
   /** Danh sách playlist của Trang Facebook để chọn trước khi đăng. */
+  /** Trang FB mà tập sẽ đăng lên (theo series) + xác nhận qua Graph API. */
+  fbPageForEpisode: (name: string) =>
+    jsonFetch<{
+      channelName: string;
+      pageIdEnv: string;
+      pageId: string | null;
+      verified: { id: string; name: string } | null;
+      error?: string;
+    }>(`/api/episodes/${encodeURIComponent(name)}/facebook-page`),
+
   fbPlaylists: (series?: SeriesId) =>
     jsonFetch<{ pageId: string; pageName: string; playlists: FbPlaylist[] }>(
       `/api/episodes/_/facebook-playlists?series=${encodeURIComponent(series ?? "bytecast")}`,

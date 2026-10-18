@@ -63,7 +63,7 @@ import { GEMINI_TTS_BLOCKED_CODE } from "../../../shared/studio-core/tts-provide
 import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
 import { PATHS } from "../../../shared/studio-core/paths";
 import { getApiKey } from "../../../shared/studio-core/api-keys-store";
-import { publishReel, listPlaylists } from "../../../shared/studio-core/facebook";
+import { publishReel, listPlaylists, resolvePage } from "../../../shared/studio-core/facebook";
 import { generateCoverImage } from "../lib/cover-image";
 import { streamSSE } from "hono/streaming";
 import path from "node:path";
@@ -528,6 +528,26 @@ episodesRoutes.delete("/:name/files", async (c) => {
     const err = e as Error & { code?: string };
     const status = err.code === "VALIDATION" ? 400 : 500;
     return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Trang FB mà tập sẽ đăng lên (card "Đăng thẳng lên Facebook"): theo series →
+ * env Page ID; có token thì hỏi Graph API tên Trang để xác nhận token quản Trang đó.
+ */
+episodesRoutes.get("/:name/facebook-page", async (c) => {
+  const summary = await getEpisode(c.req.param("name"));
+  if (!summary) return c.json({ error: "Không tìm thấy tập." }, 404);
+  const series = getSeries(summary.config.series);
+  const pageId = fbPageIdFor(summary.config.series) ?? null;
+  const base = { channelName: series.channelName, pageIdEnv: series.fbPageIdEnv, pageId };
+  const token = getApiKey("facebook");
+  if (!token) return c.json({ ...base, verified: null, error: "Chưa có token Facebook (Settings)." });
+  try {
+    const page = await resolvePage(token, pageId ?? undefined);
+    return c.json({ ...base, verified: { id: page.id, name: page.name } });
+  } catch (e) {
+    return c.json({ ...base, verified: null, error: e instanceof Error ? e.message : String(e) });
   }
 });
 

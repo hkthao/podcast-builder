@@ -17,6 +17,7 @@ User dán nguyên văn (thường copy từ ebook, hay lỗi OCR: "Không Tử"�
   "title": "tiêu đề video",
   "source": { "name": "Cổ học tinh hoa", "title": "tên truyện" },
   "geminiVoice": "Autonoe",      // giọng đã chọn (nữ, sáng + êm)
+  "tempo": 1.1,                  // tăng tốc khi ghép (atempo) — Autonoe đọc chậm; Gemini BỎ QUA chỉ đạo "đọc nhanh"
   // "geminiDirectorNote": "Style: ... Pace: ..."   // tuỳ chọn, mặc định ở story-tts-gemini.ts
   "sections": [
     { "id": "hook", "text": "..." },
@@ -82,6 +83,8 @@ Series RIÊNG **"Chuyện Xưa - Ngẫm Nay"** (Trang FB riêng, KHÔNG liên qu
 - Đăng: tab Đăng như tập podcast; caption ghi nguồn "Cổ học tinh hoa" + công bố giọng AI.
 
 ## Bẫy đã gặp
+- Tốc độ: chỉ đạo Pace nhanh trong director's note KHÔNG tác dụng (Charon "brisk" còn chậm hơn) → chỉnh bằng `tempo` (atempo giữ cao độ). Đã duyệt Autonoe 1.1. Đổi tempo SAU khi đã làm footage → phải tăng tốc cả clip footage cùng tỉ lệ (FootageLayer xếp clip nối tiếp theo độ dài) hoặc làm lại footage.
+- Thử giọng khác không đè bản đang dùng: `story-tts-gemini.ts <slug> --voice=Charon --tag=charon` → `input/<slug>.parts-charon/`. User đã nghe Charon/Iapetus, vẫn chọn Autonoe (Iapetus nhiều tạp âm).
 - Thử OmniVoice local (2026-10-18): user chê "không tự nhiên" → bỏ, dùng Gemini.
 - Whisper cắt âm tiết thành nhiều token ("gi"+"ữ") → forced-align phải ghép token không có khoảng trắng đầu (shared/lib/forced-align.ts đã làm; thiếu bước này chỉ neo ~54%).
 - Mẫu giọng NotebookLM: nhịp podcast quá nhanh, không ngắt hơi — không hợp kể chuyện.

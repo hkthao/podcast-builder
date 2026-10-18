@@ -18,6 +18,11 @@ export type Story = {
   geminiVoice?: string;
   /** Director's note gửi kèm (Style/Pace…). Bỏ trống = mặc định trong story-tts-gemini.ts. */
   geminiDirectorNote?: string;
+  /**
+   * Tăng tốc audio khi ghép (atempo, giữ cao độ). Gemini bỏ qua chỉ đạo "đọc nhanh"
+   * → chỉnh tốc độ ở bước ghép. Autonoe đã duyệt: 1.1. Bỏ trống = 1.
+   */
+  tempo?: number;
   sections: StorySection[];
 };
 

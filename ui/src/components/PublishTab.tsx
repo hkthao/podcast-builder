@@ -825,6 +825,14 @@ function FacebookPublishCard({
   });
   const hasToken = !!keysQ.data?.keys.find((k) => k.provider === "facebook")?.hasKey;
 
+  // Trang đích theo series — hỏi Graph API để chắc token quản đúng Trang trước khi đăng.
+  const pageQ = useQuery({
+    queryKey: ["fb-page", ep.name, ep.config.series ?? "bytecast"],
+    queryFn: () => api.fbPageForEpisode(ep.name),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
   const playlistsQ = useQuery({
     queryKey: ["fb-playlists", ep.config.series ?? "bytecast"],
     queryFn: () => api.fbPlaylists(ep.config.series),
@@ -980,6 +988,7 @@ function FacebookPublishCard({
         )}
       </header>
       <div className="p-5 space-y-4">
+        <FacebookPageInfo q={pageQ} />
         {!hasToken && (
           <p className="text-sm text-muted-foreground">
             Chưa có Page Access Token.{" "}
@@ -1215,3 +1224,91 @@ function FacebookPublishCard({
 
 // Mute unused-loader warning
 void Loader2;
+
+/**
+ * Mục "Trang đăng" đầu card — cùng kiểu nhãn với Playlist / Lịch đăng: ảnh đại diện
+ * Trang (fallback chữ cái) + tên Trang (Graph API) + ID (link), trạng thái kết nối bên phải.
+ */
+function FacebookPageInfo({
+  q,
+}: {
+  q: { data?: Awaited<ReturnType<typeof api.fbPageForEpisode>>; isLoading: boolean; error: unknown };
+}) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const d = q.data;
+  const name = d?.verified?.name ?? d?.channelName ?? "";
+  const id = d?.verified?.id ?? d?.pageId ?? null;
+  const initials = name
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Trang đăng
+      </Label>
+      {q.isLoading ? (
+        <div className="h-12 animate-pulse rounded-md bg-muted/40" />
+      ) : !d ? (
+        <p className="text-sm text-destructive">Không lấy được thông tin Trang: {String(q.error)}</p>
+      ) : (
+        <div className="flex items-center gap-3 rounded-md border bg-background/40 px-3 py-2">
+          {id && !avatarFailed ? (
+            // Ảnh đại diện thật của Trang (endpoint công khai, không cần token).
+            <img
+              src={`https://graph.facebook.com/${id}/picture?type=normal`}
+              alt={name}
+              onError={() => setAvatarFailed(true)}
+              className="size-9 shrink-0 rounded-full border object-cover"
+            />
+          ) : (
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold">
+              {initials || "?"}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {id ? (
+                <a
+                  href={`https://www.facebook.com/${id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-mono hover:text-foreground hover:underline"
+                >
+                  {id}
+                  <ExternalLink className="size-3" />
+                </a>
+              ) : (
+                <>
+                  Chưa đặt <code className="font-mono">{d.pageIdEnv}</code> trong .env
+                </>
+              )}
+            </div>
+          </div>
+          {d.verified ? (
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="size-3.5" />
+              Đã kết nối
+            </span>
+          ) : (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+              title={d.error}
+            >
+              <AlertCircle className="size-3.5" />
+              Chưa kết nối
+            </span>
+          )}
+        </div>
+      )}
+      {d && !d.verified && d.error ? (
+        <p className="text-[11px] text-muted-foreground">{d.error}</p>
+      ) : null}
+    </div>
+  );
+}
