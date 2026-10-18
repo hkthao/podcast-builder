@@ -65,6 +65,7 @@ import { PATHS } from "../../../shared/studio-core/paths";
 import { getApiKey } from "../../../shared/studio-core/api-keys-store";
 import { publishReel, listPlaylists, resolvePage } from "../../../shared/studio-core/facebook";
 import { generateCoverImage } from "../lib/cover-image";
+import { buildEpisodeSrt } from "../lib/srt";
 import { streamSSE } from "hono/streaming";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -789,6 +790,10 @@ episodesRoutes.get("/:name/publish", (c) => {
     const task = publishReel({
       token,
       pageIdOverride: fbPageIdFor(summary.config.series),
+      // Phân loại cho thuật toán + nhãn riêng tư để lọc thống kê (đo reach đăng qua API).
+      contentCategory: getSeries(summary.config.series).fbContentCategory,
+      customLabels: [getSeries(summary.config.series).id, "studio-api"],
+      captionsSrt: getSeries(summary.config.series).fbUploadSrt ? buildEpisodeSrt(name, summary.config) : null,
       videoPath,
       description,
       title: summary.config.title,

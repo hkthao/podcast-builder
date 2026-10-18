@@ -2,8 +2,12 @@
 
 Truyện trong sách cổ (*Cổ học tinh hoa*…) + lời bàn của sách + bài học cho hôm nay. Trang FB riêng, không liên quan ByteCast. Tập mẫu: `mat-tram-co-thi` ("Không quên được cái cũ").
 
-## Nhận truyện
-User dán nguyên văn (copy ebook, hay lỗi OCR: "Không Tử"→Khổng Tử, "cỏ thị"→cỏ thi, "sở đĩ"→sở dĩ, "nứa"→nữa, "Nhời bàn"→Lời bàn). Sửa và **liệt kê chỗ đã sửa**. Sách thường kèm **GIẢI NGHĨA** + **Lời bàn** — dùng cả hai; thiếu Lời bàn thì hỏi xin, KHÔNG tự bịa lời soạn giả. Chỗ OCR không chắc nguyên văn → bỏ và báo user.
+## Nguồn truyện — sách trong máy
+**`references/co-hoc-tinh-hoa/`** (không theo git): bản đầy đủ 243 truyện (`CoHocTinhHoa.pdf`, thuviensach.vn) đã tách bằng `story/scripts/cohoc_split.py` → `index.md` (số · tên · trang · có Lời bàn) + `truyen/NNN-<slug>.txt` (nguyên văn + GIẢI NGHĨA + LỜI BÀN). Đọc file truyện, kể SÁT nguyên văn, dùng đúng Lời bàn của sách. Tách lại (nếu đổi bản PDF):
+```bash
+uv run --no-project --with pymupdf python -I story/scripts/cohoc_split.py references/co-hoc-tinh-hoa/CoHocTinhHoa.pdf references/co-hoc-tinh-hoa
+```
+(PyMuPDF trích chữ Việt sạch; pypdf chèn khoảng trắng giữa âm tiết.) Tên trong sách có thể khác tên quen: Tăng Tử giết lợn = #92 "Thành thực", Mạnh mẫu = #93 "Mẹ hiền dạy con", Tái ông mất ngựa = #77 "Họa phúc khôn lường". User dán truyện từ nguồn khác → sửa lỗi OCR và liệt kê chỗ đã sửa.
 
 ## Cấu trúc (user đã chốt: KHÔNG hook mở đầu — đọc tiêu đề rồi vào truyện luôn; config `hook: null`)
 | section | chapter | Nội dung |

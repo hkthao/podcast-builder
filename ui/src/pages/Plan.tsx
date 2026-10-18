@@ -6,11 +6,12 @@
  * tập trong lịch; trang này hiện tiến độ từng ô (suy ra từ file tập) + hẹn giờ đăng
  * qua API (dùng lại SSE /api/episodes/:name/publish?scheduledAt=…).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
+  Clapperboard,
   ChevronLeft,
   ChevronRight,
   CalendarPlus,
@@ -32,6 +33,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { isActiveJob } from "@/pages/RenderQueue";
+import type { RenderJob } from "@/lib/api";
 
 const DAYS = 14;
 const WEEKDAY = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -90,6 +93,50 @@ export function PlanPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["plan"] });
 
   const fillMut = useMutation({ mutationFn: () => planApi.fill(from, DAYS), onSuccess: refresh });
+
+  // Job render chưa kết thúc (status = pha đang chạy) → ô hiện "Đang render…", không xếp lại.
+  const jobsQ = useQuery({
+    queryKey: ["render-jobs"],
+    queryFn: () => api.listRenderJobs(),
+    refetchInterval: (query) => (query.state.data?.jobs.some((j) => isActiveJob(j.status)) ? 5000 : false),
+  });
+  // Tập → job render đang chạy/chờ (bản dọc, không preview) để ô hiện % tiến độ.
+  const renderingEps = useMemo(() => {
+    const m = new Map<string, RenderJob>();
+    for (const j of jobsQ.data?.jobs ?? []) {
+      if (isActiveJob(j.status) && j.jobType === "render" && !j.preview) m.set(j.episodeName, j);
+    }
+    return m;
+  }, [jobsQ.data]);
+  // Có job vừa xong → làm mới tiến độ ô (chấm Render bật xanh, nút Hẹn giờ sáng).
+  const activeCount = renderingEps.size;
+  const prevActive = useRef(activeCount);
+  useEffect(() => {
+    if (activeCount < prevActive.current) refresh();
+    prevActive.current = activeCount;
+  }, [activeCount]);
+
+  // Render hàng loạt: đủ kịch bản + audio + footage + cover, chưa render (hoặc render cũ), chưa hẹn/đăng.
+  const renderable = (q.data?.slots ?? []).filter(
+    (s) =>
+      s.episode &&
+      !renderingEps.has(s.episode) &&
+      s.progress.script &&
+      s.progress.audio &&
+      s.progress.footage &&
+      s.progress.cover &&
+      !s.progress.rendered &&
+      !s.progress.scheduled &&
+      !s.progress.published,
+  );
+  const renderMut = useMutation({
+    mutationFn: async () => {
+      for (const s of renderable) {
+        await api.startRender(s.episode!, false, { regenTranscribe: false, regenPlan: true });
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["render-jobs"] }),
+  });
 
   // Hẹn giờ hàng loạt: ô đã render, chưa hẹn/đăng, giờ đăng còn ≥ 15 phút.
   const postTime = q.data?.settings.postTime;
@@ -158,11 +205,35 @@ export function PlanPage() {
           <Button variant="outline" size="sm" onClick={() => fillMut.mutate()} disabled={fillMut.isPending}>
             <CalendarPlus className="size-4" /> Điền lịch theo nhịp
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => renderMut.mutate()}
+            disabled={!renderable.length || renderMut.isPending}
+            title="Xếp hàng render các tập đã đủ kịch bản + audio + footage + cover (server chạy tối đa 2 job song song)"
+          >
+            {renderMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Clapperboard className="size-4" />} Render{" "}
+            {renderable.length} tập sẵn sàng
+          </Button>
           <Button size="sm" onClick={scheduleAll} disabled={!schedulable.length || (batch !== null && batch.done < batch.total)}>
             <Send className="size-4" /> Hẹn giờ {schedulable.length} tập đã render
           </Button>
         </div>
       </header>
+
+      {(activeCount > 0 || renderMut.error) && (
+        <Card className="mb-4 p-3 text-sm">
+          {activeCount > 0 && (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" /> Đang render {activeCount} tập —{" "}
+              <Link to="/render-queue" className="text-accent hover:underline">
+                xem hàng đợi
+              </Link>
+            </span>
+          )}
+          {renderMut.error && <div className="text-xs text-destructive">{String(renderMut.error)}</div>}
+        </Card>
+      )}
 
       {batch && (
         <Card className="mb-4 p-3 text-sm">
@@ -229,7 +300,13 @@ export function PlanPage() {
                 {SERIES_OPTIONS.map((s) => (
                   <div key={s.id} className="space-y-2 border-l px-2 py-2">
                     {(slotsBy.get(`${date}|${s.id}`) ?? []).map((slot) => (
-                      <SlotCard key={slot.id} slot={slot} at={slotAt(slot)} onChange={refresh} />
+                      <SlotCard
+                        key={slot.id}
+                        slot={slot}
+                        at={slotAt(slot)}
+                        renderJob={slot.episode ? renderingEps.get(slot.episode) ?? null : null}
+                        onChange={refresh}
+                      />
                     ))}
                   </div>
                 ))}
@@ -244,7 +321,17 @@ export function PlanPage() {
   );
 }
 
-function SlotCard({ slot, at, onChange }: { slot: PlanSlot; at: Date; onChange: () => void }) {
+function SlotCard({
+  slot,
+  at,
+  renderJob,
+  onChange,
+}: {
+  slot: PlanSlot;
+  at: Date;
+  renderJob: RenderJob | null;
+  onChange: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -297,6 +384,11 @@ function SlotCard({ slot, at, onChange }: { slot: PlanSlot; at: Date; onChange: 
           </button>
         )}
       </div>
+      {renderJob && renderJob.status !== "queued" && (
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" title={renderJob.message}>
+          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.round(renderJob.percent)}%` }} />
+        </div>
+      )}
       <div className="mt-2 flex items-center gap-1" title={STEPS.map((s) => `${s.label}: ${p[s.key] ? "✓" : "—"}`).join(" · ")}>
         {STEPS.map((s) => (
           <span key={s.key} className={cn("h-1.5 flex-1 rounded-full", p[s.key] ? "bg-emerald-500" : "bg-muted")} />
@@ -308,6 +400,11 @@ function SlotCard({ slot, at, onChange }: { slot: PlanSlot; at: Date; onChange: 
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3" />
               {new Date(p.scheduledAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
+            </span>
+          ) : renderJob ? (
+            <span className="inline-flex items-center gap-1 text-accent">
+              <Loader2 className="size-3 animate-spin" />
+              {renderJob.status === "queued" ? "Chờ render" : `Render ${Math.round(renderJob.percent)}%`}
             </span>
           ) : (
             p.next

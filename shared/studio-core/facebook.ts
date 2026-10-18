@@ -550,10 +550,14 @@ async function uploadPageVideo(opts: {
   description: string;
   thumbPath?: string | null;
   scheduledPublishTime?: number;
+  /** Danh mục nội dung (enum Graph: LIFESTYLE, FAMILY, ENTERTAINMENT… — KHÔNG có EDUCATION). */
+  contentCategory?: string;
+  /** Nhãn RIÊNG TƯ (không công khai) — lọc video trong thống kê, vd đo reach đăng qua API. */
+  customLabels?: string[];
   onProgress?: FbProgress;
   signal?: AbortSignal;
 }): Promise<string> {
-  const { token, pageId, videoPath, title, description, thumbPath, scheduledPublishTime, onProgress, signal } = opts;
+  const { token, pageId, videoPath, title, description, thumbPath, scheduledPublishTime, contentCategory, customLabels, onProgress, signal } = opts;
   const fileSize = fs.statSync(videoPath).size;
 
   // 1) start
@@ -620,9 +624,32 @@ async function uploadPageVideo(opts: {
     finForm.set("published", "false");
     finForm.set("scheduled_publish_time", String(scheduledPublishTime));
   }
+  if (contentCategory) finForm.set("content_category", contentCategory);
+  if (customLabels?.length) finForm.set("custom_labels", JSON.stringify(customLabels));
   const fin = await postPageVideos(pageId, finForm, signal);
   if (fin.success === false) throw new Error("Graph trả success=false ở pha finish.");
   return videoId;
+}
+
+/**
+ * Gắn phụ đề SRT (CC) cho video: POST /{video-id}/captions, file tên "<x>.<locale>.srt",
+ * ≤200KB (docs Graph). Video đã có caption IN CỨNG → bật CC có thể hiện chồng 2 lớp
+ * chữ, nên chỉ gọi khi series bật fbUploadSrt.
+ */
+async function uploadVideoCaptions(
+  token: string,
+  videoId: string,
+  srt: string,
+  locale = "vi_VN",
+  signal?: AbortSignal,
+): Promise<void> {
+  const form = new FormData();
+  form.set("access_token", token);
+  form.set("default_locale", locale);
+  form.set("captions_file", new Blob([srt], { type: "application/x-subrip" }), `captions.${locale}.srt`);
+  const res = await fetch(`${GRAPH}/${encodeURIComponent(videoId)}/captions`, { method: "POST", body: form, signal });
+  const body = (await parseJson(res)) as any;
+  if (!res.ok || body?.error) throwGraphError(body, `Graph /captions lỗi (HTTP ${res.status})`);
 }
 
 /**
@@ -640,10 +667,19 @@ export async function publishReel(opts: {
   thumbPath?: string | null;
   /** Unix seconds — nếu có (>0) thì LÊN LỊCH thay vì đăng ngay. */
   scheduledPublishTime?: number;
+  /** Video thường: danh mục nội dung (enum Graph). */
+  contentCategory?: string;
+  /** Video thường: nhãn riêng tư để lọc thống kê. */
+  customLabels?: string[];
+  /** Nội dung SRT → gắn phụ đề CC sau khi tải (lỗi không chặn việc đăng). */
+  captionsSrt?: string | null;
   onProgress?: FbProgress;
   signal?: AbortSignal;
 }): Promise<PublishReelResult> {
-  const { token, pageIdOverride, videoPath, description, title, thumbPath, scheduledPublishTime, onProgress, signal } = opts;
+  const {
+    token, pageIdOverride, videoPath, description, title, thumbPath, scheduledPublishTime,
+    contentCategory, customLabels, captionsSrt, onProgress, signal,
+  } = opts;
   if (!fs.existsSync(videoPath)) {
     throw new Error(`Không tìm thấy video: ${videoPath} — hãy Assemble (ráp mp4) trước.`);
   }
@@ -684,9 +720,20 @@ export async function publishReel(opts: {
       description,
       thumbPath,
       scheduledPublishTime,
+      contentCategory,
+      customLabels,
       onProgress,
       signal,
     });
+  }
+
+  if (captionsSrt) {
+    try {
+      await uploadVideoCaptions(pageToken, videoId, captionsSrt, "vi_VN", signal);
+      onProgress?.("✓ Đã gắn phụ đề SRT (vi_VN).");
+    } catch (e) {
+      onProgress?.(`⚠ Gắn phụ đề SRT lỗi (video vẫn đăng bình thường): ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   if (isScheduled) {

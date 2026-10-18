@@ -27,7 +27,7 @@ const MODEL = process.env.EDITORIAL_MODEL ?? "gpt-4o";
 const MAX_CHAPTERS = 8;
 const MAX_CITATIONS = 7;
 
-const SYSTEM = `Bạn là biên tập viên video cho podcast tiếng Việt "ByteCast Tech" (triết học, tâm lý học, xã hội). Nhiệm vụ: đọc transcript và rút ra LỚP BIÊN TẬP hiển thị trên màn hình, gồm (1) các CHƯƠNG nội dung và (2) các TRÍCH DẪN nhà tư tưởng/thuyết/khái niệm có ghi nguồn.
+export const EDITORIAL_SYSTEM = `Bạn là biên tập viên video cho podcast tiếng Việt "ByteCast Tech" (triết học, tâm lý học, xã hội). Nhiệm vụ: đọc transcript và rút ra LỚP BIÊN TẬP hiển thị trên màn hình, gồm (1) các CHƯƠNG nội dung và (2) các TRÍCH DẪN nhà tư tưởng/thuyết/khái niệm có ghi nguồn.
 
 QUY TẮC:
 - Mỗi dòng transcript có dạng "[<ms>] <câu>". Giá trị atMs bạn trả về PHẢI là một trong các số ms đã cho (chọn dòng khớp nhất), KHÔNG bịa số mới.
@@ -39,7 +39,7 @@ QUY TẮC:
   • Tối đa 7, mỗi tên 1 lần. KHÔNG bịa tên không có trong transcript.
 - Chỉ trả JSON: {"chapters":[{"atMs":number,"title":string}],"citations":[{"atMs":number,"name":string,"source":string}]}. KHÔNG markdown, KHÔNG lời mở đầu.`;
 
-const buildUserContent = (transcript: Transcript, episode: EpisodeConfig): string => {
+export const buildUserContent = (transcript: Transcript, episode: EpisodeConfig): string => {
   const lines = transcript.transcription
     .filter((s) => s.text.trim().length > 0)
     .map((s) => `[${s.offsets.from}] ${s.text.trim()}`)
@@ -120,7 +120,7 @@ export async function generateEditorial(
     raw = await chat({
       provider: "openai",
       model: MODEL,
-      systemPrompt: SYSTEM,
+      systemPrompt: EDITORIAL_SYSTEM,
       userContent: buildUserContent(transcript, episode),
       temperature: 0.4,
       jsonMode: true,
@@ -137,6 +137,56 @@ export async function generateEditorial(
     return writeEmpty("LLM trả JSON không hợp lệ");
   }
 
+  const editorial = normalizeEditorial(parsed, validOffsets, maxMs);
+  const { chapters, citations } = editorial;
+  ensureDir(path.dirname(editorialPath));
+  fs.writeFileSync(editorialPath, JSON.stringify(editorial, null, 2));
+  console.log(
+    `[editorial] ✓ ${editorialPath} — ${chapters.length} chương, ${citations.length} trích dẫn`,
+  );
+  return editorial;
+}
+
+const isMain = (() => {
+  try {
+    return process.argv[1] === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  const slug = process.argv[2];
+  if (!slug) {
+    console.error("Usage: tsx scripts/gen-editorial.ts <slug> [--force]");
+    process.exit(1);
+  }
+  const force = process.argv.includes("--force");
+  const transcriptPath = path.resolve("tmp", `${slug}.corrected.json`);
+  const fallback = path.resolve("tmp", `${slug}.json`);
+  const src = fs.existsSync(transcriptPath) ? transcriptPath : fallback;
+  const editorialPath = path.resolve("tmp", `${slug}.editorial.json`);
+  const jsonPath = path.resolve("input", `${slug}.json`);
+  const episode = fs.existsSync(jsonPath)
+    ? EpisodeConfigSchema.parse(JSON.parse(fs.readFileSync(jsonPath, "utf-8")))
+    : EpisodeConfigSchema.parse(buildEpisodeTemplate(slug));
+  generateEditorial(src, episode, editorialPath, { force }).catch(
+    (e: unknown) => {
+      console.error("[editorial] FAIL:", e);
+      process.exit(1);
+    },
+  );
+}
+
+/**
+ * Lọc + snap atMs về offset câu có thật cho kết quả editorial (LLM, hoặc Claude viết
+ * qua editorial-manual.ts). Dùng chung để 2 đường ra cùng chuẩn.
+ */
+export function normalizeEditorial(
+  parsed: { chapters?: unknown; citations?: unknown },
+  validOffsets: number[],
+  maxMs: number,
+): Editorial {
   const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : [];
   const rawCitations = Array.isArray(parsed.citations) ? parsed.citations : [];
 
@@ -181,41 +231,5 @@ export async function generateEditorial(
     chapters,
     citations,
   };
-  ensureDir(path.dirname(editorialPath));
-  fs.writeFileSync(editorialPath, JSON.stringify(editorial, null, 2));
-  console.log(
-    `[editorial] ✓ ${editorialPath} — ${chapters.length} chương, ${citations.length} trích dẫn`,
-  );
   return editorial;
-}
-
-const isMain = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
-
-if (isMain) {
-  const slug = process.argv[2];
-  if (!slug) {
-    console.error("Usage: tsx scripts/gen-editorial.ts <slug> [--force]");
-    process.exit(1);
-  }
-  const force = process.argv.includes("--force");
-  const transcriptPath = path.resolve("tmp", `${slug}.corrected.json`);
-  const fallback = path.resolve("tmp", `${slug}.json`);
-  const src = fs.existsSync(transcriptPath) ? transcriptPath : fallback;
-  const editorialPath = path.resolve("tmp", `${slug}.editorial.json`);
-  const jsonPath = path.resolve("input", `${slug}.json`);
-  const episode = fs.existsSync(jsonPath)
-    ? EpisodeConfigSchema.parse(JSON.parse(fs.readFileSync(jsonPath, "utf-8")))
-    : EpisodeConfigSchema.parse(buildEpisodeTemplate(slug));
-  generateEditorial(src, episode, editorialPath, { force }).catch(
-    (e: unknown) => {
-      console.error("[editorial] FAIL:", e);
-      process.exit(1);
-    },
-  );
 }

@@ -55,6 +55,17 @@ export type SeriesInfo = {
   fbPageIdEnv: string;
   /** File playlist chuẩn của Trang, trong input/. */
   playlistsFile: string;
+  /**
+   * content_category khi đăng /{page}/videos (enum Graph: BEAUTY_FASHION, BUSINESS, CARS_TRUCKS,
+   * COMEDY, CUTE_ANIMALS, ENTERTAINMENT, FAMILY, FOOD_HEALTH, HOME, LIFESTYLE, MUSIC, NEWS,
+   * POLITICS, SCIENCE, SPORTS, TECHNOLOGY, VIDEO_GAMING, OTHER — không có EDUCATION).
+   */
+  fbContentCategory: string;
+  /**
+   * Gắn phụ đề SRT (CC) khi đăng. Mặc định TẮT: video đã có caption in cứng → CC có thể
+   * hiện chồng 2 lớp chữ. Bật để thử SEO/accessibility trên 1 series.
+   */
+  fbUploadSrt: boolean;
 };
 
 export const SERIES: Record<SeriesId, SeriesInfo> = {
@@ -72,6 +83,8 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     markZoom: 1.3,
     fbPageIdEnv: "FB_PAGE_ID",
     playlistsFile: "_fb-playlists.json",
+    fbContentCategory: "LIFESTYLE",
+    fbUploadSrt: false,
   },
   "chuyen-xua": {
     id: "chuyen-xua",
@@ -107,6 +120,8 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     markZoom: 1,
     fbPageIdEnv: "FB_PAGE_ID_CHUYEN_XUA",
     playlistsFile: "_fb-playlists.chuyen-xua.json",
+    fbContentCategory: "LIFESTYLE",
+    fbUploadSrt: false,
   },
   "dong-ho-viet": {
     id: "dong-ho-viet",
@@ -144,6 +159,8 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     markZoom: 1,
     fbPageIdEnv: "FB_PAGE_ID_DONG_HO_VIET",
     playlistsFile: "_fb-playlists.dong-ho-viet.json",
+    fbContentCategory: "FAMILY",
+    fbUploadSrt: false,
   },
 };
 

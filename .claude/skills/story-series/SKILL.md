@@ -43,7 +43,7 @@ npx tsx story/scripts/story-tts-gemini.ts <slug> --part=2                 # gen 
 npx tsx story/scripts/story-tts-gemini.ts <slug> --voice=Iapetus --tag=iapetus   # thử giọng khác → input/<slug>.parts-iapetus/ (không đè)
 ```
 Key Gemini lấy từ trang Settings. Giọng/chỉ đạo/tempo lấy theo series của tập. Bản tay (AI Studio, ≤200 chữ/phần): `story-tts-brief.ts <slug>` → `input/<slug>.tts.md`.
-→ **User nghe QC** (giọng Bắc đều từ đầu đến cuối, đọc đủ, không vấp). Máy KHÔNG tự bắt được accent.
+→ **QC giọng tự động:** `npx tsx story/scripts/audio-qc.ts <slug>` (Gemini nghe audio, chấm Bắc/Nam từng đoạn; exit 0 = đạt, 2 = trượt → gen lại). Đã kiểm: tập tốt pass, bản lẫn giọng Nam fail. Chạy tay thì user nghe thêm cũng được.
 
 ## Bước 3b — Ghép + căn chữ
 ```bash

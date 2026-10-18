@@ -27,6 +27,7 @@ Mọi lệnh `nlm` cần `export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 nlm login          # mở trình duyệt → user chọn ĐÚNG tài khoản sở hữu notebook
 nlm login --check  # kiểm tra còn hạn
 ```
+- **⭐ QUOTA GEN AUDIO (user xác nhận 2026-10-18):** tài khoản **Plus: 6 audio / 5 giờ**; các tài khoản khác: **3 audio**. Chạy hàng loạt (skill plan-week) → gen audio ByteCast ĐẦU TIÊN trong phiên, dàn roll A/B qua các profile; hết cả → đợi cửa sổ 5 giờ hoặc báo tập đó dở.
 - **Đa tài khoản / hết quota (free tier ~50 query/ngày + giới hạn gen audio):** dùng **named profile** — `nlm login --profile acct2 --clear` (mở browser, đăng nhập account khác). Lưu ý: `nlm login --clear` (không có profile mới) có thể KHÔNG mở browser nếu cookie cũ còn hạn → cứ tạo profile mới để chắc chắn đổi account.
 - **BUG QUAN TRỌNG về `--profile`:** `source add`/`audio create`/`studio status`/`notebook` CÓ nhận `--profile`, NHƯNG `nlm download audio` **KHÔNG có** option `--profile` → sẽ lỗi "No such option". Cách đúng khi làm trên account phụ: chạy **`nlm login switch acct2`** để đặt acct2 làm **default profile**, sau đó mọi lệnh (kể cả `download audio`) tự dùng acct2 — khỏi cần truyền `--profile` nữa. Notebook thuộc account nào thì switch sang profile đó trước khi thao tác.
 - **Bẫy `authuser`:** tham số `?authuser=N` trong URL notebook KHÔNG liên quan tới CLI — CLI dùng tài khoản theo cookie/profile. Chỉ cần notebook UUID + đúng profile là truy cập được. (MCP browser cũ thì authuser gây lệch context — bỏ qua.)
@@ -58,6 +59,9 @@ Dispatch 1 general-purpose agent tìm 10 URL crawl được.
 - Nguồn tiếng Anh OK — NotebookLM sinh audio tiếng Việt từ nguồn Anh được.
 
 ## Bước 4 — Upload nguồn
+
+### ⭐ KHUÔN BÀI LUẬN THEO CHỦ ĐỀ — đọc [references/essay-pattern.md](references/essay-pattern.md) TRƯỚC KHI VIẾT
+Rút từ các tập 117–122 (đều ra audio 14–17'): tiêu đề là câu hỏi; mở bài 1 trong 4 kiểu (nhân vật có tên / "bạn" trong khoảnh khắc / hai người đối chiếu / quan sát lạ); mạch niềm tin cũ → thực tế → lăng kính Đông–Tây–khoa học (1 tên/đoạn + câu đệm) → ngụ ngôn → phân biệt 2 khái niệm; kết "không phải là… Mà là…". 1.500–3.600 chữ đều được.
 
 ### ⭐ VIẾT/MỞ RỘNG BÀI LUẬN — THÂN THIỆN, KHÔNG HÀN LÂM (nguyên tắc cốt lõi)
 Chủ đề thường là **triết học + xã hội học + tâm lý học**, nhưng đối tượng nghe RỘNG (học sinh, sinh viên, người đi làm trẻ, vợ chồng, cha mẹ, người già) — nên bài luận (và audio) phải **dễ tiếp cận, KHÔNG hàn lâm**:
@@ -155,12 +159,12 @@ TRANSITIONS: Seamlessly bridge segments using organic Vietnamese transitions: "N
 ```
 - **Source là "vũ khí bí mật" — prompt chỉ là người gác cổng:** NotebookLM gen audio dựa trên TÀI LIỆU NGUỒN, không chỉ prompt. Với kịch bản đồ sộ đi qua nhiều nhà tư tưởng Đông–Tây, AI BẮT BUỘC cần một file thô dồi dào để "bấu víu" dữ liệu — nếu không sẽ bịa hoặc bỏ phần. → **Viết hẳn các ví dụ đời thường (văn phòng, gia đình Việt Nam) của TỪNG phần vào bài luận source** (Bước 4), mỗi luận điểm gắn 1 ví dụ cụ thể. Prompt tiếng Anh khi đó chỉ đóng vai "người gác cổng": ép AI phân bổ đúng thời lượng + đọc đúng chính tả/tên tiếng Việt. Thiếu trong source thì prompt có ghi mấy cũng dễ bị bỏ.
 - **Tốc độ đọc & khoảng ngắt cảm xúc:** tốc độ KHÔNG chỉnh được bằng prompt. Tập dài (15–18 phút) tông sâu lắng mà nghe thấy 2 host trả lời hơi vội → nghe ở **Playback speed 0.9x** trên trình phát (không phải lỗi gen). Ở 0.9x, các đoạn chuyển giao cuối (vd phần áp chót → phần chốt → Outro) ngân và thấm hơn hẳn.
-- **Chỉ thị nhịp trong focus để giảm nuốt chữ:** thêm câu ép AI nói chậm + ngắt nghỉ giữa các ý, vd `"Speak slowly and clearly; take a short pause between concepts so the listener can follow."` (đã có trong mẫu). Nuốt chữ hay xảy ra khi AI nhồi quá nhiều ý vào một hơi → mỗi Part chỉ 1 luận điểm + 1 ví dụ, đừng dồn 3–4 ý vào một đoạn. (Cân bằng với cổng 12–18': đủ phần để dài nhưng mỗi phần thong thả, KHÔNG nhồi.)
+- **Chỉ thị nhịp trong focus để giảm nuốt chữ:** thêm câu ép AI nói chậm + ngắt nghỉ giữa các ý, vd `"Speak slowly and clearly; take a short pause between concepts so the listener can follow."` (đã có trong mẫu). Nuốt chữ hay xảy ra khi AI nhồi quá nhiều ý vào một hơi → mỗi Part chỉ 1 luận điểm + 1 ví dụ, đừng dồn 3–4 ý vào một đoạn. (Cân bằng với cổng 14–18': đủ phần để dài nhưng mỗi phần thong thả, KHÔNG nhồi.)
 - **⚠️ NGÔN NGỮ — LƯU Ý PHÂN KỲ với hướng dẫn NotebookLM phổ thông:** tài liệu chung khuyên "dịch source sang tiếng Anh / cho host thảo luận bằng tiếng Anh để mượt". **KHÔNG áp dụng ở đây** — sản phẩm của ta BẮT BUỘC là audio TIẾNG VIỆT giọng Bắc, nên source cứ viết tiếng Việt và gen `--language vi`. Ta chỉ mượn insight đó ở đúng một chỗ: **prompt `--focus` viết bằng tiếng Anh** (NotebookLM hiểu chỉ thị Anh tốt hơn) — còn nội dung đọc vẫn thuần Việt. Nuốt chữ tiếng Việt xử lý bằng: source sạch (Bước 4) + roll bản khác + sửa transcript ở Bước 7, KHÔNG bằng cách chuyển sang tiếng Anh.
 - **⭐ TÊN NƯỚC NGOÀI: KHÔNG PHIÊN ÂM TRONG FOCUS (mặc định).** NotebookLM đọc tên tiếng Anh rất tốt sẵn — chỉ cần **bài luận source ghi đúng tên tiếng Anh** là host đọc chuẩn. KHÔNG khai bảng phiên âm ở directive 2, KHÔNG "Cite <Phiên-âm> (<Tên gốc>)" trong từng Part. Việc whisper chép sai tên là chuyện của Bước 7 → vá bằng `input/<slug>.terms.txt` (map `sai => đúng`), KHÔNG phải việc của focus. ([[foreign-names-keep-english-default]])
   - **Ngoại lệ HIẾM:** chỉ khi nghe QC thấy một tên cụ thể bị host đọc chệch hẳn thì mới thêm một gợi ý phiên âm cho RIÊNG tên đó ở lần gen sau. Khi buộc phải phiên âm, **bám sát âm tên GỐC** — bài học kinh điển: `Marcus Aurelius -> "Mác-cô Au-rê-li-ô"` đọc lên thành **"Marco Aurelio"** (biến thể tiếng Ý); phải là "Mác-cút Au-rê-li-út" (giữ đủ "-cus/-us"). Đọc to chuỗi phiên âm lên, nếu ra một cái tên KHÁC thì sai. Nhưng đây là ngoại lệ — mặc định vẫn là để nguyên tên tiếng Anh, không phiên âm.
 - **⚠️ GIỌNG NAM/BẮC KHÔNG ĐIỀU KHIỂN ĐƯỢC BẰNG PROMPT.** Đã thử nghiệm: focus ép giọng Bắc cực mạnh bằng tiếng Anh (`[TAG]` + "FORBIDDEN Southern" + linguistic anchors) VẪN ra audio giọng Nam 100%. NotebookLM **tự gán voice** cho mỗi lần gen — prompt chỉ chi phối nội dung/nhịp/phiên âm, KHÔNG chi phối vùng giọng. Lever thật sự để được giọng Bắc: **ACCOUNT + roll lại** — có account hay ra giọng Bắc (account chính thường cho giọng Bắc), có account hay ra giọng Nam (profile phụ/plus có hôm toàn Nam). Khi 1 account ra giọng Nam → **đổi account khác + tạo notebook mới + gen lại**, lặp tới khi được giọng Bắc. Nuốt chữ cũng là roll ngẫu nhiên. → BẮT BUỘC user nghe xác nhận giọng (Bước 7), đừng render mù.
-- **⭐ THỜI LƯỢNG BẮT BUỘC 12–18 PHÚT — cổng chặn cứng.** Audio dưới 12' hoặc trên 18' đều KHÔNG đạt, phải roll lại. `--length` KHÔNG đáng tin để canh: tiếng Việt chỉ có `default`, cùng `default` từng ra 9.8 / 12.6 / 13.6 / 16.1 / 21 phút (random mỗi lần gen). Cách làm: ghi `target 15-18 minute` trong focus + source đủ dày (bài luận ~1800–2200 chữ), rồi gen nhiều bản A/B trên CÙNG notebook (`nlm audio create` lặp lại → nhiều artifact, tải từng bản bằng `--id`), **chọn bản rơi vào 12–18'**. Bản <12' thường do nuốt phần → bỏ. KHÔNG dùng `long` (xem cảnh báo Bước 5 — `long` không tồn tại cho tiếng Việt, gây lỗi giả "rate limited").
+- **⭐ THỜI LƯỢNG BẮT BUỘC 14–18 PHÚT — cổng chặn cứng (user chốt 2026-10-18: chất lượng audio NotebookLM giờ đã tốt, chỉ cần chọn bản đúng thời lượng).** Audio dưới 14' hoặc trên 18' đều KHÔNG đạt, phải roll lại. `--length` KHÔNG đáng tin để canh: tiếng Việt chỉ có `default`, cùng `default` từng ra 9.8 / 12.6 / 13.6 / 16.1 / 21 phút (random mỗi lần gen). Cách làm: ghi `target 15-18 minute` trong focus + source đủ dày (bài luận ~1800–2200 chữ), rồi gen nhiều bản A/B trên CÙNG notebook (`nlm audio create` lặp lại → nhiều artifact, tải từng bản bằng `--id`), **chọn bản rơi vào 14–18'**. Bản <12' thường do nuốt phần → bỏ. KHÔNG dùng `long` (xem cảnh báo Bước 5 — `long` không tồn tại cho tiếng Việt, gây lỗi giả "rate limited").
 
 ## Bước 6 — Chờ + tải audio
 Poll rồi tải vào `input/` (chạy nền):
@@ -179,7 +183,7 @@ done
 
 ## Bước 7 — QC audio TRƯỚC khi render (BẮT BUỘC)
 NotebookLM audio tiếng Việt KHÔNG ổn định: **hay lẫn giọng Nam/Bắc** giữa chừng + **nuốt/mất câu**. Đừng render mù.
-1. **Thời lượng (CỔNG CHẶN CỨNG 12–18 phút):** `ffprobe -v error -show_entries format=duration -of csv=p=0 input/<slug>.m4a` → chia 60. **<12' hoặc >18' = KHÔNG ĐẠT → roll lại (Bước 5), KHÔNG render.** Quá ngắn thường do nuốt phần/chương. Chỉ khi rơi vào 12–18' mới đi tiếp.
+1. **Thời lượng (CỔNG CHẶN CỨNG 14–18 phút — cổng DUY NHẤT khi chạy tự động):** `ffprobe -v error -show_entries format=duration -of csv=p=0 input/<slug>.m4a` → chia 60. **<14' hoặc >18' = KHÔNG ĐẠT → roll lại (Bước 5), KHÔNG render.** Quá ngắn thường do nuốt phần/chương. Kiểm thêm đuôi im lặng (`silencedetect`, outro cụt) rồi cắt.
 2. Transcribe + đối chiếu nội dung (dừng trước render):
    ```bash
    npm run make -- input/<slug>.m4a --plan-only
@@ -209,11 +213,11 @@ NotebookLM audio tiếng Việt KHÔNG ổn định: **hay lẫn giọng Nam/B�
    Sau khi apply: quét lỗi còn sót (`node -e` đếm `�`, câu lặp, tên riêng sai) + vá tay lỗi confident trong `corrected.json`. Đã render/plan trước đó → render lại với `regenPlan=true, regenTranscribe=false` ([[plan-json-cache-after-correct]]). **ĐỪNG tick "Tạo lại transcript" trên UI** sau khi đã sửa — nó chạy lại whisper + ghi đè `corrected.json` bằng bản chưa sửa.
 
    > ⛔ **KHÔNG dùng** `transcript-correct.ts` (gọi GPT-4o, tốn phí) hay `SPELL_FIX_OPENAI=1` — chỉ khi user yêu cầu rõ.
-4. **User nghe** xác nhận: (a) giọng Bắc nhất quán (máy khó tự bắt accent); (b) **xưng hô đúng giới tính** — host nam xưng "Tôi"/gọi nữ là "Chị", host nữ xưng "Tôi"/gọi nam là "Anh"; audio hay bị ĐẢO (nam gọi nữ là "anh", nữ gọi nam là "chị"). Cả 2 lỗi này nằm trong tiếng nói nên KHÔNG sửa được ở transcript/caption cho khớp.
+4. **(Tham khảo, không chặn khi chạy tự động)** `npx tsx story/scripts/audio-qc.ts <slug> --podcast` — Gemini nghe audio, chấm giọng Bắc/Nam + xưng hô 2 host + lỗi lặp/vấp. Chạy tay thì user có thể nghe xác nhận: (a) giọng Bắc nhất quán; (b) **xưng hô đúng giới tính** — host nam xưng "Tôi"/gọi nữ là "Chị", host nữ xưng "Tôi"/gọi nam là "Anh"; audio hay bị ĐẢO (nam gọi nữ là "anh", nữ gọi nam là "chị"). Cả 2 lỗi này nằm trong tiếng nói nên KHÔNG sửa được ở transcript/caption cho khớp.
 5. Đạt → Bước 8. Lỗi giọng HOẶC đảo xưng hô → quay lại Bước 5 regenerate (`nlm audio create` lại / roll bản khác), KHÔNG render.
 
 ## Bước 8 — Episode config
-Tạo `input/<slug>.json` (chỉ `title` + `episodeNumber` bắt buộc; còn lại có default):
+**Tạo tập qua app** (số tập đếm riêng theo series): từ ô kế hoạch `POST /api/plan/slots/<id>/create-episode`, hoặc `POST /api/episodes {"title","hook","series":"bytecast"}`. Rồi điền các trường dưới vào `input/<slug>.json`. (Cách cũ — tạo file tay, `episodeNumber` = max+1 — vẫn chạy nhưng phải tự lọc đúng series.)
 ```json
 { "style": "podcast", "title": "...", "hook": "...", "episodeNumber": <max+1>,
   "bgm": null, "coverImage": null, "showIntro": true, "showOutro": true,
@@ -236,7 +240,8 @@ npx tsx podcast/scripts/cover-prompt.ts brief <slug> --landscape  # thumbnail Yo
 npx tsx podcast/scripts/cover-prompt.ts apply <slug> tmp/<slug>.cover-prompt.txt
 npx tsx podcast/scripts/cover-prompt.ts apply <slug> tmp/<slug>.cover-prompt.yt.txt --landscape
 ```
-`apply` lưu vào `coverPrompt` / `coverPromptLandscape` (bản 9:16: tập chưa có `accentColor` → set luôn THEME_COLOR làm màu sóng). Prompt hiện ở **Render → tab khung → "Prompt tạo ảnh cover"** để user bấm Copy, dán vào Midjourney/Flux. Bản 16:9: dùng ĐÚNG `accentColor` đã có (brief truyền sẵn) + TITLE đúng nguyên văn tiêu đề tập.
+`apply` lưu vào `coverPrompt` / `coverPromptLandscape` (bản 9:16: tập chưa có `accentColor` → set luôn THEME_COLOR làm màu sóng).
+**Tạo ảnh (tự động):** `curl -s -X POST "http://localhost:3000/api/episodes/<slug>/cover-image?provider=gemini"` (thêm `&variant=landscape` cho 16:9) → model rẻ nhất (`gemini-3.1-flash-lite-image`), gắn thẳng làm cover. **Claude XEM ẢNH kiểm chữ tiếng Việt từng dấu** — sai/chữ bay khó đọc thì tạo lại (tối đa 3 lần), vẫn sai thì báo. Trên UI: Render → "Prompt tạo ảnh cover" → [Gemini ▾] Tạo ảnh. Bản 16:9: dùng ĐÚNG `accentColor` đã có (brief truyền sẵn) + TITLE đúng nguyên văn tiêu đề tập.
 **⭐ NHẠC NỀN — KẾ THỪA BẢN CHỌN GẦN NHẤT:** không phải chọn lại mỗi tập. Nhạc mặc định lưu ở `input/_music-default.json` (+ file dùng chung `input/_default.bgm.<ext>`); tập mới tự điền `bgm`/`bgmVolumeDb`/`bgmMode`/`musicCredit` từ đó (createEmptyEpisode gọi `applyMusicDefaults`). Khi user upload bgm mới cho 1 tập (UI) → tự cập nhật làm default cho các tập sau. Khi tạo config tay cho tập mới, đọc `input/_music-default.json` và điền theo (nếu có). Đổi nhạc mặc định = upload bgm mới, hoặc sửa `input/_music-default.json`.
 
 ## Bước 8.5 — Hình ảnh nâng cấp originality (footage · màu chủ đề · biên tập · công bố AI)
@@ -267,7 +272,14 @@ npx tsx podcast/scripts/footage-plan.ts <slug> --landscape --apply
 - `npx tsx podcast/scripts/derive-accent.ts <slug>` đọc ảnh cover → suy màu → ghi `episode.accentColor` → **màu sóng (visualizer)** khớp cover. (Hoặc nút "Áp dụng cho màu sóng" ở UI.) Xem [[cover-theme-color-and-wave]].
 
 ### ⭐ LỚP BIÊN TẬP GỐC (chapter + trích dẫn có nguồn)
-`gen-editorial.ts` (chạy tự động trong make.ts khi `showEditorial=true`, mặc định gpt-4o) → tiêu đề chương + thẻ trích dẫn "tên nhà tư tưởng — khái niệm" hiện trên video. Meta xếp "chỉ phụ đề" là đóng góp yếu → lớp này là tín hiệu biên tập gốc. [[editorial-overlay-feature]].
+Tiêu đề chương + thẻ trích dẫn "tên nhà tư tưởng — khái niệm" hiện trên video (Meta xếp "chỉ phụ đề" là đóng góp yếu → lớp này là tín hiệu biên tập gốc). [[editorial-overlay-feature]].
+**⭐ CLAUDE TỰ VIẾT, KHÔNG gpt-4o (user chốt 2026-10-18):** SAU khi sửa transcript (Bước 7):
+```bash
+npx tsx podcast/scripts/editorial-manual.ts brief <slug>    # → tmp/<slug>.editorial-brief.txt (luật + "[ms] câu")
+# Claude đọc, viết {"chapters":[{atMs,title}],"citations":[{atMs,name,source}]} → tmp/<slug>.editorial.claude.json
+npx tsx podcast/scripts/editorial-manual.ts apply <slug>    # snap atMs → tmp/<slug>.editorial.json + editorialLocked=true
+```
+5–8 chương ≤6 từ (không "Phần 1"), ≤7 trích dẫn đặt ở chỗ được BÀN SÂU. `editorialLocked` → render không gọi gpt-4o ghi đè. (gen-editorial.ts gpt-4o chỉ còn là fallback khi tập chưa khoá.)
 
 ### ⭐ CÔNG BỐ AI + GHI CÔNG
 Tab **Đăng** tự dựng khối công bố (kịch bản gốc do người biên soạn + lời dẫn AI + ghi công nhạc/footage/nguồn) từ config — nối vào cuối mô tả cả khi Copy caption LẪN khi đăng thẳng qua API (server dựng lại từ config, xem Bước 10). Khi đăng nhớ **bật nhãn AI** (chỉ bật được khi upload tay qua FB Reels Creator — xem cảnh báo Bước 10). [[fb-monetization-originality-project]].
@@ -296,11 +308,11 @@ npm run make -- input/<slug>.m4a --preview
 - **Đĩa:** cần THOÁNG (>10Gi lý tưởng). Đĩa <9Gi → macOS thrash (StorageManagement/CacheDelete) làm render chậm/erratic/ENOSPC — KHÔNG phải lỗi code; dọn đĩa hoặc đợi OS purge rồi chạy lại; đặt `RENDER_TIMEOUT_MS=600000` cho chắc.
 - **Bẫy theo dõi:** đừng `npm run make ... | tail -N` (buffer hết output tới khi xong) — ghi log ra file rồi `tail -f`.
 - **⚠️ KHÔNG `git checkout`/đổi branch/merge khi đang render qua UI:** server chạy `tsx watch` → file đổi (dù tích tắc) là restart → mất job ("Server lost track of this job") + Chrome Remotion mồ côi. Đợi render xong; lỡ rồi thì kill `chrome-headless-shell` PPID 1, xoá `tmp/<slug>[.yt].fchunks` + `footagebg.mp4` + `public/<slug>[.yt].*`, render lại. [[git-checkout-kills-render]]
-Yêu cầu: ffmpeg, whisper `whisper.cpp/ggml-medium.bin`, `OPENAI_API_KEY` + `PEXELS_API_KEY` trong `.env`.
+Yêu cầu: ffmpeg, whisper `whisper.cpp/ggml-medium.bin`, `PEXELS_API_KEY` trong `.env` (`OPENAI_API_KEY` chỉ còn cho people-check footage gpt-4o vision + fallback editorial). Render hàng loạt: trang **/plan → "Render N tập sẵn sàng"**; theo dõi ở **/render-queue**. Ổ đầy → **/cleanup** (bundle Remotion, WAV chuẩn hoá… tạo lại được).
 
 ## Bước 10 — Đăng lên Facebook Reel (tab Đăng → Facebook 9:16)
 
-Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — không cần copy-paste tay. [[fb-reel-publish-feature]].
+Video render (9:16) đăng THẲNG lên Trang FB ngay trong app. **Tập >90s (mọi tập ByteCast) đi `/{page}/videos` kèm tiêu đề + cover**, ≤90s mới dùng Reels API. Trang theo series (`FB_PAGE_ID`). **Hẹn giờ hàng loạt:** trang **/plan → "Hẹn giờ N tập đã render"** (giờ mặc định 19:00). [[fb-reel-publish-feature]].
 
 **Chuẩn bị token (1 lần):** Settings (`/settings`) → **Facebook (Page Access Token)** → dán **Page Access Token DÀI HẠN** (cần quyền `pages_manage_posts` + `pages_read_engagement`). Token lưu DB (hoặc `.env` `FACEBOOK_PAGE_ACCESS_TOKEN`). Token gắn với 1 TRANG; nếu là user-token quản nhiều trang thì đặt thêm `FB_PAGE_ID` trong `.env`.
 
@@ -312,6 +324,8 @@ Video render (9:16) đăng THẲNG lên Trang FB dạng Reel ngay trong app — 
   - ⚠️ **Graph API KHÔNG cho tự thêm Reel vào playlist** → app chỉ **nhắc thêm tay** sau khi đăng (mở Reel → ⋯ → Thêm vào playlist); playlist mới phải tự tạo trên FB + thêm vào `input/_fb-playlists.json`.
 - **Lên lịch (scheduler FB):** bật toggle **"Lịch đăng"** + chọn thời điểm (**10 phút – 75 ngày** kể từ hiện tại) → đăng dạng `SCHEDULED`, FB tự đăng đúng giờ. Trạng thái tập thành **"Đã lên lịch"** (`publishStatus=scheduled`, lưu `scheduledPublishTime`). Bỏ trống toggle = đăng ngay.
 - Bấm **Đăng lên Facebook Reel** / **Lên lịch đăng** → stream tiến trình (xác định Trang → tải video → chốt → xử lý) + **badge trạng thái live** (Đang đăng…/Đã lên lịch/Đã đăng/Lỗi). Xong: hiện link "Xem Reel" + lưu `fbReelId`/`fbPermalink`/`publishStatus` vào config. Trạng thái do luồng đăng TỰ set — không còn nút mark-published thủ công.
+
+**Metadata gửi kèm (đã đối chiếu docs Graph 2026-10-18):** `title`, `description` (caption + hashtag + công bố AI), `thumb` (cover), `content_category` theo series (`series.ts → fbContentCategory`; enum KHÔNG có EDUCATION), `custom_labels` = [series, "studio-api"] (riêng tư — lọc thống kê đo reach). **Không làm được qua API:** thêm video vào playlist (VideoList chỉ đọc) · `tags` chuỗi tự do (chỉ có `content_tags` = ID chủ đề số). **Phụ đề SRT** (`POST /{video}/captions`, `*.vi_VN.srt` ≤200KB) có sẵn nhưng TẮT (`fbUploadSrt`) — video đã có caption in cứng, CC có thể hiện chồng 2 lớp chữ.
 
 **⚠️ Nhãn "AI" của Meta:** đăng qua API **KHÔNG bật được công tắc "AI label"** trong trình đăng FB (không có param). Khối công bố AI vẫn nằm trong mô tả (text). Muốn bật đúng công tắc AI-label của Meta → dùng nút **"Mở FB Reels Creator (thủ công)"** trong card rồi tải video + upload tay.
 

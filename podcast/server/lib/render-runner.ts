@@ -550,6 +550,9 @@ async function runJob(job: JobInternal): Promise<void> {
     if (signal.aborted) remotionCancel.cancel();
     else signal.addEventListener("abort", onAbortForRemotion, { once: true });
 
+    // Thư mục bundle Remotion ($TMPDIR/remotion-webpack-bundle-*, chép cả public/ → 0.3–1GB/lần)
+    // — xoá khi job kết thúc, trước đây bỏ lại → tích 5GB+ sau vài chục lần render.
+    let bundleDir: string | null = null;
     try {
       // 6. Bundle
       setPhase(job, "bundle", 45, "Bundling Remotion…");
@@ -558,6 +561,7 @@ async function runJob(job: JobInternal): Promise<void> {
         publicDir: PUBLIC_DIR,
       };
       const serveUrl = await bundle(bundleOptions);
+      bundleDir = serveUrl;
       checkAbort();
 
       const composition = await selectComposition({
@@ -812,6 +816,9 @@ async function runJob(job: JobInternal): Promise<void> {
       setPhase(job, "done", 100, "Hoàn tất");
     } finally {
       signal.removeEventListener("abort", onAbortForRemotion);
+      if (bundleDir && path.basename(bundleDir).startsWith("remotion-webpack-bundle-")) {
+        fs.rmSync(bundleDir, { recursive: true, force: true });
+      }
       // Cleanup public assets
       for (const n of cleanupList) {
         const p = path.join(PUBLIC_DIR, n);

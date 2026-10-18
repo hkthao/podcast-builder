@@ -17,8 +17,11 @@ import {
   Settings as SettingsIcon,
   BookOpen,
   CalendarDays,
+  HardDrive,
+  Clapperboard,
 } from "lucide-react";
-import { api, type EpisodeStatus } from "@/lib/api";
+import { api, cleanupApi, type EpisodeStatus } from "@/lib/api";
+import { LOW_DISK_BYTES, fmtBytes } from "@/pages/Cleanup";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
 import {
@@ -54,6 +57,9 @@ export function Sidebar() {
     .slice(0, Math.max(0, 8 - pinnedEps.length));
   const recent = [...pinnedEps, ...restEps];
 
+  // Dung lượng ổ trống — đỏ khi < 15 GB (render tập dài cần ~8 GB scratch).
+  const diskQ = useQuery({ queryKey: ["disk"], queryFn: () => cleanupApi.disk(), refetchInterval: 60_000 });
+  const lowDisk = !!diskQ.data && diskQ.data.freeBytes < LOW_DISK_BYTES;
   const seriesOf = (ep: { config: { series?: string } }) => ep.config.series ?? "bytecast";
   /** "Podcast · 70 tập" — đang tải thì chỉ hiện loại (tránh "0 tập" chớp lên). */
   const metaOf = (kind: string, series: string) =>
@@ -114,6 +120,29 @@ export function Sidebar() {
             icon={<CalendarDays className="size-4" />}
             label="Kế hoạch đăng"
           />
+          <NavItem
+            to="/render-queue"
+            icon={<Clapperboard className="size-4" />}
+            label="Hàng đợi render"
+          />
+          <NavLink
+            to="/cleanup"
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-secondary",
+                isActive && "bg-secondary font-medium",
+              )
+            }
+            title="Dung lượng ổ trống — bấm để dọn"
+          >
+            <HardDrive className={cn("size-4", lowDisk && "text-destructive")} />
+            Dọn ổ cứng
+            {diskQ.data && (
+              <span className={cn("ml-auto text-xs tabular-nums", lowDisk ? "font-medium text-destructive" : "text-muted-foreground")}>
+                {fmtBytes(diskQ.data.freeBytes)}
+              </span>
+            )}
+          </NavLink>
           <NavItem
             to="/comments"
             icon={<MessageSquare className="size-4" />}

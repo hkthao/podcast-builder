@@ -1506,6 +1506,29 @@ export const planApi = {
     jsonFetch<PlanSlot>(`/api/plan/ideas/${id}/assign`, { method: "POST", body: JSON.stringify({ slotId }) }),
 };
 
+// ─── Dọn ổ cứng ──────────────────────────────────────────────────────────
+
+export type DiskUsage = { freeBytes: number; totalBytes: number };
+export type CleanupCategory = {
+  id: string;
+  label: string;
+  description: string;
+  bytes: number;
+  count: number;
+  defaultSelected: boolean;
+  blockedReason: string | null;
+};
+
+export const cleanupApi = {
+  scan: () => jsonFetch<{ categories: CleanupCategory[]; disk: DiskUsage; oldEpisodeRule: string }>("/api/cleanup"),
+  disk: () => jsonFetch<DiskUsage>("/api/cleanup/disk"),
+  run: (categories: string[]) =>
+    jsonFetch<{ freedBytes: number; deleted: number; skipped: string[]; disk: DiskUsage }>("/api/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ categories }),
+    }),
+};
+
 /** Playlist của Trang Facebook (picker khi đăng). */
 export type FbPlaylist = { id: string; title: string; videosCount: number };
 
