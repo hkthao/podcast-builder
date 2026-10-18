@@ -1,0 +1,537 @@
+/**
+ * Kế hoạch đăng — lịch 2 tuần theo kênh (input/_plan.json).
+ * Route: /plan
+ *
+ * User chỉ rảnh chủ nhật: chủ nhật Claude Code (skill plan-week) làm hàng loạt các
+ * tập trong lịch; trang này hiện tiến độ từng ô (suy ra từ file tập) + hẹn giờ đăng
+ * qua API (dùng lại SSE /api/episodes/:name/publish?scheduledAt=…).
+ */
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CalendarPlus,
+  Clock,
+  ExternalLink,
+  Lightbulb,
+  Loader2,
+  Pencil,
+  Plus,
+  Send,
+  Trash2,
+  X as XIcon,
+} from "lucide-react";
+import { api, planApi, type PlanIdea, type PlanSlot } from "@/lib/api";
+import { SERIES_OPTIONS, seriesInfo, type SeriesId } from "@/lib/series";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+const DAYS = 14;
+const WEEKDAY = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const STEPS: Array<{ key: keyof PlanSlot["progress"]; label: string }> = [
+  { key: "script", label: "Kịch bản" },
+  { key: "audio", label: "Audio" },
+  { key: "footage", label: "Footage" },
+  { key: "cover", label: "Cover" },
+  { key: "rendered", label: "Render" },
+  { key: "scheduled", label: "Hẹn giờ" },
+  { key: "published", label: "Đã đăng" },
+];
+
+/** YYYY-MM-DD theo giờ máy (VN). */
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (date: string, n: number) => {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+};
+
+/** Hẹn giờ đăng 1 tập qua SSE publish; resolve khi xong / lỗi. */
+function scheduleEpisode(name: string, scheduledAt: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(api.publishEpisodeUrl(name, { scheduledAt }));
+    let settled = false;
+    const finish = (err?: string) => {
+      if (settled) return;
+      settled = true;
+      es.close();
+      if (err) reject(new Error(err));
+      else resolve();
+    };
+    es.addEventListener("published", () => finish());
+    es.addEventListener("error", (e) => {
+      try {
+        finish(JSON.parse((e as MessageEvent).data).message as string);
+      } catch {
+        finish("Mất kết nối khi hẹn giờ");
+      }
+    });
+    es.addEventListener("done", (e) => {
+      const code = JSON.parse((e as MessageEvent).data).code as number;
+      finish(code === 0 ? undefined : "Hẹn giờ thất bại");
+    });
+  });
+}
+
+export function PlanPage() {
+  const qc = useQueryClient();
+  const today = ymd(new Date());
+  // Mặc định từ hôm nay → chủ nhật mở ra thấy ngay 2 tuần sắp tới.
+  const [from, setFrom] = useState(today);
+  const q = useQuery({ queryKey: ["plan", from], queryFn: () => planApi.get(from, DAYS) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ["plan"] });
+
+  const fillMut = useMutation({ mutationFn: () => planApi.fill(from, DAYS), onSuccess: refresh });
+
+  // Hẹn giờ hàng loạt: ô đã render, chưa hẹn/đăng, giờ đăng còn ≥ 15 phút.
+  const postTime = q.data?.settings.postTime;
+  const slotAt = (s: PlanSlot) => new Date(`${s.date}T${postTime?.[s.series] ?? "20:00"}:00`);
+  const schedulable = (q.data?.slots ?? []).filter(
+    (s) =>
+      s.episode &&
+      s.progress.rendered &&
+      !s.progress.scheduled &&
+      !s.progress.published &&
+      slotAt(s).getTime() > Date.now() + 15 * 60_000,
+  );
+  const [batch, setBatch] = useState<{ done: number; total: number; errors: string[] } | null>(null);
+  const scheduleAll = async () => {
+    const list = schedulable;
+    setBatch({ done: 0, total: list.length, errors: [] });
+    for (const s of list) {
+      try {
+        await scheduleEpisode(s.episode!, slotAt(s).toISOString());
+      } catch (e) {
+        setBatch((b) => b && { ...b, errors: [...b.errors, `${s.date} ${seriesInfo(s.series).channelName}: ${(e as Error).message}`] });
+      }
+      setBatch((b) => b && { ...b, done: b.done + 1 });
+    }
+    refresh();
+  };
+
+  const days = useMemo(() => Array.from({ length: DAYS }, (_, i) => addDays(from, i)), [from]);
+  const slotsBy = useMemo(() => {
+    const m = new Map<string, PlanSlot[]>();
+    for (const s of q.data?.slots ?? []) {
+      const k = `${s.date}|${s.series}`;
+      m.set(k, [...(m.get(k) ?? []), s]);
+    }
+    return m;
+  }, [q.data]);
+
+  const counts = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const s of q.data?.slots ?? []) c.set(s.progress.next, (c.get(s.progress.next) ?? 0) + 1);
+    return [...c.entries()];
+  }, [q.data]);
+
+  return (
+    <div className="container max-w-6xl py-10">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+            <CalendarDays className="size-7 text-accent" /> Kế hoạch đăng
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Mỗi kênh {q.data ? Object.values(q.data.settings.cadenceDays)[0] : 2} ngày 1 tập · chủ nhật Claude làm
+            hàng loạt (nói "làm kế hoạch tuần tới") · hẹn giờ đăng qua Facebook.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setFrom(addDays(from, -7))} title="Lùi 1 tuần">
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="min-w-36 text-center text-sm tabular-nums">
+            {from.slice(8)}/{from.slice(5, 7)} – {addDays(from, DAYS - 1).slice(8)}/{addDays(from, DAYS - 1).slice(5, 7)}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => setFrom(addDays(from, 7))} title="Tới 1 tuần">
+            <ChevronRight className="size-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => fillMut.mutate()} disabled={fillMut.isPending}>
+            <CalendarPlus className="size-4" /> Điền lịch theo nhịp
+          </Button>
+          <Button size="sm" onClick={scheduleAll} disabled={!schedulable.length || (batch !== null && batch.done < batch.total)}>
+            <Send className="size-4" /> Hẹn giờ {schedulable.length} tập đã render
+          </Button>
+        </div>
+      </header>
+
+      {batch && (
+        <Card className="mb-4 p-3 text-sm">
+          {batch.done < batch.total ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" /> Đang hẹn giờ {batch.done + 1}/{batch.total}…
+            </span>
+          ) : (
+            <span>
+              Đã xử lý {batch.total} tập{batch.errors.length ? ` — ${batch.errors.length} lỗi:` : " ✓"}
+            </span>
+          )}
+          {batch.errors.map((e) => (
+            <div key={e} className="text-xs text-destructive">
+              {e}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {counts.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {counts.map(([label, n]) => (
+            <Badge key={label} variant="outline" className="text-xs">
+              {label}: {n}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {q.isLoading ? (
+        <Card className="h-96 animate-pulse bg-muted/30" />
+      ) : q.error ? (
+        <Card className="p-6 text-sm text-destructive">{String(q.error)}</Card>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="grid grid-cols-[88px_repeat(3,minmax(0,1fr))] border-b bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="px-3 py-2 text-center">Ngày</div>
+            {SERIES_OPTIONS.map((s) => (
+              <div key={s.id} className="px-3 py-2">
+                <span className={cn("rounded px-1.5 py-0.5 normal-case tracking-normal", s.tone)}>{s.channelName}</span>
+                <span className="ml-1.5 normal-case tracking-normal">{postTime?.[s.id]}</span>
+              </div>
+            ))}
+          </div>
+          {days.map((date) => {
+            const dow = new Date(`${date}T00:00:00`).getDay();
+            return (
+              <div
+                key={date}
+                className={cn(
+                  "grid grid-cols-[88px_repeat(3,minmax(0,1fr))] border-b last:border-b-0",
+                  date === today && "bg-accent/5",
+                  dow === 0 && "bg-muted/20",
+                )}
+              >
+                <div className="flex flex-col items-center justify-center px-2 py-3 text-center text-sm">
+                  <div className={cn("font-medium", date === today && "text-accent")}>{WEEKDAY[dow]}</div>
+                  <div className={cn("tabular-nums", date === today ? "text-accent" : "text-muted-foreground")}>
+                    {date.slice(8)}/{date.slice(5, 7)}
+                  </div>
+                  {dow === 0 && <div className="text-[10px] text-muted-foreground">ngày làm</div>}
+                </div>
+                {SERIES_OPTIONS.map((s) => (
+                  <div key={s.id} className="space-y-2 border-l px-2 py-2">
+                    {(slotsBy.get(`${date}|${s.id}`) ?? []).map((slot) => (
+                      <SlotCard key={slot.id} slot={slot} at={slotAt(slot)} onChange={refresh} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      {q.data && <IdeasPanel ideas={q.data.ideas} slots={q.data.slots} onChange={refresh} />}
+    </div>
+  );
+}
+
+function SlotCard({ slot, at, onChange }: { slot: PlanSlot; at: Date; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const createMut = useMutation({ mutationFn: () => planApi.createEpisode(slot.id), onSuccess: onChange });
+  const p = slot.progress;
+  const canSchedule = !!slot.episode && p.rendered && !p.scheduled && !p.published && at.getTime() > Date.now() + 15 * 60_000;
+
+  const schedule = async () => {
+    setScheduling(true);
+    setErr(null);
+    try {
+      await scheduleEpisode(slot.episode!, at.toISOString());
+      onChange();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const dialog = editing && !slot.episode && (
+    <SlotEditDialog slot={slot} at={at} onClose={() => setEditing(false)} onChange={onChange} />
+  );
+
+  if (!slot.title && !slot.episode) {
+    return (
+      <>
+        <button
+          onClick={() => setEditing(true)}
+          className="flex w-full items-center gap-1.5 rounded-md border border-dashed px-2 py-2 text-xs text-muted-foreground hover:border-solid hover:text-foreground"
+        >
+          <Plus className="size-3.5" /> Thêm chủ đề
+        </button>
+        {dialog}
+      </>
+    );
+  }
+
+  return (
+    <div className="rounded-md border bg-background/60 p-2">
+      <div className="flex items-start gap-1">
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-sm font-medium leading-snug">{p.episodeTitle ?? slot.title}</div>
+          {slot.hook && <div className="mt-0.5 line-clamp-1 text-xs italic text-muted-foreground">{slot.hook}</div>}
+        </div>
+        {!slot.episode && (
+          <button onClick={() => setEditing(true)} className="text-muted-foreground hover:text-foreground" title="Sửa">
+            <Pencil className="size-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="mt-2 flex items-center gap-1" title={STEPS.map((s) => `${s.label}: ${p[s.key] ? "✓" : "—"}`).join(" · ")}>
+        {STEPS.map((s) => (
+          <span key={s.key} className={cn("h-1.5 flex-1 rounded-full", p[s.key] ? "bg-emerald-500" : "bg-muted")} />
+        ))}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-1">
+        <span className={cn("text-[11px]", p.published ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+          {p.scheduled && p.scheduledAt ? (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-3" />
+              {new Date(p.scheduledAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
+            </span>
+          ) : (
+            p.next
+          )}
+        </span>
+        <div className="flex items-center gap-1">
+          {!slot.episode && slot.title && (
+            <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
+              Tạo tập
+            </Button>
+          )}
+          {canSchedule && (
+            <Button size="sm" className="h-6 px-2 text-[11px]" onClick={schedule} disabled={scheduling}>
+              {scheduling ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} Hẹn giờ
+            </Button>
+          )}
+          {slot.episode && (
+            <Link to={`/episodes/${encodeURIComponent(slot.episode)}`} className="text-muted-foreground hover:text-foreground" title="Mở tập">
+              <ExternalLink className="size-3.5" />
+            </Link>
+          )}
+        </div>
+      </div>
+      {(err || createMut.error) && (
+        <div className="mt-1 text-[11px] text-destructive">{err ?? String(createMut.error)}</div>
+      )}
+      {dialog}
+    </div>
+  );
+}
+
+const NOTES_HINT: Record<SeriesId, string> = {
+  bytecast: "Góc nhìn chính, câu hỏi lớn của tập, nguồn/nhà tư tưởng muốn dùng (tránh nguồn đã bão hoà)…",
+  "chuyen-xua": "Tên truyện trong Cổ học tinh hoa, nguyên văn (nếu có) + giải nghĩa + lời bàn, bài học hiện đại muốn nhấn…",
+  "dong-ho-viet": "Vật thể làm trục (cuốn sổ, tấm ảnh, bát hương…), kỷ niệm/câu nói của ông bà, góc kể chưa dùng ở tập trước…",
+};
+
+/** Modal sửa ô kế hoạch: chủ đề + hook + ghi chú cho Claude. Esc đóng, ⌘/Ctrl+Enter lưu. */
+function SlotEditDialog({
+  slot,
+  at,
+  onClose,
+  onChange,
+}: {
+  slot: PlanSlot;
+  at: Date;
+  onClose: () => void;
+  onChange: () => void;
+}) {
+  const [title, setTitle] = useState(slot.title);
+  const [hook, setHook] = useState(slot.hook ?? "");
+  const [notes, setNotes] = useState(slot.notes ?? "");
+  const saveMut = useMutation({
+    mutationFn: () => planApi.updateSlot(slot.id, { title, hook, notes }),
+    onSuccess: () => {
+      onChange();
+      onClose();
+    },
+  });
+  const delMut = useMutation({
+    mutationFn: () => planApi.deleteSlot(slot.id),
+    onSuccess: () => {
+      onChange();
+      onClose();
+    },
+  });
+  const pending = saveMut.isPending || delMut.isPending;
+  const info = seriesInfo(slot.series);
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && title.trim()) saveMut.mutate();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      onKeyDown={onKey}
+      onMouseDown={(e) => e.target === e.currentTarget && !pending && onClose()}
+    >
+      <Card className="w-full max-w-2xl overflow-hidden p-0">
+        <div className="flex items-center gap-2 border-b bg-secondary/30 px-5 py-3">
+          <span className={cn("rounded px-1.5 py-0.5 text-xs", info.tone)}>{info.channelName}</span>
+          <span className="text-sm font-medium">
+            {WEEKDAY[at.getDay()]} {slot.date.slice(8)}/{slot.date.slice(5, 7)} ·{" "}
+            {at.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <button onClick={onClose} disabled={pending} className="ml-auto rounded p-1 hover:bg-secondary disabled:opacity-50" title="Đóng (Esc)">
+            <XIcon className="size-4" />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-5">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Chủ đề / tiêu đề tập <span className="text-destructive">*</span>
+            </label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus disabled={pending} placeholder="VD: Không quên được cái cũ" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Hook</label>
+            <Input
+              value={hook}
+              onChange={(e) => setHook(e.target.value)}
+              disabled={pending}
+              placeholder="Câu mở gây tò mò (tuỳ chọn)"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Ghi chú cho Claude</label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={pending}
+              rows={8}
+              placeholder={NOTES_HINT[slot.series]}
+              className="text-sm leading-relaxed"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Claude đọc ghi chú này khi làm tập vào chủ nhật (skill plan-week).
+            </p>
+          </div>
+          {(saveMut.error || delMut.error) && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+              {String(saveMut.error ?? delMut.error)}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 border-t px-5 py-3">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => delMut.mutate()} disabled={pending}>
+            <Trash2 className="size-4" /> Xoá ô
+          </Button>
+          <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">⌘/Ctrl + Enter để lưu</span>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
+            Huỷ
+          </Button>
+          <Button size="sm" onClick={() => saveMut.mutate()} disabled={pending || !title.trim()}>
+            {saveMut.isPending && <Loader2 className="size-4 animate-spin" />}
+            Lưu
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function IdeasPanel({ ideas, slots, onChange }: { ideas: PlanIdea[]; slots: PlanSlot[]; onChange: () => void }) {
+  const [series, setSeries] = useState<SeriesId>("chuyen-xua");
+  const [title, setTitle] = useState("");
+  const addMut = useMutation({
+    mutationFn: () => planApi.addIdea({ series, title }),
+    onSuccess: () => {
+      setTitle("");
+      onChange();
+    },
+  });
+  const delMut = useMutation({ mutationFn: (id: string) => planApi.deleteIdea(id), onSuccess: onChange });
+  const assignMut = useMutation({
+    mutationFn: ({ id, slotId }: { id: string; slotId: string }) => planApi.assignIdea(id, slotId),
+    onSuccess: onChange,
+  });
+  // Ô trống sớm nhất cùng kênh trong khung đang xem.
+  const firstEmpty = (s: SeriesId) =>
+    slots.filter((x) => x.series === s && !x.title && !x.episode).sort((a, b) => a.date.localeCompare(b.date))[0];
+
+  return (
+    <Card className="mt-6 p-5">
+      <h2 className="mb-3 flex items-center gap-2 font-medium">
+        <Lightbulb className="size-4 text-accent" /> Kho ý tưởng
+        <span className="text-xs font-normal text-muted-foreground">
+          — Claude đề xuất khi làm kế hoạch; bấm ↦ để đưa vào ô trống sớm nhất cùng kênh
+        </span>
+      </h2>
+      <div className="grid gap-4 md:grid-cols-3">
+        {SERIES_OPTIONS.map((s) => {
+          const list = ideas.filter((i) => i.series === s.id);
+          const target = firstEmpty(s.id);
+          return (
+            <div key={s.id}>
+              <div className={cn("mb-2 inline-block rounded px-1.5 py-0.5 text-xs", s.tone)}>{s.channelName}</div>
+              {list.length === 0 && <div className="text-xs text-muted-foreground">Chưa có ý tưởng.</div>}
+              <ul className="space-y-1">
+                {list.map((i) => (
+                  <li key={i.id} className="group flex items-start gap-1 text-sm">
+                    <span className="min-w-0 flex-1" title={[i.hook, i.notes].filter(Boolean).join("\n")}>
+                      {i.title}
+                    </span>
+                    <button
+                      onClick={() => target && assignMut.mutate({ id: i.id, slotId: target.id })}
+                      disabled={!target}
+                      className="text-xs text-accent hover:underline disabled:text-muted-foreground disabled:no-underline"
+                      title={target ? `Đưa vào ô ${target.date}` : "Không còn ô trống trong 2 tuần đang xem"}
+                    >
+                      ↦ {target ? `${target.date.slice(8)}/${target.date.slice(5, 7)}` : "—"}
+                    </button>
+                    <button
+                      onClick={() => delMut.mutate(i.id)}
+                      className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                      title="Xoá ý tưởng"
+                    >
+                      <XIcon className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <select
+          value={series}
+          onChange={(e) => setSeries(e.target.value as SeriesId)}
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          {SERIES_OPTIONS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.channelName}
+            </option>
+          ))}
+        </select>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Thêm ý tưởng…" className="h-9" />
+        <Button size="sm" onClick={() => addMut.mutate()} disabled={!title.trim() || addMut.isPending}>
+          <Plus className="size-4" /> Thêm
+        </Button>
+      </div>
+    </Card>
+  );
+}

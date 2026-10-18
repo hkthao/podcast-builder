@@ -16,6 +16,7 @@ import {
   Monitor,
   Settings as SettingsIcon,
   BookOpen,
+  CalendarDays,
 } from "lucide-react";
 import { api, type EpisodeStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -108,6 +109,11 @@ export function Sidebar() {
         </div>
         <div className="space-y-0.5">
           <SectionLabel>Công cụ</SectionLabel>
+          <NavItem
+            to="/plan"
+            icon={<CalendarDays className="size-4" />}
+            label="Kế hoạch đăng"
+          />
           <NavItem
             to="/comments"
             icon={<MessageSquare className="size-4" />}

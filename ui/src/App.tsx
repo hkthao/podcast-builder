@@ -11,6 +11,7 @@ import { ScenesPage } from "./pages/Scenes";
 import { SettingsPage } from "./pages/Settings";
 import { PromptsPage } from "./pages/Prompts";
 import { CommentsPage } from "./pages/Comments";
+import { PlanPage } from "./pages/Plan";
 import { useEpisodesChangedSync } from "./lib/sse";
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
           <Route path="/visual" element={<VisualPage />} />
           <Route path="/scenes" element={<ScenesPage />} />
           <Route path="/comments" element={<CommentsPage />} />
+          <Route path="/plan" element={<PlanPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/prompts" element={<PromptsPage />} />
         </Routes>

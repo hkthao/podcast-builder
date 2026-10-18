@@ -1456,6 +1456,56 @@ export type ApiKeyStatus = {
   keyHint: string | null;
 };
 
+// ─── Kế hoạch nội dung (input/_plan.json) ────────────────────────────────
+
+export type PlanSlotProgress = {
+  episodeTitle: string | null;
+  script: boolean;
+  audio: boolean;
+  footage: boolean;
+  cover: boolean;
+  rendered: boolean;
+  scheduled: boolean;
+  published: boolean;
+  scheduledAt: string | null;
+  next: string;
+};
+export type PlanSlot = {
+  id: string;
+  date: string;
+  series: SeriesId;
+  title: string;
+  hook: string | null;
+  notes: string | null;
+  episode: string | null;
+  progress: PlanSlotProgress;
+};
+export type PlanIdea = { id: string; series: SeriesId; title: string; hook: string | null; notes: string | null; createdAt: string };
+export type PlanSettings = {
+  cadenceDays: Record<SeriesId, number>;
+  offsetDays: Record<SeriesId, number>;
+  postTime: Record<SeriesId, string>;
+};
+
+export const planApi = {
+  get: (from: string, days: number) =>
+    jsonFetch<{ settings: PlanSettings; slots: PlanSlot[]; ideas: PlanIdea[] }>(
+      `/api/plan?from=${from}&days=${days}`,
+    ),
+  fill: (from: string, days: number) =>
+    jsonFetch<{ added: number }>("/api/plan/fill", { method: "POST", body: JSON.stringify({ from, days }) }),
+  updateSlot: (id: string, patch: Partial<Pick<PlanSlot, "date" | "title" | "hook" | "notes" | "episode">>) =>
+    jsonFetch<PlanSlot>(`/api/plan/slots/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteSlot: (id: string) => jsonFetch<{ ok: true }>(`/api/plan/slots/${id}`, { method: "DELETE" }),
+  createEpisode: (id: string) =>
+    jsonFetch<PlanSlot>(`/api/plan/slots/${id}/create-episode`, { method: "POST" }),
+  addIdea: (idea: { series: SeriesId; title: string; hook?: string; notes?: string }) =>
+    jsonFetch<PlanIdea>("/api/plan/ideas", { method: "POST", body: JSON.stringify(idea) }),
+  deleteIdea: (id: string) => jsonFetch<{ ok: true }>(`/api/plan/ideas/${id}`, { method: "DELETE" }),
+  assignIdea: (id: string, slotId: string) =>
+    jsonFetch<PlanSlot>(`/api/plan/ideas/${id}/assign`, { method: "POST", body: JSON.stringify({ slotId }) }),
+};
+
 /** Playlist của Trang Facebook (picker khi đăng). */
 export type FbPlaylist = { id: string; title: string; videosCount: number };
 
