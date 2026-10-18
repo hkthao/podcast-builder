@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -19,11 +19,21 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { seriesInfo, type SeriesId } from "@/lib/series";
 
 const PAGE_SIZE = 12;
 
-export function EpisodeList() {
+/** Route /series/:series → danh sách tập của series đó (key để reset bộ lọc khi đổi series). */
+export function SeriesEpisodeList() {
+  const { series } = useParams();
+  const id = seriesInfo(series).id;
+  return <EpisodeList key={id} series={id} />;
+}
+
+/** Danh sách tập của MỘT series (mỗi series/Trang FB có menu + danh sách riêng). */
+export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
   const qc = useQueryClient();
+  const channelName = seriesInfo(series).channelName;
   const navigate = useNavigate();
   const { data, isLoading, error } = useQuery({
     queryKey: ["episodes", "podcast"],
@@ -32,7 +42,7 @@ export function EpisodeList() {
 
   const createEpisode = useMutation({
     mutationFn: (title: string) =>
-      api.createEpisode({ title, style: "podcast" }),
+      api.createEpisode({ title, style: "podcast", series }),
     onSuccess: (ep) => {
       qc.invalidateQueries({ queryKey: ["episodes"] });
       navigate(`/episodes/${encodeURIComponent(ep.name)}`);
@@ -47,7 +57,10 @@ export function EpisodeList() {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
 
-  const all = data?.episodes ?? [];
+  const all = useMemo(
+    () => (data?.episodes ?? []).filter((ep) => (ep.config.series ?? "bytecast") === series),
+    [data, series],
+  );
   const total = all.length;
   const hasFilter = q.trim() !== "" || dateFrom !== "" || dateTo !== "";
 
@@ -89,7 +102,7 @@ export function EpisodeList() {
       <div className="container max-w-5xl py-10">
         <header className="mb-6 flex items-center justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-serif tracking-tight">Danh sách tập</h1>
+            <h1 className="text-3xl font-serif tracking-tight">{channelName}</h1>
             <p className="mt-1 text-muted-foreground text-sm">
               {data
                 ? hasFilter

@@ -8,6 +8,7 @@ import {
 import { PATHS } from "../../../shared/studio-core/paths";
 import { deleteAllScriptTurnAudio } from "../../../shared/studio-core/podcast-script-tts";
 import { getEssay } from "./essay-store";
+import { DEFAULT_SERIES, type SeriesId } from "../../src/series";
 import { getSession as getBrainstormSession } from "./brainstorm-store";
 
 const { INPUT_DIR, OUTPUT_DIR, TMP_DIR } = PATHS;
@@ -204,6 +205,7 @@ const buildTemplate = (
   style: EpisodeConfig["style"] = "podcast",
 ): EpisodeConfig => ({
   style,
+  series: "bytecast",
   title: name,
   hook: null,
   episodeNumber: 1,
@@ -216,6 +218,7 @@ const buildTemplate = (
   showIntro: true,
   showOutro: true,
   showEditorial: true,
+  editorialLocked: false,
   footage: [],
   footageLandscape: [],
   sceneOverrides: null,
@@ -294,6 +297,19 @@ export async function replaceEpisodeAudio(
   return updated;
 }
 
+/** Số tập kế tiếp = max + 1 trong CÙNG style + series (mỗi series/Trang đếm riêng). */
+async function nextEpisodeNumber(
+  style: EpisodeConfig["style"],
+  series: SeriesId,
+): Promise<number> {
+  const all = await listEpisodes({ style });
+  return (
+    all
+      .filter((e) => (e.config.series ?? DEFAULT_SERIES) === series)
+      .reduce((m, e) => Math.max(m, e.config.episodeNumber), 0) + 1
+  );
+}
+
 /**
  * Tạo episode TRỐNG (chỉ config .json, không có audio file). Dùng cho
  * workflow podcast script-gen: user tạo episode trước, sau đó vào tab
@@ -306,6 +322,7 @@ export async function createEmptyEpisode(input: {
   hook?: string | null;
   essayId?: string | null;
   style?: EpisodeConfig["style"];
+  series?: SeriesId;
 }): Promise<EpisodeSummary> {
   const title = input.title.trim();
   if (!title) {
@@ -348,10 +365,8 @@ export async function createEmptyEpisode(input: {
   }
   if (input.essayId) template.essayId = input.essayId;
 
-  // Auto-increment episodeNumber theo workspace style
-  const all = await listEpisodes({ style });
-  const maxNum = all.reduce((m, e) => Math.max(m, e.config.episodeNumber), 0);
-  template.episodeNumber = maxNum + 1;
+  template.series = input.series ?? DEFAULT_SERIES;
+  template.episodeNumber = await nextEpisodeNumber(style, template.series);
 
   // Kế thừa nhạc nền user chọn gần nhất (khỏi chọn lại mỗi tập).
   const withMusic = await applyMusicDefaults(template);
@@ -491,6 +506,7 @@ export async function uploadAudio(
     essayId?: string;
     cover?: { originalName: string; buffer: Uint8Array };
     style?: EpisodeConfig["style"];
+    series?: SeriesId;
   } = {},
 ): Promise<EpisodeSummary> {
   const ext = (originalName.split(".").pop() ?? "").toLowerCase();
@@ -527,13 +543,8 @@ export async function uploadAudio(
   if (!(await exists(configPath))) {
     const style = options.style ?? "podcast";
     const template = buildTemplate(slug, style);
-    // Auto next episodeNumber = max(existing) + 1 trong CÙNG workspace style
-    const all = await listEpisodes({ style });
-    const maxNum = all.reduce(
-      (m, e) => Math.max(m, e.config.episodeNumber),
-      0,
-    );
-    template.episodeNumber = maxNum + 1;
+    template.series = options.series ?? DEFAULT_SERIES;
+    template.episodeNumber = await nextEpisodeNumber(style, template.series);
     if (derived && options.essayId) {
       template.title = derived.title;
       template.hook = derived.hook;

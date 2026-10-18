@@ -1,4 +1,5 @@
-import { COLORS, FONTS } from "../theme";
+import { FONTS } from "../theme";
+import { usePalette } from "../palette";
 
 /**
  * Chữ kiểu 3D bubble sticker — viền trắng dày + đổ bóng cứng kiểu sticker
@@ -36,10 +37,10 @@ const buildOutline = (w: number, color: string): string => {
 export const StickerText: React.FC<Props> = ({
   children,
   fontSize,
-  color = COLORS.ink,
+  color,
   outlineWidth = 10,
   shadowOffset = 10,
-  shadowColor = COLORS.ink,
+  shadowColor,
   align = "center",
   letterSpacing = "-0.02em",
   lineHeight = 1.1,
@@ -47,8 +48,10 @@ export const StickerText: React.FC<Props> = ({
   fontFamily = FONTS.display,
   maxWidth,
 }) => {
-  const outline = buildOutline(outlineWidth, COLORS.white);
-  const shadow = `${shadowOffset}px ${shadowOffset}px 0 ${shadowColor}`;
+  const colors = usePalette();
+  color ??= colors.ink;
+  const outline = buildOutline(outlineWidth, colors.white);
+  const shadow = `${shadowOffset}px ${shadowOffset}px 0 ${shadowColor ?? colors.ink}`;
   return (
     <div
       style={{

@@ -1,10 +1,11 @@
 import { useMemo } from "react";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
-import { COLORS, MOOD_ACCENTS, type MoodKey } from "../theme";
+import { MOOD_ACCENTS, type MoodKey } from "../theme";
 import { useLayout } from "../layout";
 import type { Scene } from "../scenes";
 import { currentSceneIndex, sceneVariant } from "./scene-runtime";
+import { usePalette } from "../palette";
 
 const NUM_BANDS = 64;
 const SMOOTH_WINDOW = 2;
@@ -28,6 +29,7 @@ type Props = {
 };
 
 export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scenes, accentColor }) => {
+  const colors = usePalette();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { landscape, width: W, height: H } = useLayout();
@@ -99,11 +101,11 @@ export const Visualizer: React.FC<Props> = ({ audioSrc, mood = "positive", scene
             navy nuốt mất màu theme (user: "màu của wave" phải theo màu chủ đề).
           */}
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={COLORS.ink} />
+            <stop offset="0%" stopColor={colors.ink} />
             <stop offset="16%" stopColor={accent} />
             <stop offset="50%" stopColor={accent} />
             <stop offset="84%" stopColor={accent} />
-            <stop offset="100%" stopColor={COLORS.ink} />
+            <stop offset="100%" stopColor={colors.ink} />
           </linearGradient>
         </defs>
         {/*

@@ -6,7 +6,7 @@ import {
   staticFile,
   useCurrentFrame,
 } from "remotion";
-import { COLORS } from "../theme";
+import { usePalette } from "../palette";
 
 /**
  * Lớp footage nền động — dùng clip tự quay (đã bỏ tiếng + chậm 0.7×, xem
@@ -74,11 +74,12 @@ export const FootageLayer: React.FC<Props> = ({
   mainStartMs,
   mainEndMs,
 }) => {
+  const colors = usePalette();
   const segs = buildSegments(clips, mainStartMs, mainEndMs);
   const msToFrame = (ms: number) => Math.round((ms / 1000) * fps);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: COLORS.ink }}>
+    <AbsoluteFill style={{ backgroundColor: colors.ink }}>
       {segs.map((seg, idx) => {
         const fromF = msToFrame(seg.startMs);
         const durF = Math.max(1, msToFrame(seg.endMs) - fromF);

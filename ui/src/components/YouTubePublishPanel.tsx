@@ -30,11 +30,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  BRAND_NAME,
   buildDisclosure,
   CollapsibleCard,
   CopyButton,
 } from "@/components/publish-ui";
+import { seriesInfo } from "@/lib/series";
 
 /** Giới hạn của YouTube Studio. */
 const YT_TITLE_MAX = 100;
@@ -219,7 +219,8 @@ export function YouTubePublishPanel({
   const sources = ep.config.sources ?? [];
   const disclosure = buildDisclosure({
     aiAssisted: ep.config.aiAssisted ?? true,
-    editor: (ep.config.scriptCredit ?? "").trim() || BRAND_NAME,
+    brandName: seriesInfo(ep.config.series).channelName,
+    editor: (ep.config.scriptCredit ?? "").trim() || seriesInfo(ep.config.series).channelName,
     musicCredit: (ep.config.musicCredit ?? "").trim(),
     footageCredit: footageCredit.trim(),
     sources,

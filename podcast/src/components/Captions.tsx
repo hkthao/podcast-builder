@@ -8,9 +8,10 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
+import { FONTS, SAFE_ZONE, TYPE_SCALE } from "../theme";
 import { useLayout } from "../layout";
 import type { Transcript } from "../../../shared/transcribe/transcribe";
+import { usePalette } from "../palette";
 
 /** Padding-bottom = SAFE_ZONE.bottom - 40 — dịch caption xuống ~40px cho cân bố cục (vẫn nằm trên vùng FB overlay). */
 const CAPTION_PADDING_BOTTOM = SAFE_ZONE.bottom - 40;
@@ -148,6 +149,7 @@ const chunkBySentence = (transcript: Transcript): Page[] => {
 };
 
 export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentColor }) => {
+  const colors = usePalette();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { landscape } = useLayout();
@@ -207,7 +209,7 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentCol
     : wc > 7 ? 56 : wc > 5 ? 62 : TYPE_SCALE.caption;
 
   // Viền + chữ theo màu chủ đề (fallback ink navy nếu tập chưa đặt màu).
-  const accent = accentColor || COLORS.ink;
+  const accent = accentColor || colors.ink;
 
   return (
     <AbsoluteFill
@@ -224,7 +226,7 @@ export const Captions: React.FC<Props> = ({ transcriptSrc, hideRanges, accentCol
         style={{
           opacity,
           transform: `scale(${scale})`,
-          backgroundColor: COLORS.white,
+          backgroundColor: colors.white,
           border: `5px solid ${accent}`,
           borderRadius: landscape ? 24 : 28,
           padding: landscape ? "14px 32px" : "20px 36px",

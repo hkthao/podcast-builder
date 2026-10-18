@@ -17,6 +17,7 @@ import { SceneLayer } from "./components/SceneLayer";
 import { Visualizer } from "./components/Visualizer";
 import { Watermark } from "./components/Watermark";
 import { useScenePlan } from "./components/scene-runtime";
+import { PaletteProvider, paletteFor } from "./palette";
 import { outroTailFrames, type EpisodeConfig } from "./episode";
 import type { VideoFormat } from "./layout";
 
@@ -83,6 +84,7 @@ export const Video: React.FC<CompProps> = ({
   const hideStickers = useFootage || overlayMode;
 
   return (
+    <PaletteProvider value={paletteFor(episode.series)}>
     <AbsoluteFill style={overlayMode ? { backgroundColor: "transparent" } : undefined}>
       {overlayMode ? null : (
         <Sequence from={mainStartFrame}>
@@ -118,7 +120,7 @@ export const Video: React.FC<CompProps> = ({
           {hideStickers ? null : <SceneLayer scenes={scenes} audioSrc={audioSrc} />}
           <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} accentColor={episode.accentColor} />
           <Captions transcriptSrc={transcriptSrc} accentColor={episode.accentColor} />
-          <Watermark episodeNumber={episode.episodeNumber} accentColor={episode.accentColor} />
+          <Watermark episodeNumber={episode.episodeNumber} accentColor={episode.accentColor} series={episode.series} />
           {episode.showEditorial ? (
             <EditorialOverlay
               editorialSrc={editorialSrc}
@@ -154,9 +156,10 @@ export const Video: React.FC<CompProps> = ({
 
       {episode.showOutro && outroFrames > 0 ? (
         <Sequence from={mainEndFrame} durationInFrames={outroFrames} layout="none">
-          <OutroCard />
+          <OutroCard series={episode.series} />
         </Sequence>
       ) : null}
     </AbsoluteFill>
+    </PaletteProvider>
   );
 };

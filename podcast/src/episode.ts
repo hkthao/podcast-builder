@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MOOD_ACCENTS, SCENE_TYPES } from "./theme";
 import { INTRO_SECONDS, hookSeconds } from "./timing";
+import { DEFAULT_SERIES, SERIES_IDS } from "./series";
 
 export const MoodKeySchema = z.enum(
   Object.keys(MOOD_ACCENTS) as [keyof typeof MOOD_ACCENTS, ...Array<keyof typeof MOOD_ACCENTS>],
@@ -23,6 +24,8 @@ export const EpisodeConfigSchema = z.object({
    * "podcast" = sticker SVG 9:16, "gallery" = real photos + Ken Burns.
    */
   style: StyleSchema,
+  /** Series/kênh của tập (xem series.ts) — nhận diện video, Trang FB, playlist, số tập. */
+  series: z.enum(SERIES_IDS).default(DEFAULT_SERIES),
   title: z.string().min(1, "title không được để trống"),
   hook: z.string().nullable().default(null),
   episodeNumber: z.number().int().positive(),
@@ -51,6 +54,11 @@ export const EpisodeConfigSchema = z.object({
   showOutro: z.boolean().default(true),
   /** Bật lớp biên tập gốc trên màn hình (tiêu đề chương + trích dẫn có nguồn). */
   showEditorial: z.boolean().default(true),
+  /**
+   * true = editorial.json do kịch bản sinh sẵn (vd story/tts/build.py) → render
+   * KHÔNG gọi LLM tạo lại khi regenPlan, giữ nguyên chương/trích dẫn.
+   */
+  editorialLocked: z.boolean().default(false),
   /**
    * Danh sách tên file footage (trong input/footage/) dùng làm NỀN động luân
    * phiên cho tập này. Rỗng = nền sticker mặc định. Xem FootageLayer + §3.2.
@@ -177,6 +185,7 @@ export const buildEpisodeTemplate = (
   style: EpisodeConfig["style"] = "podcast",
 ): EpisodeConfig => ({
   style,
+  series: DEFAULT_SERIES,
   title: name,
   hook: null,
   episodeNumber: 1,
@@ -189,6 +198,7 @@ export const buildEpisodeTemplate = (
   showIntro: true,
   showOutro: true,
   showEditorial: true,
+  editorialLocked: false,
   footage: [],
   footageLandscape: [],
   sceneOverrides: null,

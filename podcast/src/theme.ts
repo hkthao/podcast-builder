@@ -1,4 +1,3 @@
-import { staticFile } from "remotion";
 import { loadFont as loadBaloo2 } from "@remotion/google-fonts/Baloo2";
 import { loadFont as loadBeVietnamPro } from "@remotion/google-fonts/BeVietnamPro";
 
@@ -51,14 +50,6 @@ export const MOOD_ACCENTS: Record<MoodKey, string> = {
   contemplative: COLORS.ink,
 };
 
-/** Mood `contemplative` dùng nền kem thay vì vàng để đổi không khí. */
-export const MOOD_BG: Record<MoodKey, string> = {
-  positive: COLORS.bg,
-  social: COLORS.bg,
-  healing: COLORS.bg,
-  energetic: COLORS.bg,
-  contemplative: COLORS.bgAlt,
-};
 
 export const TYPE_SCALE = {
   hook: 96,
@@ -80,26 +71,6 @@ export const SAFE_ZONE = {
   right: 140,
 } as const;
 
-export const BRAND = {
-  channelName: "ByteCast Tech",
-  /** Slogan in trong logo lockup — show dưới logo ở Intro/Outro. */
-  slogan: "Giữa Công Nghệ Và Bản Chất Con Người",
-  /**
-   * Mô tả kênh — dùng cho metadata video / mô tả Facebook khi cần.
-   * Không hiển thị trong video render.
-   */
-  description:
-    "ByteCast Tech khám phá những câu hỏi lớn của thời đại AI, nơi công nghệ giao thoa với triết học, tâm lý học và xã hội học để giúp chúng ta hiểu rõ hơn về con người, ý nghĩa và tương lai.",
-  /** Logo lockup đầy đủ (1536×1024 PNG) — dùng ở Intro/Outro. */
-  logoSrc: staticFile("brand/logo.png"),
-  /**
-   * Logo lockup ByteCast Tech (1536×1024 PNG RGBA) — paper-card style với
-   * brand text "ByteCast Tech" sẵn trong ảnh. Dùng ở Watermark — không cần
-   * thêm text "ByteCast Tech" bên cạnh nữa.
-   */
-  markSrc: staticFile("brand/logo-bytecast.png"),
-  cta: "Theo dõi để xem thêm",
-} as const;
 
 export const FPS = 30;
 

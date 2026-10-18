@@ -1,9 +1,10 @@
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { COLORS, FPS } from "../theme";
+import { FPS } from "../theme";
 import { useLayout } from "../layout";
 import { hookSeconds, splitHookLines } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
+import { usePalette } from "../palette";
 
 /**
  * Hook 3.5s — punchline có điểm nhấn giống cover.
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export const Hook: React.FC<Props> = ({ hook }) => {
+  const colors = usePalette();
   const frame = useCurrentFrame();
   // Trong <Sequence>, durationInFrames = độ dài card hook (co giãn theo chữ).
   const { durationInFrames } = useVideoConfig();
@@ -108,7 +110,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
       style={{
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: COLORS.bg,
+        backgroundColor: colors.bg,
         paddingLeft: safe.left,
         paddingRight: safe.right,
         paddingTop: safe.top,
@@ -117,10 +119,10 @@ export const Hook: React.FC<Props> = ({ hook }) => {
         opacity,
       }}
     >
-      <Sparkle x={sx(140)} y={sy(300)} color={COLORS.accentRed} size={84} delay={0} />
-      <StarSmall x={sx(940)} y={sy(420)} color={COLORS.accentBlue} size={64} delay={6} />
-      <Sparkle x={sx(140)} y={sy(1500)} color={COLORS.accentTeal} size={76} delay={10} />
-      <StarSmall x={sx(940)} y={sy(1620)} color={COLORS.ink} size={60} delay={14} />
+      <Sparkle x={sx(140)} y={sy(300)} color={colors.accentRed} size={84} delay={0} />
+      <StarSmall x={sx(940)} y={sy(420)} color={colors.accentBlue} size={64} delay={6} />
+      <Sparkle x={sx(140)} y={sy(1500)} color={colors.accentTeal} size={76} delay={10} />
+      <StarSmall x={sx(940)} y={sy(1620)} color={colors.ink} size={60} delay={14} />
 
       {lines.map((line, i) => {
         const isEmphasis = i === emphasisIdx && lines.length > 1;
@@ -153,7 +155,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
                   >
                     <StickerText
                       fontSize={fontSize}
-                      color={COLORS.accentRed}
+                      color={colors.accentRed}
                       outlineWidth={14}
                       shadowOffset={14}
                     >
@@ -181,7 +183,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
                 >
                   <path
                     d="M 18 16 Q 130 4 260 14 Q 390 24 502 8"
-                    stroke={COLORS.accentRed}
+                    stroke={colors.accentRed}
                     strokeWidth={10}
                     fill="none"
                     strokeLinecap="round"
@@ -195,7 +197,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
           <div key={i} style={{ transform: `scale(${baseScale})`, maxWidth: lineMaxWidth }}>
             <StickerText
               fontSize={fontSize}
-              color={isEmphasis ? COLORS.accentRed : COLORS.ink}
+              color={isEmphasis ? colors.accentRed : colors.ink}
               outlineWidth={isEmphasis ? 14 : 11}
               shadowOffset={isEmphasis ? 14 : 10}
             >
@@ -220,7 +222,7 @@ export const Hook: React.FC<Props> = ({ hook }) => {
                 >
                   <path
                     d="M 18 16 Q 130 4 260 14 Q 390 24 502 8"
-                    stroke={COLORS.accentRed}
+                    stroke={colors.accentRed}
                     strokeWidth={10}
                     fill="none"
                     strokeLinecap="round"

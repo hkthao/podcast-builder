@@ -7,9 +7,10 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, FONTS, withAlpha } from "../theme";
+import { FONTS, withAlpha } from "../theme";
 import { useLayout } from "../layout";
 import { type Editorial } from "../editorial";
+import { usePalette } from "../palette";
 
 const CHAPTER_SHOW_MS = 5000;
 const CHAPTER_FADE_MS = 450;
@@ -66,7 +67,8 @@ export const EditorialOverlay: React.FC<Props> = ({
   revealMs,
   accentColor,
 }) => {
-  const accent = accentColor || COLORS.ink;
+  const colors = usePalette();
+  const accent = accentColor || colors.ink;
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { landscape, safe } = useLayout();
@@ -153,12 +155,12 @@ export const EditorialOverlay: React.FC<Props> = ({
               display: "flex",
               alignItems: "center",
               gap: 16,
-              background: COLORS.white,
+              background: colors.white,
               border: `3px solid ${accent}`,
               // Bo tròn kiểu bong bóng chat (góc dưới-trái vuông hơn = phía đuôi).
               borderRadius: "28px 28px 28px 8px",
               padding: "14px 28px",
-              boxShadow: `0 8px 22px ${withAlpha(COLORS.ink, 0.2)}`,
+              boxShadow: `0 8px 22px ${withAlpha(colors.ink, 0.2)}`,
               maxWidth: "100%",
             }}
           >
@@ -205,7 +207,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 height: 0,
                 borderLeft: "10px solid transparent",
                 borderRight: "10px solid transparent",
-                borderTop: `13px solid ${COLORS.white}`,
+                borderTop: `13px solid ${colors.white}`,
               }}
             />
           </div>
@@ -228,12 +230,12 @@ export const EditorialOverlay: React.FC<Props> = ({
             style={{
               position: "relative",
               display: "inline-block",
-              background: COLORS.white,
+              background: colors.white,
               border: `3px solid ${accent}`,
               // Bong bóng chat, đuôi ở góc dưới-trái.
               borderRadius: "28px 28px 28px 8px",
               padding: "16px 26px",
-              boxShadow: `0 8px 22px ${withAlpha(COLORS.ink, 0.2)}`,
+              boxShadow: `0 8px 22px ${withAlpha(colors.ink, 0.2)}`,
             }}
           >
             <div
@@ -242,7 +244,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 fontWeight: 800,
                 fontSize: 40,
                 lineHeight: 1.1,
-                color: COLORS.ink,
+                color: colors.ink,
               }}
             >
               {activeCitation.name}
@@ -283,7 +285,7 @@ export const EditorialOverlay: React.FC<Props> = ({
                 height: 0,
                 borderLeft: "10px solid transparent",
                 borderRight: "10px solid transparent",
-                borderTop: `13px solid ${COLORS.white}`,
+                borderTop: `13px solid ${colors.white}`,
               }}
             />
           </div>

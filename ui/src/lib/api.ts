@@ -1,3 +1,5 @@
+import type { SeriesId } from "./series";
+
 /**
  * Fetch wrapper cho Studio API.
  *
@@ -33,6 +35,8 @@ export type Style = "podcast";
 
 export type EpisodeConfig = {
   style: Style;
+  /** Series/kênh (xem lib/series.ts). Config cũ không có → "bytecast". */
+  series?: SeriesId;
   title: string;
   hook: string | null;
   episodeNumber: number;
@@ -1042,6 +1046,7 @@ export const api = {
     hook?: string | null;
     essayId?: string | null;
     style?: Style;
+    series?: SeriesId;
   }) =>
     jsonFetch<EpisodeSummary>("/api/episodes", {
       method: "POST",
@@ -1118,6 +1123,17 @@ export const api = {
     }
     return (await res.json()) as EpisodeSummary;
   },
+
+  /** Tạo ảnh cover (tốn phí) bằng Gemini/OpenAI từ prompt cover đã lưu → gắn như upload. */
+  genCoverImage: (
+    episodeName: string,
+    variant: VideoFormat = "vertical",
+    provider: "gemini" | "openai" = "gemini",
+  ) =>
+    jsonFetch<EpisodeSummary>(
+      `/api/episodes/${encodeURIComponent(episodeName)}/cover-image?provider=${provider}${variant === "landscape" ? "&variant=landscape" : ""}`,
+      { method: "POST" },
+    ),
 
   uploadCover: async (
     episodeName: string,
@@ -1353,9 +1369,9 @@ export const api = {
 
   // ─── Đăng Facebook Reel trực tiếp ────────────────────────────────────
   /** Danh sách playlist của Trang Facebook để chọn trước khi đăng. */
-  fbPlaylists: () =>
+  fbPlaylists: (series?: SeriesId) =>
     jsonFetch<{ pageId: string; pageName: string; playlists: FbPlaylist[] }>(
-      "/api/episodes/_/facebook-playlists",
+      `/api/episodes/_/facebook-playlists?series=${encodeURIComponent(series ?? "bytecast")}`,
     ),
   /** Gợi ý playlist bằng AI: dùng lại playlist nào, hay nên tạo mới. */
   suggestPlaylist: (name: string, input: { provider: LLMProvider; model: string }) =>

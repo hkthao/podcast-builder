@@ -36,13 +36,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  BRAND_NAME,
   buildDisclosure,
   CollapsibleCard,
   CopyButton,
   CopyChip,
 } from "@/components/publish-ui";
 import { YouTubePublishPanel } from "@/components/YouTubePublishPanel";
+import { seriesInfo } from "@/lib/series";
 
 /** FB Reels best practice: 3-5 hashtags max. */
 const MAX_HASHTAGS = 5;
@@ -310,9 +310,11 @@ function FacebookPublishTab({
     setHashtags(hashtags.filter((x) => x !== h));
   };
 
+  const brandName = seriesInfo(ep.config.series).channelName;
   const disclosure = buildDisclosure({
     aiAssisted,
-    editor: scriptCredit.trim() || BRAND_NAME,
+    brandName,
+    editor: scriptCredit.trim() || brandName,
     musicCredit: musicCredit.trim(),
     footageCredit: footageCredit.trim(),
     sources: sourcesArr,
@@ -678,7 +680,7 @@ function FacebookPublishTab({
               <Input
                 value={scriptCredit}
                 onChange={(e) => setScriptCredit(e.target.value)}
-                placeholder={`Mặc định: ${BRAND_NAME}`}
+                placeholder={`Mặc định: ${brandName}`}
                 className="mt-1 text-sm"
               />
             </div>
@@ -824,8 +826,8 @@ function FacebookPublishCard({
   const hasToken = !!keysQ.data?.keys.find((k) => k.provider === "facebook")?.hasKey;
 
   const playlistsQ = useQuery({
-    queryKey: ["fb-playlists"],
-    queryFn: () => api.fbPlaylists(),
+    queryKey: ["fb-playlists", ep.config.series ?? "bytecast"],
+    queryFn: () => api.fbPlaylists(ep.config.series),
     enabled: hasToken,
     staleTime: 60_000,
     retry: false,
@@ -1066,7 +1068,7 @@ function FacebookPublishCard({
                         Nên <strong>tạo playlist mới</strong>: "{suggestion.playlistTitle}"
                         {suggestion.confidence ? ` (độ tin ${suggestion.confidence})` : ""}. Tạo
                         trên Facebook rồi thêm vào{" "}
-                        <code className="font-mono">input/_fb-playlists.json</code>.
+                        <code className="font-mono">input/{seriesInfo(ep.config.series).playlistsFile}</code>.
                       </span>
                     </div>
                   )}

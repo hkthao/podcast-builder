@@ -23,5 +23,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["shared", "podcast", "server", "remotion.config.ts"]
+  "include": ["shared", "podcast", "server", "story", "remotion.config.ts"]
 }

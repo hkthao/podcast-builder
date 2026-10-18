@@ -64,6 +64,7 @@ import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
 import { PATHS } from "../../../shared/studio-core/paths";
 import { getApiKey } from "../../../shared/studio-core/api-keys-store";
 import { publishReel, listPlaylists } from "../../../shared/studio-core/facebook";
+import { generateCoverImage } from "../lib/cover-image";
 import { streamSSE } from "hono/streaming";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -71,11 +72,16 @@ import os from "node:os";
 import crypto from "node:crypto";
 import type { LLMProvider } from "../../../shared/studio-core/llm-providers";
 import type { EpisodeConfig } from "../../src/episode";
+import { SERIES_IDS, getSeries, type SeriesId } from "../../src/series";
 
 export const episodesRoutes = new Hono();
 
-/** Brand mặc định khi scriptCredit trống (khớp PublishTab UI). */
-const FB_BRAND_NAME = "ByteCast Tech";
+/** ID Trang FB của series (env theo series.fbPageIdEnv; trống → token tự chọn Trang). */
+const fbPageIdFor = (series: string | null | undefined): string | undefined =>
+  process.env[getSeries(series).fbPageIdEnv]?.trim() || undefined;
+
+const parseSeries = (v: unknown): SeriesId | undefined =>
+  typeof v === "string" && (SERIES_IDS as readonly string[]).includes(v) ? (v as SeriesId) : undefined;
 
 /**
  * Dựng mô tả đầy đủ để đăng (khớp logic fullCaption + buildDisclosure ở
@@ -85,11 +91,13 @@ const FB_BRAND_NAME = "ByteCast Tech";
 const buildEpisodeDescription = (config: EpisodeConfig): string => {
   const caption = config.publishCaption?.trim() ?? "";
   const hashtagLine = (config.publishHashtags ?? []).map((h) => `#${h}`).join(" ");
-  const editor = config.scriptCredit?.trim() || FB_BRAND_NAME;
+  // Tên kênh theo series (khớp PublishTab UI) — dùng khi scriptCredit trống.
+  const brandName = getSeries(config.series).channelName;
+  const editor = config.scriptCredit?.trim() || brandName;
   const lines: string[] = [];
   if (config.aiAssisted) {
     lines.push(
-      `Kịch bản gốc do ${editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${FB_BRAND_NAME} định hướng và biên tập.`,
+      `Kịch bản gốc do ${editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${brandName} định hướng và biên tập.`,
     );
   } else {
     lines.push(`Kịch bản gốc do ${editor} biên soạn và biên tập.`);
@@ -129,6 +137,7 @@ episodesRoutes.post("/", async (c) => {
     hook?: string | null;
     essayId?: string | null;
     style?: string;
+    series?: string;
   };
   if (typeof body.title !== "string" || !body.title.trim()) {
     return c.json({ error: "Cần field 'title' (string)" }, 400);
@@ -142,6 +151,7 @@ episodesRoutes.post("/", async (c) => {
       hook: body.hook,
       essayId: body.essayId ?? undefined,
       style: body.style as "podcast" | "gallery" | undefined,
+      series: parseSeries(body.series),
     });
     return c.json(summary, 201);
   } catch (e) {
@@ -204,7 +214,8 @@ episodesRoutes.post("/upload", async (c) => {
   }
   const buf = new Uint8Array(await file.arrayBuffer());
   try {
-    const summary = await uploadAudio(file.name, buf, { essayId, cover, style });
+    const series = parseSeries(body["series"]);
+    const summary = await uploadAudio(file.name, buf, { essayId, cover, style, series });
     return c.json(summary, 201);
   } catch (e) {
     const err = e as Error & { code?: string };
@@ -325,6 +336,31 @@ episodesRoutes.delete("/:name/bgm", async (c) => {
     const status =
       err.code === "VALIDATION" ? 400 : err.code === "NOT_FOUND" ? 404 : 500;
     return c.json({ error: err.message }, status);
+  }
+});
+
+/**
+ * Tạo ảnh cover (TỐN PHÍ) từ prompt cover đã lưu trong config rồi gắn như cover
+ * upload. ?provider=gemini (mặc định) | openai · ?variant=landscape → thumbnail 16:9.
+ */
+episodesRoutes.post("/:name/cover-image", async (c) => {
+  const name = c.req.param("name");
+  const variant = c.req.query("variant") === "landscape" ? "landscape" : "vertical";
+  const provider = c.req.query("provider") === "openai" ? "openai" : "gemini";
+  const summary = await getEpisode(name);
+  if (!summary) return c.json({ error: `Không tìm thấy tập "${name}".` }, 404);
+  const prompt = (
+    variant === "landscape" ? summary.config.coverPromptLandscape : summary.config.coverPrompt
+  )?.trim();
+  if (!prompt) {
+    return c.json({ error: "Chưa có prompt cover — tạo prompt trước rồi mới tạo ảnh." }, 400);
+  }
+  try {
+    const img = await generateCoverImage(provider, prompt, variant);
+    const updated = await uploadCover(name, `${provider}.${img.ext}`, new Uint8Array(img.data), variant);
+    return c.json(updated);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });
 
@@ -474,15 +510,18 @@ episodesRoutes.delete("/:name/files", async (c) => {
   }
 });
 
-/** File playlist chuẩn của kênh (nguồn user tự maintain). */
-const FB_PLAYLISTS_FILE = path.join(PATHS.INPUT_DIR, "_fb-playlists.json");
+/** File playlist chuẩn của Trang theo series (nguồn user tự maintain). */
+const fbPlaylistsFile = (series: string | null | undefined) =>
+  path.join(PATHS.INPUT_DIR, getSeries(series).playlistsFile);
 
 type LocalPlaylist = { id: string; title: string; videosCount: number; desc?: string };
 
 /** Đọc playlist từ file chuẩn; null nếu không có/hỏng. */
-const readLocalPlaylists = async (): Promise<LocalPlaylist[] | null> => {
+const readLocalPlaylists = async (
+  series: string | null | undefined,
+): Promise<LocalPlaylist[] | null> => {
   try {
-    const j = JSON.parse(await fs.readFile(FB_PLAYLISTS_FILE, "utf-8"));
+    const j = JSON.parse(await fs.readFile(fbPlaylistsFile(series), "utf-8"));
     if (!Array.isArray(j.playlists)) return null;
     return j.playlists
       .filter(
@@ -506,7 +545,8 @@ const readLocalPlaylists = async (): Promise<LocalPlaylist[] | null> => {
  * không có file thì fallback gọi Graph API video_lists.
  */
 episodesRoutes.get("/_/facebook-playlists", async (c) => {
-  const local = await readLocalPlaylists();
+  const series = c.req.query("series");
+  const local = await readLocalPlaylists(series);
   if (local) {
     return c.json({ pageId: "", pageName: "", playlists: local, source: "file" });
   }
@@ -515,7 +555,7 @@ episodesRoutes.get("/_/facebook-playlists", async (c) => {
     return c.json({ error: "Chưa có Facebook Page Access Token — nhập ở Settings." }, 400);
   }
   try {
-    const r = await listPlaylists(token, process.env.FB_PAGE_ID);
+    const r = await listPlaylists(token, fbPageIdFor(series));
     return c.json({ ...r, source: "api" });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
@@ -551,10 +591,10 @@ episodesRoutes.post("/:name/playlist-suggestion", async (c) => {
   const { provider, model } = body;
   if (!provider || !model) return c.json({ error: "thiếu provider/model" }, 400);
 
-  const playlists = await readLocalPlaylists();
+  const playlists = await readLocalPlaylists(summary.config.series);
   if (!playlists || !playlists.length) {
     return c.json(
-      { error: "Chưa có danh sách playlist (input/_fb-playlists.json) để gợi ý." },
+      { error: `Chưa có danh sách playlist (input/${getSeries(summary.config.series).playlistsFile}) để gợi ý.` },
       400,
     );
   }
@@ -707,7 +747,7 @@ episodesRoutes.get("/:name/publish", (c) => {
     } = { done: false, result: null, error: null };
     const task = publishReel({
       token,
-      pageIdOverride: process.env.FB_PAGE_ID,
+      pageIdOverride: fbPageIdFor(summary.config.series),
       videoPath,
       description,
       title: summary.config.title,

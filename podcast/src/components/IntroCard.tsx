@@ -1,9 +1,10 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { COLORS, FONTS, FPS } from "../theme";
+import { FONTS, FPS } from "../theme";
 import { useLayout } from "../layout";
 import { INTRO_SECONDS } from "../timing";
 import { StickerText } from "./StickerText";
 import { Sparkle, StarSmall } from "./doodles";
+import { usePalette } from "../palette";
 
 /**
  * Cover 3s — TITLE LÀ HERO duy nhất, chiếm toàn frame để gây tò mò.
@@ -59,6 +60,7 @@ export const IntroCard: React.FC<Props> = ({
   coverFit = "cover",
   coverPosition = "center",
 }) => {
+  const colors = usePalette();
   const frame = useCurrentFrame();
   const { landscape, sx, sy } = useLayout();
   const lines = splitIntoLines(title);
@@ -72,7 +74,7 @@ export const IntroCard: React.FC<Props> = ({
     // chính ảnh đó phóng to + mờ thay vì dải vàng hai bên.
     const blurredBackdrop = landscape && coverFit === "contain";
     return (
-      <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>
+      <AbsoluteFill style={{ backgroundColor: colors.bg }}>
         {blurredBackdrop ? (
           <Img
             src={staticFile(coverImage)}
@@ -134,7 +136,7 @@ export const IntroCard: React.FC<Props> = ({
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: COLORS.bg,
+        backgroundColor: colors.bg,
         paddingLeft: 60,
         paddingRight: 60,
         display: "flex",
@@ -145,10 +147,10 @@ export const IntroCard: React.FC<Props> = ({
       }}
     >
       {/* Decoration sparkles ở 4 góc */}
-      <Sparkle x={sx(120)} y={sy(260)} color={COLORS.accentRed} size={84} delay={0} />
-      <StarSmall x={sx(960)} y={sy(340)} color={COLORS.accentBlue} size={70} delay={6} />
-      <Sparkle x={sx(960)} y={sy(1600)} color={COLORS.accentTeal} size={76} delay={10} />
-      <StarSmall x={sx(120)} y={sy(1500)} color={COLORS.ink} size={64} delay={14} />
+      <Sparkle x={sx(120)} y={sy(260)} color={colors.accentRed} size={84} delay={0} />
+      <StarSmall x={sx(960)} y={sy(340)} color={colors.accentBlue} size={70} delay={6} />
+      <Sparkle x={sx(960)} y={sy(1600)} color={colors.accentTeal} size={76} delay={10} />
+      <StarSmall x={sx(120)} y={sy(1500)} color={colors.ink} size={64} delay={14} />
 
       {lines.map((line, i) => {
         const isEmphasis = i === emphasisIdx && lines.length > 1;
@@ -168,11 +170,11 @@ export const IntroCard: React.FC<Props> = ({
               {/* Coral sticker bar — uppercase trắng, viền navy, shadow đậm. */}
               <div
                 style={{
-                  backgroundColor: COLORS.accentRed,
-                  border: `6px solid ${COLORS.ink}`,
+                  backgroundColor: colors.accentRed,
+                  border: `6px solid ${colors.ink}`,
                   borderRadius: 22,
                   padding: "16px 36px",
-                  boxShadow: `12px 12px 0 ${COLORS.ink}`,
+                  boxShadow: `12px 12px 0 ${colors.ink}`,
                   textAlign: "center",
                 }}
               >
@@ -180,12 +182,12 @@ export const IntroCard: React.FC<Props> = ({
                   style={{
                     fontFamily: FONTS.display,
                     fontWeight: 800,
-                    color: COLORS.white,
+                    color: colors.white,
                     fontSize: emphasisFontSize(line),
                     textTransform: "uppercase",
                     letterSpacing: "0.02em",
                     lineHeight: 1.05,
-                    textShadow: `3px 3px 0 ${COLORS.ink}`,
+                    textShadow: `3px 3px 0 ${colors.ink}`,
                     textAlign: "center",
                   }}
                 >
@@ -203,7 +205,7 @@ export const IntroCard: React.FC<Props> = ({
               >
                 <path
                   d="M 18 16 Q 130 4 260 14 Q 390 24 502 8"
-                  stroke={COLORS.ink}
+                  stroke={colors.ink}
                   strokeWidth={10}
                   fill="none"
                   strokeLinecap="round"
@@ -224,7 +226,7 @@ export const IntroCard: React.FC<Props> = ({
           >
             <StickerText
               fontSize={normalFontSize(line)}
-              color={COLORS.ink}
+              color={colors.ink}
               outlineWidth={14}
               shadowOffset={12}
               align="center"

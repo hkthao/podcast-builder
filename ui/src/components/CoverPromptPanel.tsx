@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Copy, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, Check, Copy, Image as ImageIcon, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { api, type EpisodeSummary, type VideoFormat } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,19 @@ export function CoverPromptPanel({
       setGenerated(res.prompt);
       setThemeColor(res.themeColor);
       savePromptMut.mutate(res.prompt);
+    },
+  });
+
+  // Tạo ảnh (tốn phí, model rẻ nhất): lưu prompt đang sửa trước, rồi server gen + gắn cover.
+  const [imageProvider, setImageProvider] = useState<"gemini" | "openai">("gemini");
+  const imageMut = useMutation({
+    mutationFn: async () => {
+      if (generated.trim() !== saved.trim()) await savePromptMut.mutateAsync(generated);
+      return api.genCoverImage(ep.name, variant, imageProvider);
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["episodes"] });
     },
   });
 
@@ -173,6 +186,22 @@ export function CoverPromptPanel({
         </div>
       )}
 
+      {imageMut.isError && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>Tạo ảnh lỗi: {String(imageMut.error)}</span>
+        </div>
+      )}
+      {imageMut.isSuccess && (
+        <div className="mt-3 rounded-md border border-accent/40 bg-accent/5 p-2 text-xs flex items-start gap-2">
+          <Check className="size-3.5 mt-0.5 shrink-0 text-accent" />
+          <span>
+            Đã tạo và gắn {variant === "landscape" ? "thumbnail" : "ảnh cover"} — kiểm tra chữ tiếng Việt
+            trên ảnh (model hay sai dấu); chưa ưng thì bấm tạo lại.
+          </span>
+        </div>
+      )}
+
       {genMut.isError && (
         <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
           <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
@@ -180,7 +209,7 @@ export function CoverPromptPanel({
         </div>
       )}
 
-      {/* Footer: Copy luôn có; gen qua API (OpenAI/Ollama) ẩn sau nút — tốn phí */}
+      {/* Footer theo thứ tự bước: viết prompt bằng AI (ẩn sau nút, tốn phí) → copy → tạo ảnh OpenAI (nút chính) */}
       <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2 flex-wrap">
         {showOpenAI && (
           <>
@@ -227,17 +256,18 @@ export function CoverPromptPanel({
               ) : (
                 <Sparkles className="size-3.5" />
               )}
-              {genMut.isPending ? "Đang gen…" : "Gen qua API"}
+              {genMut.isPending ? "Đang viết…" : "Viết prompt"}
             </Button>
           </>
         )}
         <Button
           size="sm"
-          variant="ghost"
-          className="text-xs text-muted-foreground"
+          variant="outline"
           onClick={() => setShowOpenAI((v) => !v)}
+          title="Dùng LLM (OpenAI/Ollama) viết lại prompt — OpenAI tốn phí"
         >
-          {showOpenAI ? "Ẩn gen qua API" : "Gen qua API (tốn phí)…"}
+          <Sparkles className="size-3.5" />
+          {showOpenAI ? "Ẩn viết prompt bằng AI" : "Viết prompt bằng AI…"}
         </Button>
         <Button
           size="sm"
@@ -252,6 +282,29 @@ export function CoverPromptPanel({
             <Copy className="size-3.5" />
           )}
           {copied ? "Đã copy" : "Copy prompt"}
+        </Button>
+        <select
+          value={imageProvider}
+          onChange={(e) => setImageProvider(e.target.value as "gemini" | "openai")}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+          title="Dịch vụ tạo ảnh (model rẻ nhất)"
+          disabled={imageMut.isPending}
+        >
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <Button
+          size="sm"
+          onClick={() => imageMut.mutate()}
+          disabled={!generated.trim() || imageMut.isPending}
+          title="Tạo ảnh từ prompt này rồi gắn làm cover — TỐN PHÍ"
+        >
+          {imageMut.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Wand2 className="size-3.5" />
+          )}
+          {imageMut.isPending ? "Đang tạo ảnh…" : "Tạo ảnh"}
         </Button>
       </div>
     </div>

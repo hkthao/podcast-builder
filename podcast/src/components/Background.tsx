@@ -1,5 +1,7 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { COLORS, FORMAT, MOOD_BG, SAFE_ZONE, type MoodKey } from "../theme";
+import { FORMAT, SAFE_ZONE, type MoodKey } from "../theme";
+import { usePalette } from "../palette";
+import type { SeriesPalette } from "../series";
 import { Sparkle, Squiggle, StarSmall, DottedPath } from "./doodles";
 import type { Scene } from "../scenes";
 import { currentSceneIndex, sceneVariant } from "./scene-runtime";
@@ -31,7 +33,9 @@ export const Background: React.FC<Props> = ({ mood = "positive", scenes }) => {
     }
   }
 
-  const bg = MOOD_BG[activeMood];
+  const colors = usePalette();
+  // Mood contemplative dùng nền phụ (bgAlt) để đổi không khí — như MOOD_BG cũ, nhưng theo series.
+  const bg = activeMood === "contemplative" ? colors.bgAlt : colors.bg;
   const tapeRotate = [-8, 5, -4, 9][variant];
   return (
     <AbsoluteFill style={{ backgroundColor: bg }}>
@@ -48,20 +52,23 @@ export const Background: React.FC<Props> = ({ mood = "positive", scenes }) => {
   );
 };
 
-const GridPaper: React.FC<{ opacity: number }> = ({ opacity }) => (
+const GridPaper: React.FC<{ opacity: number }> = ({ opacity }) => {
+  const colors = usePalette();
+  return (
   <div
     style={{
       position: "absolute",
       inset: 0,
       backgroundImage: `
-        linear-gradient(to right, ${COLORS.gridLine} 1px, transparent 1px),
-        linear-gradient(to bottom, ${COLORS.gridLine} 1px, transparent 1px)
+        linear-gradient(to right, ${colors.gridLine} 1px, transparent 1px),
+        linear-gradient(to bottom, ${colors.gridLine} 1px, transparent 1px)
       `,
       backgroundSize: `${GRID}px ${GRID}px`,
       opacity,
     }}
   />
-);
+  );
+};
 
 type TapeProps = { x: number; y: number; width: number; rotate?: number };
 
@@ -84,19 +91,19 @@ const MaskingTape: React.FC<TapeProps> = ({ x, y, width, rotate = 0 }) => (
   />
 );
 
-/** Bộ màu doodle xoay theo variant — mỗi scene 1 tông rìa khác. */
-const DOODLE_PALETTES = [
-  [COLORS.accentRed, COLORS.accentTeal, COLORS.ink, COLORS.accentBlue],
-  [COLORS.accentBlue, COLORS.accentRed, COLORS.accentTeal, COLORS.ink],
-  [COLORS.accentTeal, COLORS.ink, COLORS.accentBlue, COLORS.accentRed],
-  [COLORS.ink, COLORS.accentBlue, COLORS.accentRed, COLORS.accentTeal],
-] as const;
+/** Bộ màu doodle xoay theo variant — mỗi scene 1 tông rìa khác (màu theo series). */
+const doodlePalettes = (c: SeriesPalette) => [
+  [c.accentRed, c.accentTeal, c.ink, c.accentBlue],
+  [c.accentBlue, c.accentRed, c.accentTeal, c.ink],
+  [c.accentTeal, c.ink, c.accentBlue, c.accentRed],
+  [c.ink, c.accentBlue, c.accentRed, c.accentTeal],
+];
 
 const DriftingDoodles: React.FC<{ variant: number }> = ({ variant }) => {
   const frame = useCurrentFrame();
   const t = frame / 60;
   const safeBottomY = FORMAT.height - SAFE_ZONE.bottom - 60;
-  const pal = DOODLE_PALETTES[variant];
+  const pal = doodlePalettes(usePalette())[variant];
   // Offset dọc xoay theo variant để vị trí doodle dịch giữa các scene.
   const off = variant * 36;
   return (

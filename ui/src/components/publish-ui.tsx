@@ -9,9 +9,6 @@ import { cn } from "@/lib/utils";
  * thu gọn được, nút copy.
  */
 
-/** Tên brand mặc định cho phần ghi công khi scriptCredit để trống. */
-export const BRAND_NAME = "ByteCast Tech";
-
 /**
  * Dựng khối "công bố AI + ghi công" chèn vào cuối phần mô tả khi đăng.
  * Đáp ứng yêu cầu originality (Meta/YouTube): công bố nội dung AI + ghi rõ
@@ -20,6 +17,8 @@ export const BRAND_NAME = "ByteCast Tech";
  */
 export function buildDisclosure(opts: {
   aiAssisted: boolean;
+  /** Tên kênh theo series (seriesInfo(ep.config.series).channelName). */
+  brandName: string;
   editor: string;
   musicCredit: string;
   footageCredit: string;
@@ -28,7 +27,7 @@ export function buildDisclosure(opts: {
   const lines: string[] = [];
   if (opts.aiAssisted) {
     lines.push(
-      `Kịch bản gốc do ${opts.editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${BRAND_NAME} định hướng và biên tập.`,
+      `Kịch bản gốc do ${opts.editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${opts.brandName} định hướng và biên tập.`,
     );
   } else {
     lines.push(`Kịch bản gốc do ${opts.editor} biên soạn và biên tập.`);

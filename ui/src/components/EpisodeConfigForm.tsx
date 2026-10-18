@@ -13,17 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { SERIES_OPTIONS, type SeriesId } from "@/lib/series";
 
 const SAVE_DEBOUNCE_MS = 500;
-const MOODS: Array<{ value: string | null; label: string }> = [
-  { value: null, label: "Auto (theo nội dung)" },
-  { value: "positive", label: "positive — tích cực" },
-  { value: "social", label: "social — kết nối" },
-  { value: "healing", label: "healing — chữa lành" },
-  { value: "energetic", label: "energetic — năng lượng" },
-  { value: "contemplative", label: "contemplative — suy ngẫm" },
-];
-
 type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 /**
@@ -172,6 +164,23 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <Field label="Series / Trang">
+            <select
+              value={form.series ?? "bytecast"}
+              onChange={(e) => update({ series: e.target.value as SeriesId })}
+              className={cn(
+                "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              )}
+            >
+              {SERIES_OPTIONS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.channelName}
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <Field label="Số tập" required>
             <Input
               type="number"
@@ -186,26 +195,6 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
             />
           </Field>
 
-          <Field label="Tâm trạng (override)">
-            <select
-              value={form.moodOverride ?? ""}
-              onChange={(e) =>
-                update({
-                  moodOverride: e.target.value === "" ? null : e.target.value,
-                })
-              }
-              className={cn(
-                "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              )}
-            >
-              {MOODS.map((m) => (
-                <option key={String(m.value)} value={m.value ?? ""}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </Field>
         </div>
 
         {/* BGM (file + volume) đã chuyển sang BgmPanel ngay dưới Meta cards. */}

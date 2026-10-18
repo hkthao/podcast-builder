@@ -42,6 +42,7 @@ import { applySpellFix } from "@/components/spell-fix-rules";
 import type { SpellFixRule } from "@/components/spell-fix-rules";
 import { PublishTab } from "@/components/PublishTab";
 import { cn } from "@/lib/utils";
+import { seriesInfo, seriesListPath } from "@/lib/series";
 
 /**
  * 5 tab top-level (gộp từ 7): config / content / render / publish / files.
@@ -124,11 +125,11 @@ export function EpisodeEdit() {
   return (
     <div className="container max-w-4xl py-10">
       <Link
-        to="/"
+        to={seriesListPath(ep.config.series)}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft className="size-4" />
-        Danh sách tập
+        {seriesInfo(ep.config.series).channelName}
       </Link>
 
       <header className="mb-6 flex items-start justify-between gap-6">

@@ -441,6 +441,7 @@ async function runJob(job: JobInternal): Promise<void> {
 
     // 5.5 Editorial overlay (LLM) — lớp biên tập gốc. Regen cùng lúc với plan
     // (runPlan) để bám transcript mới; graceful nếu thiếu key/lỗi LLM.
+    // editorialLocked = chương do kịch bản sinh sẵn → chỉ đọc cache, không regen.
     let editorialPublicName: string | null = null;
     if (ep.config.showEditorial) {
       const editorialJsonPath = planJsonPath.replace(
@@ -448,7 +449,7 @@ async function runJob(job: JobInternal): Promise<void> {
         ".editorial.json",
       );
       await generateEditorial(transcriptSource, ep.config, editorialJsonPath, {
-        force: runPlan,
+        force: runPlan && !ep.config.editorialLocked,
       });
       editorialPublicName = `${outBase}.editorial.json`;
       fs.copyFileSync(
