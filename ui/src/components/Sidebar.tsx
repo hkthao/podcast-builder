@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -6,15 +5,10 @@ import {
   Film,
   Network,
   MessageSquare,
-  Lightbulb,
   Star,
   CheckCircle2,
   Clock,
   AlertCircle,
-  Sun,
-  Moon,
-  Monitor,
-  Settings as SettingsIcon,
   BookOpen,
   CalendarDays,
   HardDrive,
@@ -24,12 +18,6 @@ import { api, cleanupApi, type EpisodeStatus } from "@/lib/api";
 import { LOW_DISK_BYTES, fmtBytes } from "@/pages/Cleanup";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
-import {
-  getTheme,
-  setTheme,
-  subscribeTheme,
-  type Theme,
-} from "@/lib/theme";
 
 export function Sidebar() {
   const location = useLocation();
@@ -75,7 +63,8 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 shrink-0 border-r bg-card flex flex-col h-screen sticky top-0">
-      <div className="p-5 border-b">
+      {/* Cao h-14 = AppBar → 2 viền dưới thẳng hàng. */}
+      <div className="flex h-14 shrink-0 items-center border-b px-5">
         <NavLink
           to="/"
           className="flex items-center gap-2 font-serif text-lg font-semibold"
@@ -216,44 +205,6 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="border-t p-3 space-y-2">
-        <NavLink
-          to="/prompts"
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
-              "hover:bg-secondary",
-              isActive && "bg-secondary font-medium",
-            )
-          }
-        >
-          <Lightbulb className="size-3.5" />
-          System prompts
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
-              "hover:bg-secondary",
-              isActive && "bg-secondary font-medium",
-            )
-          }
-        >
-          <SettingsIcon className="size-3.5" />
-          Settings
-        </NavLink>
-        <p
-          className="text-xs text-muted-foreground text-center"
-          title="Bấm ?"
-        >
-          Phím tắt:{" "}
-          <kbd className="font-mono text-[10px] px-1 py-0.5 rounded border bg-secondary/50">
-            ?
-          </kbd>
-        </p>
-        <ThemeSwitcher />
-      </div>
     </aside>
   );
 }
@@ -339,34 +290,4 @@ function StatusDot({ status }: { status: EpisodeStatus }) {
   if (status === "no-audio")
     return <AlertCircle className="size-3.5 text-destructive shrink-0" />;
   return <Clock className="size-3.5 text-muted-foreground shrink-0" />;
-}
-
-function ThemeSwitcher() {
-  const [theme, setLocal] = useState<Theme>(() => getTheme());
-  useEffect(() => subscribeTheme(setLocal), []);
-  const opts: Array<{ value: Theme; icon: React.ReactNode; label: string }> = [
-    { value: "light", icon: <Sun className="size-4" />, label: "Sáng" },
-    { value: "dark", icon: <Moon className="size-4" />, label: "Tối" },
-    { value: "system", icon: <Monitor className="size-4" />, label: "Hệ thống" },
-  ];
-  return (
-    <div className="grid grid-cols-3 gap-1 rounded-md border bg-background p-1">
-      {opts.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => setTheme(o.value)}
-          title={o.label}
-          aria-label={o.label}
-          className={cn(
-            "flex items-center justify-center rounded py-1.5 text-muted-foreground transition-colors",
-            theme === o.value
-              ? "bg-secondary text-foreground"
-              : "hover:bg-secondary/50",
-          )}
-        >
-          {o.icon}
-        </button>
-      ))}
-    </div>
-  );
 }

@@ -10,10 +10,18 @@ import { Card } from "@/components/ui/card";
  * - `g e/b/r/w/k/v/y` = navigate (vim style)
  * - Escape khi modal mở = close
  */
+/** AppBar bắn event này để mở bảng phím tắt (ngoài phím `?`). */
+export const OPEN_SHORTCUTS_EVENT = "shortcuts:open";
+
 export function ShortcutsHelp() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [pendingG, setPendingG] = useState(false);
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(OPEN_SHORTCUTS_EVENT, show);
+    return () => window.removeEventListener(OPEN_SHORTCUTS_EVENT, show);
+  }, []);
 
   useShortcuts([
     {
