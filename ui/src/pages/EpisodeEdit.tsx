@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,6 +24,7 @@ import {
   Check,
   Flag,
   Send,
+  BookOpen,
 } from "lucide-react";
 import {
   api,
@@ -41,6 +42,7 @@ import { SpellFixPanel } from "@/components/SpellFixPanel";
 import { applySpellFix } from "@/components/spell-fix-rules";
 import type { SpellFixRule } from "@/components/spell-fix-rules";
 import { PublishTab } from "@/components/PublishTab";
+import { ScriptTextTab } from "@/components/ScriptTextTab";
 import { cn } from "@/lib/utils";
 import { seriesInfo, seriesListPath } from "@/lib/series";
 
@@ -48,12 +50,18 @@ import { seriesInfo, seriesListPath } from "@/lib/series";
  * 5 tab top-level (gộp từ 7): config / content / render / publish / files.
  * `content` chứa 3 sub-tab pipeline tạo: script → transcript → scenes.
  */
-type Tab = "assets" | "content" | "render" | "publish" | "footage";
+type Tab = "script" | "assets" | "content" | "render" | "publish" | "footage";
 type ContentSubTab = "transcript" | "scenes";
 
 export function EpisodeEdit() {
   const { name = "" } = useParams<{ name: string }>();
-  const [tab, setTab] = useState<Tab>("render");
+  // ?tab=script|assets|content|footage|render|publish → mở thẳng tab đó (link chia sẻ).
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTab = (["script", "assets", "content", "footage", "render", "publish"] as const).find(
+    (t) => t === tabParam,
+  );
+  const [tab, setTab] = useState<Tab>(initialTab ?? "render");
   const [contentSub, setContentSub] = useState<ContentSubTab>("transcript");
 
   const epQ = useQuery({
@@ -84,7 +92,7 @@ export function EpisodeEdit() {
   useEffect(() => {
     if (didInitTab.current || !epQ.data) return;
     didInitTab.current = true;
-    if (!epQ.data.audioPath) setTab("assets");
+    if (!epQ.data.audioPath && !initialTab) setTab("assets");
   }, [epQ.data]);
 
   if (epQ.isLoading) {
@@ -175,8 +183,14 @@ export function EpisodeEdit() {
         </Meta>
       </div>
 
-      {/* Tabs — Âm thanh / Nội dung / Footage / Render (gồm Cấu hình) / Đăng */}
+      {/* Tabs — Kịch bản / Âm thanh / Nội dung / Footage / Render (gồm Cấu hình) / Đăng */}
       <div className="mb-4 flex flex-wrap gap-x-1 gap-y-0 border-b">
+        <TabButton
+          active={tab === "script"}
+          onClick={() => setTab("script")}
+          icon={<BookOpen className="size-4" />}
+          label="Kịch bản"
+        />
         <TabButton
           active={tab === "assets"}
           onClick={() => setTab("assets")}
@@ -218,6 +232,8 @@ export function EpisodeEdit() {
           }`}
         />
       </div>
+
+      {tab === "script" && <ScriptTextTab ep={ep} />}
 
       {tab === "assets" && (
         <>

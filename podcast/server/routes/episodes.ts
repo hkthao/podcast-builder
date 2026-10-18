@@ -470,6 +470,27 @@ episodesRoutes.put("/:name/transcript/flags", async (c) => {
  * List tất cả file liên quan tới episode (audio input, outputs, tmp artifacts).
  * Mỗi entry có url để play/download qua /input/ /output/ /tmp/ static.
  */
+/**
+ * Nội dung bài đọc của tập (tab "Kịch bản"): kịch bản kể chuyện
+ * input/<slug>.story.json, hoặc bài luận gốc input/<slug>.essay.txt (podcast).
+ */
+episodesRoutes.get("/:name/script-text", async (c) => {
+  const name = c.req.param("name");
+  const read = (ext: string) =>
+    fs.readFile(path.join(PATHS.INPUT_DIR, `${name}.${ext}`), "utf-8").catch(() => null);
+  const story = await read("story.json");
+  if (story) {
+    try {
+      return c.json({ kind: "story", story: JSON.parse(story) });
+    } catch (e) {
+      return c.json({ error: `story.json hỏng: ${(e as Error).message}` }, 500);
+    }
+  }
+  const essay = await read("essay.txt");
+  if (essay) return c.json({ kind: "essay", text: essay });
+  return c.json({ kind: "none" });
+});
+
 episodesRoutes.get("/:name/files", async (c) => {
   const name = c.req.param("name");
   const data = await listEpisodeFiles(name);

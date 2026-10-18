@@ -13,13 +13,16 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { getApiKey } from "../../shared/studio-core/api-keys-store";
-import { INPUT_DIR, buildParts, readStory } from "./story-common";
+import { INPUT_DIR, PART_WORDS_API, buildParts, readStory } from "./story-common";
 
 const DEFAULT_MODEL = "gemini-2.5-pro-preview-tts";
 const DEFAULT_VOICE = "Autonoe";
-// Director's note user chỉnh trên AI Studio (2026-10-18), sửa từng tập qua story.json `geminiDirectorNote`.
+// Director's note user chỉnh trên AI Studio (2026-10-18) + KHOÁ giọng Bắc: thiếu dòng Accent
+// thì Gemini tự chọn giọng mỗi lần gen → lẫn Nam/Bắc giữa các phần. Sửa từng tập qua story.json.
 const DEFAULT_NOTE =
-  "Style: Warm, understanding, soft tone with gentle inflections. Pace: Natural conversational pace.";
+  "Style: Warm, understanding, soft tone with gentle inflections. Pace: Natural conversational pace. " +
+  "Accent: Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first sentence to the last — never Southern Vietnamese. " +
+  "Keep the same voice, tone and energy throughout the whole transcript.";
 
 /** PCM 16-bit mono (Gemini trả audio/L16;rate=24000) → WAV. */
 const pcmToWav = (pcm: Buffer, mimeType: string): Buffer => {
@@ -48,7 +51,8 @@ async function synthesize(apiKey: string, model: string, voice: string, note: st
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 1,
+      // < 1 để giọng bớt dao động giữa các câu.
+      temperature: 0.7,
       responseModalities: ["AUDIO"],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
     },
@@ -97,7 +101,7 @@ async function main() {
   const note = story.geminiDirectorNote ?? DEFAULT_NOTE;
   const only = arg("part") ? Number(arg("part")) : null;
 
-  const parts = buildParts(story);
+  const parts = buildParts(story, PART_WORDS_API);
   const dir = path.join(INPUT_DIR, `${slug}.parts`);
   fs.mkdirSync(dir, { recursive: true });
   console.log(`[story-tts-gemini] ${slug}: ${parts.length} phần · ${model} · giọng ${voice}`);

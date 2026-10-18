@@ -44,20 +44,25 @@ export const storySentences = (story: Story): Array<{ section: number; text: str
 
 export const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
-/** AI Studio / API gen tối đa ~1'30 mỗi lần → mỗi phần ≤ MAX_WORDS chữ. */
-const MAX_WORDS = 200;
+/**
+ * Chữ tối đa mỗi phần. AI Studio (dán tay) gen tối đa ~1'30/lần → 200.
+ * API gen được dài hơn — mỗi phần là 1 lần "diễn" riêng nên giọng/tông lệch ở chỗ
+ * chuyển phần (đã gặp lẫn Nam/Bắc) → API dùng phần lớn (ít điểm nối nhất).
+ */
+export const PART_WORDS_AI_STUDIO = 200;
+export const PART_WORDS_API = 900;
 
 /**
  * Chia kịch bản thành các phần, ưu tiên cắt ở ranh giới section (đổi ý = giọng nghỉ
- * tự nhiên). Section dài hơn MAX_WORDS → chia ĐỀU theo câu (không để đuôi lẻ vài câu).
+ * tự nhiên). Section dài hơn maxWords → chia ĐỀU theo câu (không để đuôi lẻ vài câu).
  * Các khối liền nhau được ghép chung phần khi còn chỗ. Trong phần, khối cách dòng trống.
  */
-export const buildParts = (story: Story): string[] => {
+export const buildParts = (story: Story, maxWords = PART_WORDS_AI_STUDIO): string[] => {
   const blocks: string[][] = [];
   for (const sec of story.sections) {
     const sents = splitSentences(sec.text);
     const total = sents.reduce((n, s) => n + wordCount(s), 0);
-    const k = Math.max(1, Math.ceil(total / MAX_WORDS));
+    const k = Math.max(1, Math.ceil(total / maxWords));
     const target = total / k;
     let cur: string[] = [];
     let words = 0;
@@ -77,7 +82,7 @@ export const buildParts = (story: Story): string[] => {
   for (const b of blocks) {
     const text = b.join(" ");
     const w = wordCount(text);
-    if (parts.length && words + w <= MAX_WORDS) {
+    if (parts.length && words + w <= maxWords) {
       parts[parts.length - 1].push(text);
       words += w;
     } else {

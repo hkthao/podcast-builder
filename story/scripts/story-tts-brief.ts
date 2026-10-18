@@ -1,7 +1,7 @@
 /**
  * story-tts-brief.ts — kịch bản input/<slug>.story.json → input/<slug>.tts.md để
  * dán vào Google AI Studio (Speech). AI Studio gen tối đa ~1'30/lần → chia PHẦN
- * ≤ MAX_WORDS chữ, cắt ở ranh giới câu (ưu tiên ranh giới section).
+ * ≤ PART_WORDS_AI_STUDIO chữ, cắt ở ranh giới câu (ưu tiên ranh giới section).
  *
  * User gen từng phần → lưu input/<slug>.parts/audio_01.wav, audio_02.wav…
  * → npx tsx story/scripts/story-align.ts <slug>

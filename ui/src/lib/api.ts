@@ -33,6 +33,15 @@ export type EpisodeStatus =
 /** Workspace style — chỉ còn podcast (gallery đã gỡ). */
 export type Style = "podcast";
 
+/** input/<slug>.story.json — kịch bản kể chuyện (khớp story/scripts/story-common.ts). */
+export type StoryScript = {
+  title: string;
+  source?: { name: string; title: string };
+  geminiVoice?: string;
+  geminiDirectorNote?: string;
+  sections: Array<{ id: string; chapter?: string; cite?: boolean; text: string }>;
+};
+
 export type EpisodeConfig = {
   style: Style;
   /** Series/kênh (xem lib/series.ts). Config cũ không có → "bytecast". */
@@ -611,6 +620,14 @@ export const api = {
 
   getPlan: (name: string) =>
     jsonFetch<PlanPayload>(`/api/episodes/${encodeURIComponent(name)}/plan`),
+
+  /** Nội dung bài đọc (tab "Kịch bản"): story.json kể chuyện hoặc essay.txt podcast. */
+  getScriptText: (name: string) =>
+    jsonFetch<
+      | { kind: "story"; story: StoryScript }
+      | { kind: "essay"; text: string }
+      | { kind: "none" }
+    >(`/api/episodes/${encodeURIComponent(name)}/script-text`),
 
   getFiles: (name: string) =>
     jsonFetch<EpisodeFiles>(
