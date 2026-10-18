@@ -2,11 +2,12 @@
  * Series/kênh — BẢN SAO GỌN của podcast/src/series.ts (UI không import được code
  * ngoài ui/). Thêm/sửa series thì sửa CẢ HAI file.
  */
-export type SeriesId = "bytecast" | "chuyen-xua";
+export type SeriesId = "bytecast" | "chuyen-xua" | "dong-ho-viet";
 
 export const SERIES_OPTIONS: Array<{ id: SeriesId; channelName: string; playlistsFile: string }> = [
   { id: "bytecast", channelName: "ByteCast Tech", playlistsFile: "_fb-playlists.json" },
   { id: "chuyen-xua", channelName: "Chuyện Xưa - Ngẫm Nay", playlistsFile: "_fb-playlists.chuyen-xua.json" },
+  { id: "dong-ho-viet", channelName: "Dòng Họ Việt", playlistsFile: "_fb-playlists.dong-ho-viet.json" },
 ];
 
 export const seriesInfo = (id: string | null | undefined) =>

@@ -22,7 +22,7 @@ import {
   sentenceSpans,
   whisperWords,
 } from "../../shared/lib/forced-align";
-import { INPUT_DIR, TMP_DIR, readStory, storySentences } from "./story-common";
+import { INPUT_DIR, TMP_DIR, readStory, resolveTts, storySentences } from "./story-common";
 
 const ffprobeMs = (file: string): number =>
   Math.round(
@@ -47,6 +47,7 @@ async function main() {
     process.exit(1);
   }
   const story = readStory(slug);
+  const { tempo } = resolveTts(slug, story);
 
   // 1. Ghép phần → input/<slug>.m4a
   const partsDir = path.join(INPUT_DIR, `${slug}.parts`);
@@ -69,7 +70,7 @@ async function main() {
       "-filter_complex",
       parts.map((_, i) => `[${i}:a]aresample=48000,aformat=channel_layouts=mono[a${i}]`).join(";") +
         ";" + parts.map((_, i) => `[a${i}]`).join("") + `concat=n=${parts.length}:v=0:a=1` +
-        (story.tempo && story.tempo !== 1 ? `,atempo=${story.tempo}` : "") + "[out]",
+        (tempo !== 1 ? `,atempo=${tempo}` : "") + "[out]",
       "-map", "[out]", "-c:a", "aac", "-b:a", "192k", m4a,
     ],
     { stdio: ["ignore", "ignore", "inherit"] },

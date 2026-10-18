@@ -5,7 +5,7 @@
  *
  * File này KHÔNG import remotion → dùng được cả ở server lẫn composition.
  */
-export const SERIES_IDS = ["bytecast", "chuyen-xua"] as const;
+export const SERIES_IDS = ["bytecast", "chuyen-xua", "dong-ho-viet"] as const;
 export type SeriesId = (typeof SERIES_IDS)[number];
 export const DEFAULT_SERIES: SeriesId = "bytecast";
 
@@ -22,8 +22,22 @@ export type SeriesPalette = {
   gridLine: string;
 };
 
+/**
+ * Giọng Gemini TTS mặc định của series kể chuyện (story-tts-gemini / story-align).
+ * story.json có thể ghi đè từng trường cho 1 tập.
+ */
+export type SeriesTts = {
+  voice: string;
+  /** Director's note gửi kèm transcript (Style/Pace/Accent…). */
+  note: string;
+  /** Tăng tốc khi ghép (atempo). Gemini bỏ qua chỉ đạo "đọc nhanh" → chỉnh ở đây. */
+  tempo: number;
+};
+
 export type SeriesInfo = {
   id: SeriesId;
+  /** null = series không làm bằng pipeline kể chuyện (vd podcast NotebookLM). */
+  tts: SeriesTts | null;
   /** Màu khung (intro, hook, outro, nền, watermark, caption…). null = palette ByteCast mặc định. */
   palette: SeriesPalette | null;
   channelName: string;
@@ -46,6 +60,7 @@ export type SeriesInfo = {
 export const SERIES: Record<SeriesId, SeriesInfo> = {
   bytecast: {
     id: "bytecast",
+    tts: null,
     palette: null,
     channelName: "ByteCast Tech",
     slogan: "Giữa Công Nghệ Và Bản Chất Con Người",
@@ -60,6 +75,15 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
   },
   "chuyen-xua": {
     id: "chuyen-xua",
+    // Đã duyệt 2026-10-18: nữ Autonoe, tăng tốc 1.1 (đọc gốc hơi chậm).
+    tts: {
+      voice: "Autonoe",
+      note:
+        "Style: Warm, understanding, soft tone with gentle inflections. Pace: Natural conversational pace. " +
+        "Accent: Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first sentence to the last — never Southern Vietnamese. " +
+        "Keep the same voice, tone and energy throughout the whole transcript.",
+      tempo: 1.1,
+    },
     // Giấy dó + mực nâu + đỏ son / xanh chàm / xanh rêu — tông sách cổ.
     palette: {
       bg: "#F1E6CC",
@@ -83,6 +107,43 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     markZoom: 1,
     fbPageIdEnv: "FB_PAGE_ID_CHUYEN_XUA",
     playlistsFile: "_fb-playlists.chuyen-xua.json",
+  },
+  "dong-ho-viet": {
+    id: "dong-ho-viet",
+    // Trước là pipeline reel riêng (reel/) — gộp vào studio 2026-10-18. Giọng nam dẫn phim
+    // tài liệu: rõ, chắc, KHÔNG chậm, KHÔNG thủ thỉ / truyện ma (bài học từ 8 tập reel).
+    tts: {
+      voice: "Charon",
+      note:
+        "Style: Clear, warm male documentary narrator, sincere and grounded — engaging and human, not sentimental, never a whisper or a ghost-story tone. " +
+        "Pace: Natural documentary narration pace, not slow. " +
+        "Accent: Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first sentence to the last — never Southern Vietnamese. " +
+        "Keep the same voice, tone and energy throughout the whole transcript.",
+      // Charon đọc gốc chậm (user nghe 2026-10-18) → 1.09 vừa tai.
+      tempo: 1.09,
+    },
+    // Con triện rượu vang + vàng đồng trên nền kem — lấy từ icon reel/assets/app-icon.svg.
+    palette: {
+      bg: "#F4EBDD",
+      bgAlt: "#EADBC4",
+      ink: "#3A1A1F",
+      inkMuted: "#7A5A55",
+      white: "#FFFBF5",
+      accentRed: "#7A2230",
+      accentBlue: "#4A5D73",
+      accentTeal: "#C19A5B",
+      gridLine: "rgba(58, 26, 31, 0.07)",
+    },
+    channelName: "Dòng Họ Việt",
+    slogan: "Gia đình · gia phả · ký ức · nguồn cội",
+    description:
+      "Dòng Họ Việt kể những câu chuyện về gia đình, gia phả và ký ức dòng họ — để mỗi người nhớ mình từ đâu tới và giữ lại điều ông bà trao truyền.",
+    cta: "Theo dõi để giữ ký ức gia đình",
+    logoFile: "brand/dong-ho-viet/mark.png",
+    markFile: "brand/dong-ho-viet/mark.png",
+    markZoom: 1,
+    fbPageIdEnv: "FB_PAGE_ID_DONG_HO_VIET",
+    playlistsFile: "_fb-playlists.dong-ho-viet.json",
   },
 };
 

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Mic2,
   Film,
-  Clapperboard,
+  Network,
   MessageSquare,
   Lightbulb,
   Star,
@@ -17,7 +17,7 @@ import {
   Settings as SettingsIcon,
   BookOpen,
 } from "lucide-react";
-import { api, reelApi, type EpisodeStatus } from "@/lib/api";
+import { api, type EpisodeStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
 import {
@@ -53,7 +53,6 @@ export function Sidebar() {
     .slice(0, Math.max(0, 8 - pinnedEps.length));
   const recent = [...pinnedEps, ...restEps];
 
-  const reelQ = useQuery({ queryKey: ["reel", "list"], queryFn: () => reelApi.list() });
   const seriesOf = (ep: { config: { series?: string } }) => ep.config.series ?? "bytecast";
   /** "Podcast · 70 tập" — đang tải thì chỉ hiện loại (tránh "0 tập" chớp lên). */
   const metaOf = (kind: string, series: string) =>
@@ -99,12 +98,12 @@ export function Sidebar() {
             meta={metaOf("Kể chuyện", "chuyen-xua")}
           />
           <ChannelItem
-            to="/reel"
-            active={location.pathname.startsWith("/reel")}
-            icon={<Clapperboard className="size-4" />}
+            to="/series/dong-ho-viet"
+            active={channelActive("dong-ho-viet")}
+            icon={<Network className="size-4" />}
             tone="bg-rose-500/15 text-rose-600 dark:text-rose-400"
             name="Dòng Họ Việt"
-            meta={reelQ.data ? `Reel · ${reelQ.data.episodes.length} tập` : "Reel"}
+            meta={metaOf("Kể chuyện", "dong-ho-viet")}
           />
         </div>
         <div className="space-y-0.5">

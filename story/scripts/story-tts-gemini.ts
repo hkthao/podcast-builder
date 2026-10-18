@@ -15,18 +15,9 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { getApiKey } from "../../shared/studio-core/api-keys-store";
-import { INPUT_DIR, PART_WORDS_API, buildParts, readStory } from "./story-common";
+import { INPUT_DIR, PART_WORDS_API, buildParts, readStory, resolveTts } from "./story-common";
 
 const DEFAULT_MODEL = "gemini-2.5-pro-preview-tts";
-const DEFAULT_VOICE = "Autonoe";
-// Director's note user chỉnh trên AI Studio (2026-10-18) + KHOÁ giọng Bắc: thiếu dòng Accent
-// thì Gemini tự chọn giọng mỗi lần gen → lẫn Nam/Bắc giữa các phần. Sửa từng tập qua story.json.
-const DEFAULT_NOTE =
-  "Style: Warm, understanding, soft tone with gentle inflections. Pace: Natural conversational pace. " +
-  "Accent: Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first sentence to the last — never Southern Vietnamese. " +
-  "Keep the same voice, tone and energy throughout the whole transcript.";
-
-/** PCM 16-bit mono (Gemini trả audio/L16;rate=24000) → WAV. */
 const pcmToWav = (pcm: Buffer, mimeType: string): Buffer => {
   const rate = Number(mimeType.match(/rate=(\d+)/)?.[1] ?? 24000);
   const bits = Number(mimeType.match(/L(\d+)/)?.[1] ?? 16);
@@ -99,10 +90,12 @@ async function main() {
 
   const story = readStory(slug);
   const model = arg("model") ?? DEFAULT_MODEL;
-  const voice = arg("voice") ?? story.geminiVoice ?? DEFAULT_VOICE;
+  // Giọng/chỉ đạo theo series của tập (series.ts → tts), story.json ghi đè được.
+  const tts = resolveTts(slug, story);
+  const voice = arg("voice") ?? tts.voice;
   const tag = arg("tag");
   const pace = arg("pace");
-  const baseNote = story.geminiDirectorNote ?? DEFAULT_NOTE;
+  const baseNote = tts.note;
   const note = pace ? baseNote.replace(/Pace: [^.]*\./, `Pace: ${pace.replace(/\.$/, "")}.`) : baseNote;
   const only = arg("part") ? Number(arg("part")) : null;
 

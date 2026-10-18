@@ -1,6 +1,7 @@
 /** Đọc input/<slug>.story.json + tách câu — dùng chung cho story-tts-brief và story-align. */
 import fs from "node:fs";
 import path from "node:path";
+import { getSeries, type SeriesTts } from "../../podcast/src/series";
 
 export type StorySection = {
   id: string;
@@ -14,14 +15,11 @@ export type StorySection = {
 export type Story = {
   title: string;
   source?: { name: string; title: string };
-  /** Giọng Gemini đã khoá cho series (AI Studio → Speaker settings → Voice). */
+  /** Ghi đè giọng Gemini của series (mặc định: series.ts → tts.voice). */
   geminiVoice?: string;
-  /** Director's note gửi kèm (Style/Pace…). Bỏ trống = mặc định trong story-tts-gemini.ts. */
+  /** Ghi đè director's note của series (mặc định: series.ts → tts.note). */
   geminiDirectorNote?: string;
-  /**
-   * Tăng tốc audio khi ghép (atempo, giữ cao độ). Gemini bỏ qua chỉ đạo "đọc nhanh"
-   * → chỉnh tốc độ ở bước ghép. Autonoe đã duyệt: 1.1. Bỏ trống = 1.
-   */
+  /** Ghi đè tempo ghép (atempo, giữ cao độ) của series (mặc định: series.ts → tts.tempo). */
   tempo?: number;
   sections: StorySection[];
 };
@@ -46,6 +44,26 @@ export const storySentences = (story: Story): Array<{ section: number; text: str
   story.sections.flatMap((sec, si) =>
     splitSentences(sec.text).map((text) => ({ section: si, text })),
   );
+
+/**
+ * Giọng/chỉ đạo/tempo cho 1 tập: story.json ghi đè → mặc định của series (theo
+ * input/<slug>.json `series`). Series không có tts (podcast) → lỗi rõ ràng.
+ */
+export const resolveTts = (slug: string, story: Story): SeriesTts => {
+  const cfgPath = path.join(INPUT_DIR, `${slug}.json`);
+  const seriesId = fs.existsSync(cfgPath)
+    ? (JSON.parse(fs.readFileSync(cfgPath, "utf-8")) as { series?: string }).series
+    : undefined;
+  const series = getSeries(seriesId);
+  if (!series.tts && !(story.geminiVoice && story.geminiDirectorNote)) {
+    throw new Error(`Series "${series.id}" chưa có cấu hình giọng (series.ts → tts) — ghi geminiVoice + geminiDirectorNote trong story.json.`);
+  }
+  return {
+    voice: story.geminiVoice ?? series.tts!.voice,
+    note: story.geminiDirectorNote ?? series.tts!.note,
+    tempo: story.tempo ?? series.tts?.tempo ?? 1,
+  };
+};
 
 export const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
