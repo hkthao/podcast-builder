@@ -35,6 +35,8 @@ export type SeriesInfo = {
   logoFile: string | null;
   /** Logo nhỏ cho Watermark. null = chưa có → watermark hiện tên kênh bằng chữ. */
   markFile: string | null;
+  /** Phóng logo watermark để cắt hoạ tiết thừa quanh logo (ByteCast 1.3; con dấu sát viền = 1). */
+  markZoom: number;
   /** Biến môi trường chứa ID Trang FB của series (token Settings phải quản Trang này). */
   fbPageIdEnv: string;
   /** File playlist chuẩn của Trang, trong input/. */
@@ -52,6 +54,7 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     cta: "Theo dõi để xem thêm",
     logoFile: "brand/logo.png",
     markFile: "brand/logo-bytecast.png",
+    markZoom: 1.3,
     fbPageIdEnv: "FB_PAGE_ID",
     playlistsFile: "_fb-playlists.json",
   },
@@ -74,8 +77,10 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     description:
       "Chuyện Xưa - Ngẫm Nay kể lại những câu chuyện trong sách cổ như Cổ học tinh hoa, rồi cùng ngẫm xem người xưa còn dạy gì cho cuộc sống hôm nay.",
     cta: "Theo dõi để nghe chuyện tiếp",
-    logoFile: null,
-    markFile: null,
+    // Con dấu đỏ son cắt sát viền từ ảnh đại diện Trang FB (fb-avatar.jpg).
+    logoFile: "brand/chuyen-xua/mark.png",
+    markFile: "brand/chuyen-xua/mark.png",
+    markZoom: 1,
     fbPageIdEnv: "FB_PAGE_ID_CHUYEN_XUA",
     playlistsFile: "_fb-playlists.chuyen-xua.json",
   },

@@ -16,12 +16,6 @@ type Props = {
 const LOGO_HEIGHT = 220;
 /** 16:9: logo nhỏ lại (khung thấp 1080px) để không chiếm góc quá nhiều. */
 export const LOGO_HEIGHT_LANDSCAPE = 140;
-/**
- * Crop PNG decorations (heart/cloud/stars float xung quanh paper-card) bằng
- * cách zoom in 1.3× + overflow:hidden. Brand text "ByteCast Tech" được zoom
- * theo → đọc to hơn, đẹp hơn. Decorations bị clip ra ngoài.
- */
-const LOGO_ZOOM = 1.3;
 
 export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor, series }) => {
   const colors = usePalette();
@@ -68,7 +62,8 @@ export const Watermark: React.FC<Props> = ({ episodeNumber, accentColor, series 
                 width: "100%",
                 height: "100%",
                 objectFit: "contain",
-                transform: `scale(${LOGO_ZOOM})`,
+                // Zoom theo series: ByteCast 1.3 cắt hoạ tiết bay quanh paper-card; con dấu sát viền = 1.
+                transform: `scale(${brand.markZoom})`,
                 transformOrigin: "center",
               }}
             />
