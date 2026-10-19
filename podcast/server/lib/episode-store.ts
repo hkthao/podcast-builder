@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
+import { pickMusicTrack } from "./music-library";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -47,6 +49,8 @@ export type EpisodeSummary = {
   renderedAt: string | null;
   /** mtime config json — sort by recency. */
   mtimeMs: number;
+  /** Độ dài (giây): video đã render nếu có, không thì audio. Null nếu chưa có file. */
+  durationSec: number | null;
 };
 
 const sha256Json = (obj: unknown): string =>
@@ -81,6 +85,32 @@ const readLock = async (lockPath: string): Promise<LockFile | null> => {
   } catch {
     return null;
   }
+};
+
+/** ffprobe thời lượng, cache theo path+mtime (danh sách >100 tập không probe lại mỗi lần). */
+const durationCache = new Map<string, number | null>();
+const probeDurationSec = async (file: string | null): Promise<number | null> => {
+  if (!file) return null;
+  let key: string;
+  try {
+    const st = await fs.stat(file);
+    key = `${file}:${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
+  if (durationCache.has(key)) return durationCache.get(key)!;
+  const sec = await new Promise<number | null>((resolve) =>
+    execFile(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file],
+      (err, stdout) => {
+        const n = Number(String(stdout).trim());
+        resolve(err || !Number.isFinite(n) ? null : Math.round(n));
+      },
+    ),
+  );
+  durationCache.set(key, sec);
+  return sec;
 };
 
 const loadSummary = async (
@@ -132,6 +162,7 @@ const loadSummary = async (
     lockedEpisodeHash,
     renderedAt,
     mtimeMs: stat.mtimeMs,
+    durationSec: await probeDurationSec(hasOutput ? outputPath : audioPath),
   };
 };
 
@@ -373,8 +404,18 @@ export async function createEmptyEpisode(input: {
   // Series kể chuyện: chương lấy từ kịch bản → khoá editorial (render không gọi LLM ghi đè).
   if (seriesInfo.tts) template.editorialLocked = true;
 
-  // Kế thừa nhạc nền user chọn gần nhất (khỏi chọn lại mỗi tập).
-  const withMusic = await applyMusicDefaults(template);
+  // Nhạc nền: bốc ngẫu nhiên từ kho xoay vòng an toàn Content ID (mỗi tập chưa đăng 1 bài
+  // khác nhau); kho trống → kế thừa bản user chọn gần nhất như trước.
+  const picked = pickMusicTrack(template.series ?? DEFAULT_SERIES, slug);
+  const withMusic = picked
+    ? {
+        ...template,
+        bgm: picked.bgm,
+        bgmVolumeDb: (await getMusicDefaults(template.series))?.bgmVolumeDb ?? -16,
+        bgmMode: "full" as const,
+        musicCredit: picked.credit,
+      }
+    : await applyMusicDefaults(template);
   await fs.writeFile(configPath, JSON.stringify(withMusic, null, 2));
   const summary = await loadSummary(slug);
   if (!summary) {

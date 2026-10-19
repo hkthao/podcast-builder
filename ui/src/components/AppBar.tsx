@@ -12,6 +12,7 @@ const TOOL_PAGES: Record<string, string> = {
   "/plan": "Kế hoạch đăng",
   "/render-queue": "Hàng đợi render",
   "/publish-queue": "Hàng đợi đăng",
+  "/music": "Kho nhạc nền",
   "/cleanup": "Dọn ổ cứng",
   "/comments": "Comment Facebook",
   "/scenes": "Mẫu cảnh podcast",

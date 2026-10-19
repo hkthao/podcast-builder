@@ -1,0 +1,527 @@
+{
+  "_doc": "Kho nhạc nền AN TOÀN Content ID: chỉ bản thu Musopen tự thu & phát hành CC0/Public Domain (Wikimedia Commons, Category:Musopen). Tải bằng `npx tsx podcast/scripts/music-fetch.ts` → input/_music/lib/<id>.ogg. Tập mới tự bốc ngẫu nhiên theo series, tránh bài vừa dùng (podcast/server/lib/music-library.ts). Bài dính claim → chặn ở UI (input/_music-blocklist.json).",
+  "allowedLicenses": [
+    "CC0",
+    "PDM-owner",
+    "Public domain"
+  ],
+  "tracks": [
+    {
+      "id": "bach-goldberg-aria",
+      "commonsTitle": "File:Bach, Goldberg Variations, Aria (Musopen version).ogg",
+      "composer": "J. S. Bach",
+      "work": "Goldberg Variations — Aria",
+      "performer": "Kimiko Ishizaka (Open Goldberg)",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua",
+        "bytecast"
+      ],
+      "mood": "tĩnh, trầm tư",
+      "lengthSec": 287
+    },
+    {
+      "id": "bach-siloti-prelude-bm",
+      "commonsTitle": "File:Bach-Siloti, Prelude in B minor (J. S. Bach, arranged Siloti), arrangement of Prelude in E minor BWV 855a.ogg",
+      "composer": "J. S. Bach / A. Siloti",
+      "work": "Prelude in B minor",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua",
+        "dong-ho-viet"
+      ],
+      "mood": "trầm, hoài niệm",
+      "lengthSec": 266
+    },
+    {
+      "id": "bach-wtc-prelude-c",
+      "commonsTitle": "File:JS Bach - Well Tempered Clavier - Prelude in Fugue No.1 in C major.ogg",
+      "composer": "J. S. Bach",
+      "work": "Well-Tempered Clavier — Prelude No.1 in C",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua",
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "đều, sáng",
+      "lengthSec": 254
+    },
+    {
+      "id": "bach-italian-andante",
+      "commonsTitle": "File:J. S. Bach - Italian Concerto, BWV. 971 - 2. Andante.ogg",
+      "composer": "J. S. Bach",
+      "work": "Italian Concerto BWV 971 — Andante",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua"
+      ],
+      "mood": "trầm tư",
+      "lengthSec": 309
+    },
+    {
+      "id": "vivaldi-winter-largo",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Winter, RV 297 - II. Largo.ogg",
+      "composer": "A. Vivaldi",
+      "work": "The Four Seasons, Winter — Largo",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua",
+        "dong-ho-viet"
+      ],
+      "mood": "ấm, bình yên",
+      "lengthSec": 164
+    },
+    {
+      "id": "vivaldi-spring-largo",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Spring, RV 269 - II. Largo.ogg",
+      "composer": "A. Vivaldi",
+      "work": "The Four Seasons, Spring — Largo",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua"
+      ],
+      "mood": "tĩnh",
+      "lengthSec": 179
+    },
+    {
+      "id": "vivaldi-autumn-adagio",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Autumn, RV 293 - II. Adagio molto.ogg",
+      "composer": "A. Vivaldi",
+      "work": "The Four Seasons, Autumn — Adagio molto",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua",
+        "tien-tam-ly"
+      ],
+      "mood": "mơ hồ, chậm",
+      "lengthSec": 201
+    },
+    {
+      "id": "vivaldi-rv580-largo",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's L'estro armonico, Concerto No. 10, RV 580 - II. Largo-Larghetto.ogg",
+      "composer": "A. Vivaldi",
+      "work": "L'estro armonico No.10 — Largo",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua"
+      ],
+      "mood": "trang nghiêm",
+      "lengthSec": 200
+    },
+    {
+      "id": "vivaldi-oboes-largo",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Concerto for 2 Oboes in A minor, RV 536 - II. Largo.ogg",
+      "composer": "A. Vivaldi",
+      "work": "Concerto for 2 Oboes RV 536 — Largo",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua"
+      ],
+      "mood": "buồn nhẹ",
+      "lengthSec": 132
+    },
+    {
+      "id": "albinoni-oboe-adagio",
+      "commonsTitle": "File:Albinoni, Concerto for Oboe and Strings No. 2 in D minor, Op. 9, II. Adagio.ogg",
+      "composer": "T. Albinoni",
+      "work": "Oboe Concerto Op.9 No.2 — Adagio",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua",
+        "dong-ho-viet"
+      ],
+      "mood": "trầm, sâu lắng",
+      "lengthSec": 258
+    },
+    {
+      "id": "haydn-lark-adagio",
+      "commonsTitle": "File:Haydn StringQuartetInDMajorOp.64 JosephHaydn-StringQuartetInDOp.645H363Lark-02-AdagioCantabile.ogg",
+      "composer": "J. Haydn",
+      "work": "String Quartet Op.64 No.5 'Lark' — Adagio cantabile",
+      "performer": "Musopen String Quartet",
+      "license": "PDM-owner",
+      "series": [
+        "chuyen-xua",
+        "bytecast"
+      ],
+      "mood": "ấm, trang nhã",
+      "lengthSec": 292
+    },
+    {
+      "id": "chopin-cello-largo",
+      "commonsTitle": "File:Sonata for Piano and Cello in G Minor, Op. 65 - III. Largo.mp3",
+      "composer": "F. Chopin",
+      "work": "Cello Sonata Op.65 — Largo",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "chuyen-xua",
+        "dong-ho-viet"
+      ],
+      "mood": "sâu lắng",
+      "lengthSec": 219
+    },
+    {
+      "id": "chopin-noc-op15-1",
+      "commonsTitle": "File:Nocturne Op. 15 no. 1 In F major.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.15 No.1",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "dịu dàng",
+      "lengthSec": 306
+    },
+    {
+      "id": "chopin-noc-op72-1",
+      "commonsTitle": "File:NocturneOp.72No.1InEMinor.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.72 No.1 in E minor",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "hoài niệm",
+      "lengthSec": 273
+    },
+    {
+      "id": "chopin-noc-op55-1",
+      "commonsTitle": "File:Nocturne Op. 55 no. 1 in F minor.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.55 No.1",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "buồn nhẹ",
+      "lengthSec": 317
+    },
+    {
+      "id": "chopin-noc-op32-2",
+      "commonsTitle": "File:Nocturne Op. 32 no. 2 in A flat major.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.32 No.2",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "ấm",
+      "lengthSec": 343
+    },
+    {
+      "id": "chopin-noc-op62-2",
+      "commonsTitle": "File:Nocturne Op. 62 no. 2 in E major.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.62 No.2",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "dịu",
+      "lengthSec": 340
+    },
+    {
+      "id": "chopin-noc-op37-1",
+      "commonsTitle": "File:Chopin- Nocturne op. 37 no. 1.ogg",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.37 No.1",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "trầm",
+      "lengthSec": 321
+    },
+    {
+      "id": "chopin-noc-b49",
+      "commonsTitle": "File:Nocturne B. 49 in C sharp minor 'Lento con gran espressione' (1).mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne in C# minor 'Lento con gran espressione'",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "hoài niệm",
+      "lengthSec": 239
+    },
+    {
+      "id": "chopin-noc-op55-2",
+      "commonsTitle": "File:Nocturne Op. 55 no. 2 in E flat major.mp3",
+      "composer": "F. Chopin",
+      "work": "Nocturne Op.55 No.2",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "dịu",
+      "lengthSec": 310
+    },
+    {
+      "id": "beethoven-pathetique-adagio",
+      "commonsTitle": "File:Beethoven, Sonata No. 8 in C Minor Pathetique, Op. 13 - II. Adagio cantabile.ogg",
+      "composer": "L. v. Beethoven",
+      "work": "Sonata 'Pathétique' — Adagio cantabile",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet",
+        "bytecast"
+      ],
+      "mood": "ấm, sâu",
+      "lengthSec": 298
+    },
+    {
+      "id": "schubert-d664-andante",
+      "commonsTitle": "File:Schubert, Sonata A Major, D. 664 - II. Andante.ogg",
+      "composer": "F. Schubert",
+      "work": "Piano Sonata D.664 — Andante",
+      "performer": "Paul Pitman (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "dong-ho-viet",
+        "bytecast"
+      ],
+      "mood": "dịu, suy tư",
+      "lengthSec": 291
+    },
+    {
+      "id": "romance-anonimo",
+      "commonsTitle": "File:Romance Anónimo (Jeux interdits).ogg",
+      "composer": "Anonymous",
+      "work": "Romance Anónimo (guitar)",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "hoài niệm",
+      "lengthSec": 167
+    },
+    {
+      "id": "chopin-waltz-op69-2",
+      "commonsTitle": "File:Waltz Op. 69 no. 2 in B minor.mp3",
+      "composer": "F. Chopin",
+      "work": "Waltz Op.69 No.2",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "dong-ho-viet"
+      ],
+      "mood": "buồn nhẹ",
+      "lengthSec": 216
+    },
+    {
+      "id": "mozart-pc17-andante",
+      "commonsTitle": "File:Mozart - Concerto No.17 in G - II. Andante.ogg",
+      "composer": "W. A. Mozart",
+      "work": "Piano Concerto No.17 — Andante",
+      "performer": "Musopen",
+      "license": "CC0",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "suy tư",
+      "lengthSec": 675
+    },
+    {
+      "id": "mendelssohn-italian-andante",
+      "commonsTitle": "File:Mendelssohn, Symphony No. 4 in A Major, Op. 90 'Italian' - II. Andante con moto.ogg",
+      "composer": "F. Mendelssohn",
+      "work": "Symphony No.4 'Italian' — Andante con moto",
+      "performer": "Musopen Symphony",
+      "license": "CC0",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "đều bước",
+      "lengthSec": 348
+    },
+    {
+      "id": "brahms-sym3-andante",
+      "commonsTitle": "File:Brahms, Symphony No. 3 in F Major, Op. 90 - II. Andante.ogg",
+      "composer": "J. Brahms",
+      "work": "Symphony No.3 — Andante",
+      "performer": "Musopen Symphony",
+      "license": "CC0",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "ấm",
+      "lengthSec": 487
+    },
+    {
+      "id": "beethoven-op18-6-adagio",
+      "commonsTitle": "File:Beethoven StringQuartetNo.6inBFlatMajorOp.18 LudwigVanBeethoven-StringQuartetNo.6InBFlatMajorOp.18No.6-02-AdagioMaNonTroppo.ogg",
+      "composer": "L. v. Beethoven",
+      "work": "String Quartet Op.18 No.6 — Adagio ma non troppo",
+      "performer": "Musopen String Quartet",
+      "license": "CC0",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "suy tư",
+      "lengthSec": 422
+    },
+    {
+      "id": "vivaldi-rv558-andante",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Concerto in C major, RV 558 - II. Andante molto.ogg",
+      "composer": "A. Vivaldi",
+      "work": "Concerto RV 558 — Andante molto",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "bytecast"
+      ],
+      "mood": "nhẹ",
+      "lengthSec": 178
+    },
+    {
+      "id": "vivaldi-mandolins-andante",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Concerto for 2 Mandolins in G major, RV 532 - II. Andante.ogg",
+      "composer": "A. Vivaldi",
+      "work": "Concerto for 2 Mandolins RV 532 — Andante",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "bytecast",
+        "chuyen-xua"
+      ],
+      "mood": "nhẹ, trong",
+      "lengthSec": 183
+    },
+    {
+      "id": "vivaldi-bassoon-larghetto",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Bassoon Concerto in A minor, RV 498 - II. Larghetto.ogg",
+      "composer": "A. Vivaldi",
+      "work": "Bassoon Concerto RV 498 — Larghetto",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "bytecast"
+      ],
+      "mood": "trầm nhẹ",
+      "lengthSec": 232
+    },
+    {
+      "id": "vivaldi-summer-adagio",
+      "commonsTitle": "File:The Modena Chamber Orchestra - Vivaldi's Summer, RV 315 - II. Adagio.ogg",
+      "composer": "A. Vivaldi",
+      "work": "The Four Seasons, Summer — Adagio",
+      "performer": "Modena Chamber Orchestra (Musopen)",
+      "license": "PDM-owner",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "lơ lửng",
+      "lengthSec": 125
+    },
+    {
+      "id": "mendelssohn-op80-adagio",
+      "commonsTitle": "File:IMSLP247105-PMLP27022-String Quartet No. 6 in F minor, Op. 80 - III. Adagio.ogg",
+      "composer": "F. Mendelssohn",
+      "work": "String Quartet Op.80 — Adagio",
+      "performer": "Musopen String Quartet",
+      "license": "PDM-owner",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "trầm",
+      "lengthSec": 486
+    },
+    {
+      "id": "bach-goldberg-aria-dacapo",
+      "commonsTitle": "File:Bach, J S - Goldberg Variations, BWV988 - 32. Aria Da Capo (Shelley Katz).flac",
+      "composer": "J. S. Bach",
+      "work": "Goldberg Variations — Aria da capo",
+      "performer": "Shelley Katz (Musopen)",
+      "license": "Public domain",
+      "series": [
+        "bytecast",
+        "chuyen-xua"
+      ],
+      "mood": "tĩnh",
+      "lengthSec": 340
+    },
+    {
+      "id": "schubert-d958-adagio",
+      "commonsTitle": "File:Schubert - Piano Sonata No. 19 in C minor, D958 - II. Adagio (Paul Pitman).flac",
+      "composer": "F. Schubert",
+      "work": "Piano Sonata D.958 — Adagio",
+      "performer": "Paul Pitman (Musopen)",
+      "license": "Public domain",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "suy tư",
+      "lengthSec": 468
+    },
+    {
+      "id": "schubert-d568-andante",
+      "commonsTitle": "File:Schubert - Piano Sonata No. 8 in E flat major, D568 - II. Andante molto (Paul Pitman).flac",
+      "composer": "F. Schubert",
+      "work": "Piano Sonata D.568 — Andante molto",
+      "performer": "Paul Pitman (Musopen)",
+      "license": "Public domain",
+      "series": [
+        "bytecast",
+        "dong-ho-viet"
+      ],
+      "mood": "dịu",
+      "lengthSec": 417
+    },
+    {
+      "id": "dvorak-american-lento",
+      "commonsTitle": "File:Dvořák - String Quartet No. 12 in F major, Op. 96 'American' - II. Lento (Musopen String Quartet).flac",
+      "composer": "A. Dvořák",
+      "work": "String Quartet 'American' — Lento",
+      "performer": "Musopen String Quartet",
+      "license": "Public domain",
+      "series": [
+        "bytecast",
+        "dong-ho-viet"
+      ],
+      "mood": "hoài niệm",
+      "lengthSec": 471
+    },
+    {
+      "id": "mozart-k465-andante",
+      "commonsTitle": "File:Mozart - String Quartet No. 19 in C major, K465 'Dissonance' - II. Andante cantabile (Musopen String Quartet).flac",
+      "composer": "W. A. Mozart",
+      "work": "String Quartet K.465 — Andante cantabile",
+      "performer": "Musopen String Quartet",
+      "license": "Public domain",
+      "series": [
+        "bytecast",
+        "tien-tam-ly"
+      ],
+      "mood": "trang nhã",
+      "lengthSec": 461
+    }
+  ]
+}

@@ -107,6 +107,8 @@ export type EpisodeSummary = {
   lockedEpisodeHash: string | null;
   renderedAt: string | null;
   mtimeMs: number;
+  /** Độ dài (giây): video đã render nếu có, không thì audio. */
+  durationSec: number | null;
 };
 
 class ApiError extends Error {
@@ -1691,4 +1693,37 @@ export const publishApi = {
   cancel: (id: string) => jsonFetch<{ cancelled: boolean }>(`/api/publish/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   retry: (id: string) => jsonFetch<PublishJob>(`/api/publish/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
   clearFinished: () => jsonFetch<{ removed: number }>("/api/publish/jobs/_clear", { method: "POST" }),
+};
+
+// ─── Kho nhạc nền xoay vòng (an toàn Content ID) ──────────────────────────
+export type MusicTrack = {
+  id: string;
+  composer: string;
+  work: string;
+  performer: string;
+  license: string;
+  series: string[];
+  mood: string;
+  bgm: string;
+  credit: string;
+  downloaded: boolean;
+  qc: { ok: boolean; reason?: string; sourceUrl: string; durationSec: number; lra: number } | null;
+  blocked: { reason: string; at: string } | null;
+  usable: boolean;
+  useCount: number;
+  lastUsedAt: string | null;
+  upcoming: string[];
+};
+
+export const musicApi = {
+  library: () => jsonFetch<{ tracks: MusicTrack[] }>("/api/music/library"),
+  block: (id: string, reason: string) =>
+    jsonFetch<{ tracks: MusicTrack[] }>(`/api/music/${encodeURIComponent(id)}/block`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  unblock: (id: string) =>
+    jsonFetch<{ tracks: MusicTrack[] }>(`/api/music/${encodeURIComponent(id)}/unblock`, { method: "POST" }),
+  reroll: (episode: string) =>
+    jsonFetch<EpisodeSummary>(`/api/music/reroll/${encodeURIComponent(episode)}`, { method: "POST" }),
 };

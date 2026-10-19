@@ -21,6 +21,7 @@ import { commentsRoutes } from "../podcast/server/routes/comments";
 import { planRoutes } from "../podcast/server/routes/plan";
 import { cleanupRoutes } from "../podcast/server/routes/cleanup";
 import { publishRoutes } from "../podcast/server/routes/publish";
+import { musicRoutes } from "../podcast/server/routes/music";
 import { resumePublishQueue } from "../podcast/server/lib/publish-queue";
 import { startFsWatcher } from "../shared/studio-core/events";
 import { sseFromBus } from "../shared/studio-core/sse";
@@ -91,6 +92,7 @@ app.route("/api/comments", commentsRoutes);
 app.route("/api/plan", planRoutes);
 app.route("/api/cleanup", cleanupRoutes);
 app.route("/api/publish", publishRoutes);
+app.route("/api/music", musicRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.

@@ -25,9 +25,12 @@ import {
   Flag,
   Send,
   BookOpen,
+  Shuffle,
+  ShieldAlert,
 } from "lucide-react";
 import {
   api,
+  musicApi,
   type EpisodeSummary,
   type ScenePlanItem,
   type TranscriptSegment,
@@ -449,6 +452,26 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
   });
   const volumeDirty = localVolume !== ep.config.bgmVolumeDb;
 
+  // Bài trong kho xoay vòng (input/_music/lib) → hiện tên/ghi công + đổi bài / báo claim.
+  const libId = ep.config.bgm?.match(/^_music\/lib\/(.+)\.ogg$/)?.[1] ?? null;
+  const rerollMut = useMutation({
+    mutationFn: () => musicApi.reroll(ep.name),
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["music-library"] });
+    },
+  });
+  const claimMut = useMutation({
+    mutationFn: async () => {
+      await musicApi.block(libId!, `Content ID (tập ${ep.name})`);
+      return musicApi.reroll(ep.name);
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(["episode", ep.name], updated);
+      qc.invalidateQueries({ queryKey: ["music-library"] });
+    },
+  });
+
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) uploadMut.mutate(f);
@@ -460,7 +483,7 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
     ? `/input/${encodeURIComponent(ep.config.bgm!)}`
     : null;
   const isPending =
-    uploadMut.isPending || deleteMut.isPending || volumeMut.isPending;
+    uploadMut.isPending || deleteMut.isPending || volumeMut.isPending || rerollMut.isPending || claimMut.isPending;
 
   return (
     <Card className="p-5 mb-6">
@@ -476,7 +499,18 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
 
       {hasBgm && bgmUrl ? (
         <div className="space-y-4">
+          {ep.config.musicCredit && (
+            <p className="text-xs text-muted-foreground">
+              {ep.config.musicCredit}
+              {libId && (
+                <Link to="/music" className="ml-2 text-accent hover:underline">
+                  Kho nhạc
+                </Link>
+              )}
+            </p>
+          )}
           <audio
+            key={bgmUrl}
             controls
             preload="metadata"
             src={bgmUrl}
@@ -537,6 +571,12 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
           <span>{String(uploadMut.error)}</span>
         </div>
       )}
+      {(rerollMut.isError || claimMut.isError) && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+          <span>{String(rerollMut.error ?? claimMut.error)}</span>
+        </div>
+      )}
       {deleteMut.isError && (
         <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive flex items-start gap-2">
           <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
@@ -545,7 +585,33 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
       )}
 
       {/* Footer actions — căn phải */}
-      <div className="mt-4 pt-3 border-t flex items-center justify-end gap-2">
+      <div className="mt-4 pt-3 border-t flex flex-wrap items-center justify-end gap-2">
+        {libId && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() =>
+              window.confirm("Bài này bị Facebook/YouTube đánh Content ID? Chặn khỏi kho (không bốc lại) và đổi bài khác cho tập này.") &&
+              claimMut.mutate()
+            }
+            disabled={isPending}
+            title="Chặn bài khỏi kho xoay vòng + đổi bài khác"
+          >
+            {claimMut.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldAlert className="size-3.5" />}
+            Dính Content ID
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => rerollMut.mutate()}
+          disabled={isPending}
+          title="Bốc ngẫu nhiên bài khác trong kho an toàn (CC0/PD) hợp series, tránh bài tập khác đang dùng"
+        >
+          {rerollMut.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Shuffle className="size-3.5" />}
+          {hasBgm ? "Đổi bài khác" : "Bốc từ kho nhạc"}
+        </Button>
         {hasBgm && (
           <Button
             size="sm"

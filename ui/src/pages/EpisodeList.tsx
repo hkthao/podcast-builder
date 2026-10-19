@@ -7,6 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  CalendarClock,
+  Facebook,
+  Send,
   FileAudio2,
   Plus,
   Loader2,
@@ -399,7 +402,10 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
           <h3 className="font-serif text-lg leading-tight line-clamp-2">
             {title}
           </h3>
-          <StatusBadge status={ep.status} />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge status={ep.status} />
+            <PublishBadge config={ep.config} />
+          </div>
         </div>
         {ep.config.hook && (
           <p className="mb-3 line-clamp-2 text-sm text-muted-foreground italic">
@@ -410,6 +416,14 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
           <span className="font-mono">
             #{String(ep.config.episodeNumber).padStart(3, "0")}
           </span>
+          {ep.durationSec != null && (
+            <>
+              <span>·</span>
+              <span className="font-mono" title="Độ dài (video đã render, hoặc audio)">
+                {fmtDuration(ep.durationSec)}
+              </span>
+            </>
+          )}
           {ep.renderedAt && (
             <>
               <span>·</span>
@@ -472,6 +486,46 @@ function StatusBadge({ status }: { status: EpisodeStatus }) {
       {c.label}
     </Badge>
   );
+}
+
+function PublishBadge({ config }: { config: EpisodeSummary["config"] }) {
+  const when = config.scheduledPublishTime
+    ? new Date(config.scheduledPublishTime).toLocaleString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+      })
+    : null;
+  switch (config.publishStatus) {
+    case "published":
+      return (
+        <Badge variant="accent" className="gap-1 shrink-0" title={config.fbPermalink ?? undefined}>
+          <Facebook className="size-3.5" /> Đã đăng
+        </Badge>
+      );
+    case "scheduled":
+      return (
+        <Badge variant="secondary" className="gap-1 shrink-0" title="Đã hẹn giờ trên Facebook">
+          <CalendarClock className="size-3.5" /> {when ? `Hẹn ${when}` : "Đã hẹn giờ"}
+        </Badge>
+      );
+    case "ready":
+      return (
+        <Badge variant="outline" className="gap-1 shrink-0">
+          <Send className="size-3.5" /> Sẵn sàng đăng
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
+function fmtDuration(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = String(sec % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 function timeAgo(iso: string): string {
