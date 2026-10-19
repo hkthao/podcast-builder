@@ -2,6 +2,8 @@ import { Composition, staticFile } from "remotion";
 import { parseMedia } from "@remotion/media-parser";
 import { Video, type CompProps } from "./Video";
 import { ScenePreview, type ScenePreviewProps } from "./ScenePreview";
+import { InterestTrap } from "./viz/pilot/InterestTrap";
+import { VizLayer } from "./viz/VizLayer";
 import { FORMAT, FPS } from "./theme";
 import { FORMATS } from "./layout";
 import {
@@ -59,6 +61,24 @@ export const RemotionRoot: React.FC = () => {
             ...size,
           };
         }}
+      />
+      <Composition
+        id="VizPilot"
+        component={InterestTrap}
+        durationInFrames={FPS * 15}
+        fps={FPS}
+        width={FORMAT.width}
+        height={FORMAT.height}
+      />
+      {/* Xem trước cảnh vẽ tay: --props='{"vizSrc":"<file trong public/>"}' (mỗi cảnh 6s). */}
+      <Composition
+        id="VizPreview"
+        component={VizLayer}
+        durationInFrames={FPS * 6 * 18}
+        fps={FPS}
+        width={FORMAT.width}
+        height={FORMAT.height}
+        defaultProps={{ vizSrc: "_viz-preview.json" }}
       />
       <Composition
         id="ScenePreview"

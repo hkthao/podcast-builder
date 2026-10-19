@@ -206,6 +206,15 @@ async function main() {
     cleanupList.push(editorialPublicName);
   }
 
+  // Cảnh phân tích vẽ tay (story-align) — có thì thay nền/sticker.
+  let vizPublicName: string | null = null;
+  const vizJsonPath = path.join(TMP_DIR, `${baseName}.viz.json`);
+  if (fs.existsSync(vizJsonPath)) {
+    vizPublicName = `${outBase}.viz.json`;
+    copyToPublic(vizJsonPath, vizPublicName);
+    cleanupList.push(vizPublicName);
+  }
+
   let bgmPublicName: string | null = null;
   if (episode.bgm) {
     const bgmAbsPath = path.resolve(path.dirname(args.audioPath), episode.bgm);
@@ -274,6 +283,7 @@ async function main() {
     planSrc: planPublicName,
     bgmSrc: bgmPublicName,
     editorialSrc: editorialPublicName,
+    vizSrc: vizPublicName,
     footageClips,
     format,
     episode,

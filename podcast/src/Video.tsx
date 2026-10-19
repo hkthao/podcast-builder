@@ -16,6 +16,7 @@ import { OutroCard, OUTRO_DURATION_FRAMES } from "./components/OutroCard";
 import { SceneLayer } from "./components/SceneLayer";
 import { Visualizer } from "./components/Visualizer";
 import { Watermark } from "./components/Watermark";
+import { VizLayer } from "./viz/VizLayer";
 import { useScenePlan } from "./components/scene-runtime";
 import { PaletteProvider, paletteFor } from "./palette";
 import { outroTailFrames, type EpisodeConfig } from "./episode";
@@ -28,6 +29,8 @@ export type CompProps = {
   bgmSrc: string | null;
   editorialSrc: string | null;
   footageClips: FootageClip[];
+  /** tmp/<slug>.viz.json (cảnh phân tích vẽ tay) — có thì thay nền/sticker/sóng. */
+  vizSrc?: string | null;
   /**
    * Overlay mode (2-pass): render ĐỒ HOẠ trên nền TRONG SUỐT (không nền vàng,
    * không sticker, KHÔNG FootageLayer) → ffmpeg phủ lên footage bg + audio.
@@ -46,6 +49,7 @@ export const Video: React.FC<CompProps> = ({
   bgmSrc,
   editorialSrc,
   footageClips,
+  vizSrc = null,
   overlayMode = false,
   episode,
 }) => {
@@ -86,7 +90,7 @@ export const Video: React.FC<CompProps> = ({
   return (
     <PaletteProvider value={paletteFor(episode.series)}>
     <AbsoluteFill style={overlayMode ? { backgroundColor: "transparent" } : undefined}>
-      {overlayMode ? null : (
+      {overlayMode || vizSrc ? null : (
         <Sequence from={mainStartFrame}>
           <Background mood={mood} scenes={scenes} />
         </Sequence>
@@ -117,8 +121,14 @@ export const Video: React.FC<CompProps> = ({
 
       {audioSrc && mainEndFrame > mainStartFrame ? (
         <Sequence from={mainStartFrame} durationInFrames={mainEndFrame - mainStartFrame}>
-          {hideStickers ? null : <SceneLayer scenes={scenes} audioSrc={audioSrc} />}
-          <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} accentColor={episode.accentColor} />
+          {vizSrc ? (
+            <VizLayer vizSrc={vizSrc} />
+          ) : (
+            <>
+              {hideStickers ? null : <SceneLayer scenes={scenes} audioSrc={audioSrc} />}
+              <Visualizer audioSrc={audioSrc} mood={mood} scenes={scenes} accentColor={episode.accentColor} />
+            </>
+          )}
           <Captions transcriptSrc={transcriptSrc} accentColor={episode.accentColor} />
           <Watermark episodeNumber={episode.episodeNumber} accentColor={episode.accentColor} series={episode.series} />
           {episode.showEditorial ? (

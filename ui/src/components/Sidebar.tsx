@@ -14,6 +14,8 @@ import {
   HardDrive,
   Clapperboard,
   UploadCloud,
+  Music2,
+  Coins,
 } from "lucide-react";
 import { api, cleanupApi, publishApi, type EpisodeStatus } from "@/lib/api";
 import { LOW_DISK_BYTES, fmtBytes } from "@/pages/Cleanup";
@@ -111,6 +113,14 @@ export function Sidebar() {
             name="Dòng Họ Việt"
             meta={metaOf("Kể chuyện", "dong-ho-viet")}
           />
+          <ChannelItem
+            to="/series/tien-tam-ly"
+            active={channelActive("tien-tam-ly")}
+            icon={<Coins className="size-4" />}
+            tone="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            name="Tiền & Tâm Lý"
+            meta={metaOf("Phân tích", "tien-tam-ly")}
+          />
         </div>
         <div className="space-y-0.5">
           <SectionLabel>Công cụ</SectionLabel>
@@ -134,6 +144,7 @@ export function Sidebar() {
                 : undefined
             }
           />
+          <NavItem to="/music" icon={<Music2 className="size-4" />} label="Kho nhạc nền" />
           <NavLink
             to="/cleanup"
             className={({ isActive }) =>

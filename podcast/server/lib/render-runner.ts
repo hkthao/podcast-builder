@@ -469,6 +469,14 @@ async function runJob(job: JobInternal): Promise<void> {
       cleanupList.push(editorialPublicName);
       checkAbort();
     }
+    // Cảnh phân tích vẽ tay (story-align ghi tmp/<slug>.viz.json) — có thì thay nền/sticker.
+    let vizPublicName: string | null = null;
+    const vizJsonPath = planJsonPath.replace(/\.plan\.json$/, ".viz.json");
+    if (fs.existsSync(vizJsonPath)) {
+      vizPublicName = `${outBase}.viz.json`;
+      fs.copyFileSync(vizJsonPath, path.join(PUBLIC_DIR, vizPublicName));
+      cleanupList.push(vizPublicName);
+    }
     // Hết phần dùng chung tmp/<slug>.* → nhả khoá cho khung kia của tập.
     releasePrep();
 
@@ -548,6 +556,7 @@ async function runJob(job: JobInternal): Promise<void> {
       planSrc: planPublicName,
       bgmSrc: bgmPublicName,
       editorialSrc: editorialPublicName,
+      vizSrc: vizPublicName,
       footageClips,
       format: job.format,
       episode: episodeConfig,
@@ -656,6 +665,7 @@ async function runJob(job: JobInternal): Promise<void> {
             transcriptSource,
             planJsonPath,
             planJsonPath.replace(/\.plan\.json$/, ".editorial.json"),
+            ...[planJsonPath.replace(/\.plan\.json$/, ".viz.json")].filter((f) => fs.existsSync(f)),
             renderWav,
             // Cover GỐC trong input/ (bản copy public/ đổi mtime mỗi lần render).
             ...[ep.config.coverImage, ep.config.coverImageLandscape]

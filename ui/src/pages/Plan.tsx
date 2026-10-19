@@ -290,7 +290,7 @@ export function PlanPage() {
         <Card className="p-6 text-sm text-destructive">{String(q.error)}</Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-[88px_repeat(3,minmax(0,1fr))] border-b bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="grid border-b bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground" style={gridCols}>
             <div className="px-3 py-2 text-center">Ngày</div>
             {SERIES_OPTIONS.map((s) => (
               <div key={s.id} className="px-3 py-2">
@@ -304,8 +304,9 @@ export function PlanPage() {
             return (
               <div
                 key={date}
+                style={gridCols}
                 className={cn(
-                  "grid grid-cols-[88px_repeat(3,minmax(0,1fr))] border-b last:border-b-0",
+                  "grid border-b last:border-b-0",
                   date === today && "bg-accent/5",
                   dow === 0 && "bg-muted/20",
                 )}
@@ -472,10 +473,14 @@ function SlotCard({
   );
 }
 
+/** Cột ngày + 1 cột mỗi kênh (số kênh lấy từ SERIES_OPTIONS, không hardcode). */
+const gridCols = { gridTemplateColumns: `88px repeat(${SERIES_OPTIONS.length}, minmax(0, 1fr))` };
+
 const NOTES_HINT: Record<SeriesId, string> = {
   bytecast: "Góc nhìn chính, câu hỏi lớn của tập, nguồn/nhà tư tưởng muốn dùng (tránh nguồn đã bão hoà)…",
   "chuyen-xua": "Tên truyện trong Cổ học tinh hoa, nguyên văn (nếu có) + giải nghĩa + lời bàn, bài học hiện đại muốn nhấn…",
   "dong-ho-viet": "Vật thể làm trục (cuốn sổ, tấm ảnh, bát hương…), kỷ niệm/câu nói của ông bà, góc kể chưa dùng ở tập trước…",
+  "tien-tam-ly": "Case study/cơ chế làm cú sốc, số liệu VN cần lấy (nguồn GSO/NHNN/…), hiệu ứng tâm lý muốn mổ xẻ, quy tắc rút ra…",
 };
 
 /** Modal sửa ô kế hoạch: chủ đề + hook + ghi chú cho Claude. Esc đóng, ⌘/Ctrl+Enter lưu. */
@@ -612,7 +617,7 @@ function IdeasPanel({ ideas, slots, onChange }: { ideas: PlanIdea[]; slots: Plan
           — Claude đề xuất khi làm kế hoạch; bấm ↦ để đưa vào ô trống sớm nhất cùng kênh
         </span>
       </h2>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {SERIES_OPTIONS.map((s) => {
           const list = ideas.filter((i) => i.series === s.id);
           const target = firstEmpty(s.id);

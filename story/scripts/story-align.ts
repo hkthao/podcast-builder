@@ -47,7 +47,7 @@ async function main() {
     process.exit(1);
   }
   const story = readStory(slug);
-  const { tempo } = resolveTts(slug, story);
+  const { tempo, speakers, eq } = resolveTts(slug, story);
 
   // 1. Ghép phần → input/<slug>.m4a
   const partsDir = path.join(INPUT_DIR, `${slug}.parts`);
@@ -70,7 +70,7 @@ async function main() {
       "-filter_complex",
       parts.map((_, i) => `[${i}:a]aresample=48000,aformat=channel_layouts=mono[a${i}]`).join(";") +
         ";" + parts.map((_, i) => `[a${i}]`).join("") + `concat=n=${parts.length}:v=0:a=1` +
-        (tempo !== 1 ? `,atempo=${tempo}` : "") + "[out]",
+        (tempo !== 1 ? `,atempo=${tempo}` : "") + (eq ? `,${eq}` : "") + "[out]",
       "-map", "[out]", "-c:a", "aac", "-b:a", "192k", m4a,
     ],
     { stdio: ["ignore", "ignore", "inherit"] },
@@ -84,7 +84,7 @@ async function main() {
   const W = whisperWords(await transcribeAudio(whisperWav, whisperJson));
 
   // 3. Căn chữ kịch bản
-  const sentences = storySentences(story);
+  const sentences = storySentences(story, (speakers ?? []).map((sp) => sp.name));
   const S = sentencesToWords(sentences.map((s) => s.text));
   const { aligned, anchored } = alignWords(W, S, durationMs);
   const pct = S.length ? Math.round((anchored / S.length) * 100) : 0;
@@ -130,6 +130,41 @@ async function main() {
     path.join(TMP_DIR, `${slug}.editorial.json`),
     JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), chapters, citations }, null, 2),
   );
+
+  // 6. Cảnh phân tích vẽ tay: neo `at` (câu trong section) → mốc ms; mỗi cảnh kéo tới cảnh kế.
+  const vizPath = path.join(TMP_DIR, `${slug}.viz.json`);
+  const sectionSentence = new Map<string, number>(); // "section:câu" → index câu toàn tập
+  const perSection = new Map<number, number>();
+  sentences.forEach((s, i) => {
+    const k = perSection.get(s.section) ?? 0;
+    sectionSentence.set(`${s.section}:${k}`, i);
+    perSection.set(s.section, k + 1);
+  });
+  const starts = story.sections.flatMap((sec, si) =>
+    (sec.viz ?? []).map(({ at = 0, ...scene }) => {
+      // `at` = số thứ tự câu trong section, hoặc 1 đoạn chữ của câu cần neo (bền khi sửa kịch bản).
+      const n = perSection.get(si) ?? 1;
+      const local =
+        typeof at === "string"
+          ? Array.from({ length: n }, (_, k) => k).find((k) =>
+              sentences[sectionSentence.get(`${si}:${k}`)!].text.toLowerCase().includes(at.toLowerCase()),
+            )
+          : Math.min(at, n - 1);
+      const idx = local === undefined ? undefined : sectionSentence.get(`${si}:${local}`);
+      if (idx === undefined) throw new Error(`viz section ${sec.id}: không tìm thấy câu "${at}"`);
+      // Hiện cảnh sớm ~250ms để hình ra kịp lúc giọng nói tới ý đó.
+      return { startMs: Math.max(0, spans[idx].startMs - 250), scene };
+    }),
+  );
+  starts.sort((a, b) => a.startMs - b.startMs);
+  if (starts.length) {
+    const lastMs = spans[spans.length - 1].endMs + 400;
+    const beats = starts.map((b, i) => ({ ...b, endMs: starts[i + 1]?.startMs ?? lastMs }));
+    fs.writeFileSync(vizPath, JSON.stringify({ version: 1, beats }, null, 2));
+    console.log(`[story-align] ✓ ${beats.length} cảnh vẽ tay → ${vizPath}`);
+  } else {
+    fs.rmSync(vizPath, { force: true });
+  }
 
   fs.rmSync(path.join(TMP_DIR, `${slug}.plan.json`), { force: true });
   console.log(

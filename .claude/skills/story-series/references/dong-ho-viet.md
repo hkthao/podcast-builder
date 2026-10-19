@@ -16,7 +16,7 @@ Gia đình · gia phả · ký ức · nguồn cội — nhắm khán giả trun
 - Không có `source`/`cite` trừ khi trích tài liệu thật.
 
 ## Giọng
-Nam **dẫn phim tài liệu**: rõ, chắc, chân thành, tốc độ tự nhiên — KHÔNG chậm, KHÔNG thủ thỉ, KHÔNG giọng truyện ma (tránh Algenib khàn, tránh "slow/unhurried/whisper/intimate"). Mặc định series: Charon + tempo 1.09 — **tập 1 cho user nghe duyệt**, có thể thử thêm Orus/Sadaltager/Rasalgethi bằng `--voice=… --tag=…` (Iapetus từng nghe nhiều tạp âm).
+Nam **dẫn phim tài liệu**: rõ, chắc, chân thành, tốc độ tự nhiên — KHÔNG chậm, KHÔNG thủ thỉ, KHÔNG giọng truyện ma (tránh Algenib khàn, tránh "slow/unhurried/whisper/intimate"). Mặc định series: **Alnilam + tempo 1.0** (user chọn 2026-10-19, thay Charon 1.09), có thể thử thêm Orus/Sadaltager/Rasalgethi bằng `--voice=… --tag=…` (Iapetus từng nghe nhiều tạp âm).
 
 ## Hình
 - **Footage:** đồ vật gia đình Việt, nhà cũ, bàn thờ/nén nhang, ảnh cũ, sổ chép tay, mâm cơm, sân gạch, ngõ quê, cây cau, giếng, mái ngói — KHÔNG người (gợi người bằng vật/nơi chốn vắng). Ưu tiên query có "vietnamese" khi hợp.

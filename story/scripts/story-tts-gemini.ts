@@ -39,15 +39,32 @@ const pcmToWav = (pcm: Buffer, mimeType: string): Buffer => {
   return Buffer.concat([h, pcm]);
 };
 
-async function synthesize(apiKey: string, model: string, voice: string, note: string, text: string) {
-  const prompt = `Read the following transcript based on the director's note.\n\n# Director's note\n${note}\n\n## Transcript:\n${text}`;
+async function synthesize(
+  apiKey: string,
+  model: string,
+  voice: string,
+  note: string,
+  text: string,
+  speakers?: Array<{ name: string; voice: string }>,
+) {
+  const kind = speakers?.length ? "conversation" : "transcript";
+  const prompt = `Read the following ${kind} based on the director's note.\n\n# Director's note\n${note}\n\n## Transcript:\n${text}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      // < 1 để giọng bớt dao động giữa các câu.
-      temperature: 0.7,
+      // Độc thoại < 1 để giọng bớt dao động; đối thoại cao hơn cho phản ứng tự nhiên.
+      temperature: speakers?.length ? 0.9 : 0.7,
       responseModalities: ["AUDIO"],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+      speechConfig: speakers?.length
+        ? {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: speakers.map((sp) => ({
+                speaker: sp.name,
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: sp.voice } },
+              })),
+            },
+          }
+        : { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
     },
   };
   for (let attempt = 1; ; attempt++) {
@@ -99,10 +116,11 @@ async function main() {
   const note = pace ? baseNote.replace(/Pace: [^.]*\./, `Pace: ${pace.replace(/\.$/, "")}.`) : baseNote;
   const only = arg("part") ? Number(arg("part")) : null;
 
-  const parts = buildParts(story, PART_WORDS_API);
+  const parts = buildParts(story, PART_WORDS_API, !!tts.speakers?.length);
   const dir = path.join(INPUT_DIR, tag ? `${slug}.parts-${tag}` : `${slug}.parts`);
   fs.mkdirSync(dir, { recursive: true });
-  console.log(`[story-tts-gemini] ${slug}: ${parts.length} phần · ${model} · giọng ${voice}`);
+  const voiceDesc = tts.speakers?.length && !arg("voice") ? tts.speakers.map((sp) => `${sp.name}=${sp.voice}`).join(", ") : voice;
+  console.log(`[story-tts-gemini] ${slug}: ${parts.length} phần · ${model} · giọng ${voiceDesc}`);
 
   for (const [i, text] of parts.entries()) {
     const n = i + 1;
@@ -113,7 +131,7 @@ async function main() {
       continue;
     }
     const t = Date.now();
-    fs.writeFileSync(out, await synthesize(apiKey, model, voice, note, text));
+    fs.writeFileSync(out, await synthesize(apiKey, model, voice, note, text, arg("voice") ? undefined : tts.speakers));
     console.log(`[story-tts-gemini] ✓ phần ${n}/${parts.length} (${((Date.now() - t) / 1000).toFixed(0)}s) → ${out}`);
   }
   console.log(`[story-tts-gemini] xong. Nghe QC rồi: npx tsx story/scripts/story-align.ts ${slug}`);

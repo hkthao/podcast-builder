@@ -49,9 +49,9 @@ export type PlanSettings = {
 export type Plan = { version: 1; settings: PlanSettings; slots: PlanSlot[]; ideas: PlanIdea[] };
 
 const DEFAULT_SETTINGS: PlanSettings = {
-  cadenceDays: { bytecast: 2, "chuyen-xua": 2, "dong-ho-viet": 2 },
-  offsetDays: { bytecast: 0, "chuyen-xua": 1, "dong-ho-viet": 1 },
-  postTime: { bytecast: "19:00", "chuyen-xua": "19:00", "dong-ho-viet": "19:00" },
+  cadenceDays: { bytecast: 2, "chuyen-xua": 2, "dong-ho-viet": 2, "tien-tam-ly": 2 },
+  offsetDays: { bytecast: 0, "chuyen-xua": 1, "dong-ho-viet": 1, "tien-tam-ly": 0 },
+  postTime: { bytecast: "19:00", "chuyen-xua": "19:00", "dong-ho-viet": "19:00", "tien-tam-ly": "19:00" },
 };
 
 const newId = () => crypto.randomBytes(5).toString("hex");

@@ -5,7 +5,7 @@
  *
  * File này KHÔNG import remotion → dùng được cả ở server lẫn composition.
  */
-export const SERIES_IDS = ["bytecast", "chuyen-xua", "dong-ho-viet"] as const;
+export const SERIES_IDS = ["bytecast", "chuyen-xua", "dong-ho-viet", "tien-tam-ly"] as const;
 export type SeriesId = (typeof SERIES_IDS)[number];
 export const DEFAULT_SERIES: SeriesId = "bytecast";
 
@@ -32,7 +32,23 @@ export type SeriesTts = {
   note: string;
   /** Tăng tốc khi ghép (atempo). Gemini bỏ qua chỉ đạo "đọc nhanh" → chỉnh ở đây. */
   tempo: number;
+  /**
+   * Có = kịch bản ĐỐI THOẠI 2 người (Gemini multi-speaker): mỗi dòng trong section bắt đầu
+   * bằng "Tên: …" khớp `name`; `voice` ở trên bị bỏ qua. Caption/căn chữ tự bỏ tên người nói.
+   */
+  speakers?: Array<{ name: string; voice: string }>;
+  /** Chuỗi filter ffmpeg chỉnh tiếng khi ghép (vd EQ bớt ồm). Áp sau atempo. */
+  eq?: string;
 };
+
+/**
+ * EQ cho giọng Gemini TTS (24kHz, dồn năng lượng dải trầm → nghe ồm): cắt rung dưới 90Hz,
+ * bớt đục 180/350Hz, nâng vùng rõ chữ 3kHz + "không khí" 7kHz, nén nhẹ cho đều.
+ * Đo 2026-10-19: chênh dải <250Hz so với 2kHz giảm từ ~14dB còn ~11dB.
+ */
+export const VOICE_CLARITY_EQ =
+  "highpass=f=90,equalizer=f=180:t=q:w=1:g=-4,equalizer=f=350:t=q:w=1:g=-3," +
+  "equalizer=f=3000:t=q:w=1.2:g=3,treble=g=3:f=7000,acompressor=threshold=-20dB:ratio=2.5:attack=10:release=150";
 
 export type SeriesInfo = {
   id: SeriesId;
@@ -136,14 +152,15 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     // Trước là pipeline reel riêng (reel/) — gộp vào studio 2026-10-18. Giọng nam dẫn phim
     // tài liệu: rõ, chắc, KHÔNG chậm, KHÔNG thủ thỉ / truyện ma (bài học từ 8 tập reel).
     tts: {
-      voice: "Charon",
+      voice: "Alnilam",
       note:
         "Style: Clear, warm male documentary narrator, sincere and grounded — engaging and human, not sentimental, never a whisper or a ghost-story tone. " +
         "Pace: Natural documentary narration pace, not slow. " +
         "Accent: Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first sentence to the last — never Southern Vietnamese. " +
         "Keep the same voice, tone and energy throughout the whole transcript.",
-      // Charon đọc gốc chậm (user nghe 2026-10-18) → 1.09 vừa tai.
-      tempo: 1.09,
+      // 2026-10-19 user đổi Charon → Alnilam (mẫu Tiền & Tâm Lý). Alnilam đọc gốc đã đủ nhanh
+      // (~175 chữ/phút) → không tăng tốc; nghe tập đầu rồi chỉnh nếu cần.
+      tempo: 1.0,
     },
     // Con triện rượu vang + vàng đồng trên nền kem — lấy từ icon reel/assets/app-icon.svg.
     palette: {
@@ -170,6 +187,53 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     fbContentCategory: "FAMILY",
     fbUploadSrt: false,
     hookCard: false, // hook = 2 câu đầu kịch bản (đọc thành tiếng) → không thẻ hook trùng
+    footageLook: null,
+  },
+  "tien-tam-ly": {
+    id: "tien-tam-ly",
+    // Kênh kinh tế × tâm lý học hành vi, ĐỘC LẬP với ByteCast (user chốt 2026-10-19).
+    // ĐỐI THOẠI 2 người dẫn (user duyệt mẫu 2026-10-19: độc thoại nghe "máy", kịch bản quá sách vở).
+    // Minh (nam, Alnilam) kể chuyện + giải thích; Lan (nữ, Aoede) hỏi như người nghe bình thường.
+    // Xưng hô: Minh xưng "tôi" gọi "chị"; Lan xưng "tôi" gọi "anh".
+    tts: {
+      voice: "Alnilam",
+      speakers: [
+        { name: "Minh", voice: "Alnilam" },
+        { name: "Lan", voice: "Aoede" },
+      ],
+      note:
+        "A relaxed, natural Vietnamese podcast conversation between two friends who host a show about money and everyday psychology. " +
+        "They react to each other genuinely: small laughs, surprised 'ôi', thoughtful pauses, varied pace — never like reading a script, never like a newsreader. " +
+        "Accent: both speak Northern Vietnamese (Hanoi) accent with standard Hanoi pronunciation, kept exactly the same from the first line to the last — never Southern Vietnamese.",
+      tempo: 1.0,
+      eq: VOICE_CLARITY_EQ,
+    },
+    // Bảng trắng: giấy ngà + mực chàm đậm; xanh lá = tăng/lãi, đỏ = lỗ/rủi ro, xanh dương = dữ kiện.
+    palette: {
+      bg: "#F7F5EF",
+      bgAlt: "#ECE8DC",
+      ink: "#1D2433",
+      inkMuted: "#5B6475",
+      white: "#FFFFFF",
+      accentRed: "#C8372D",
+      accentBlue: "#2F5D8A",
+      accentTeal: "#2E8B57",
+      gridLine: "rgba(29, 36, 51, 0.07)",
+    },
+    channelName: "Tiền & Tâm Lý",
+    slogan: "Giải phẫu đồng tiền và bộ não",
+    description:
+      "Tiền & Tâm Lý mổ xẻ những câu chuyện tiền bạc có thật bằng số liệu kinh tế và tâm lý học hành vi — để hiểu vì sao người thông minh vẫn mất tiền, và cách giữ tiền tỉnh táo hơn.",
+    cta: "Theo dõi để hiểu tiền rõ hơn",
+    // Đồng xu chứa bộ não (Gemini, 2026-10-19) — ảnh Trang FB: brand/tien-tam-ly/fb-avatar.jpg + fb-cover.jpg.
+    logoFile: "brand/tien-tam-ly/mark.png",
+    markFile: "brand/tien-tam-ly/mark.png",
+    markZoom: 1,
+    fbPageIdEnv: "FB_PAGE_ID_TIEN_TAM_LY",
+    playlistsFile: "_fb-playlists.tien-tam-ly.json",
+    fbContentCategory: "BUSINESS",
+    fbUploadSrt: false,
+    hookCard: false, // hook "cú sốc" là câu mở đầu kịch bản (đọc thành tiếng)
     footageLook: null,
   },
 };
