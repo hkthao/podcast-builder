@@ -22,7 +22,7 @@ uv run --no-project --with pymupdf python -I story/scripts/cohoc_split.py refere
 `source`: `{ "name": "Cổ học tinh hoa", "title": "<tên truyện>" }`. Độ dài ~700 chữ ≈ 4'.
 
 ## Hình
-- **Footage:** phần truyện → cảnh Á Đông xưa, KHÔNG người (bờ đầm, lau sậy, đèn dầu, mái ngói, sách cổ, ấm trà, sương núi); phần bài học → đồ vật/đô thị hiện đại tạo tương phản.
+- **Footage:** render TỰ áp tông phim xưa (`series.ts → footageLook: "vintage"`: gần đen trắng, sepia nhẹ, tối, viền + hạt phim — user 2026-10-18 muốn "cổ trang trắng đen tối như ngày xưa" khớp cover) → query ưu tiên cảnh/đồ vật CỔ (gỗ, giấy, tre, mái ngói, sương), màu clip không quan trọng. Tránh đồ tôn giáo khác (thánh giá, kinh Ả Rập/Do Thái), đồ Tây (hải đăng, dầu ô liu). Phần truyện → cảnh Á Đông xưa, KHÔNG người (bờ đầm, lau sậy, đèn dầu, mái ngói, sách cổ, ấm trà, sương núi); phần bài học → đồ vật/đô thị hiện đại tạo tương phản.
 - **Cover:** tranh thuỷ mặc trên giấy dó (nâu mực, sepia, 1 điểm đỏ son #B03A2E), cảnh chính của truyện; tiêu đề thư pháp đậm rõ + dòng nhỏ "CHUYỆN XƯA - NGẪM NAY" + con dấu son. Mẫu prompt: xem `coverPrompt` trong `input/mat-tram-co-thi.json`.
 
 ## Đăng

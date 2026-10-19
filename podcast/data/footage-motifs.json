@@ -1,27 +1,280 @@
 {
-  "_doc": "Thư viện mô-típ hình ảnh b-roll dùng chung MỌI tập (footage-plan đưa vào brief shot-list). Mỗi motif = 1 ý/cảm xúc hay gặp → query Pexels TIẾNG ANH gợi ý (cảnh KHÔNG người, hợp ý). Query nào chạy thực tế ra clip tốt thì giữ, ra người/lạc ý thì chuyển sang avoid. 'portrait' = ưu tiên cho khung dọc (cận/macro, đường thẳng đứng), 'landscape' = khung ngang (cảnh toàn/viễn, khoảng trống). Làm xong 1 tập → THÊM motif/query mới hiệu quả, BỎ query hay ra người/lạc ý (ghi vào 'avoid').",
-  "motifs": [
-    { "idea": "thời gian trôi / trì hoãn / hữu hạn", "portrait": ["hourglass sand falling close up", "old clock ticking macro", "candle wax dripping macro"], "landscape": ["clouds timelapse over valley", "sunlight moving across room timelapse", "hourglass on table wide shot"] },
-    { "idea": "ký ức / gia đình / người đã xa", "portrait": ["old photographs close up", "steam rising from tea cup", "vintage letter handwriting macro"], "landscape": ["empty chair by window", "old wooden house interior sunlight", "family dinner table food"] },
-    { "idea": "mất mát / vô thường / chia ly", "portrait": ["wilting flower timelapse", "candle burning out close up", "falling autumn leaf macro"], "landscape": ["footprints washed by waves", "empty swing in fog", "autumn leaves falling forest wide"] },
-    { "idea": "buông bỏ / thả lỏng", "portrait": ["dandelion seeds blowing macro", "feather falling slow motion", "leaf floating on water close up"], "landscape": ["leaf floating on river", "small boat drifting on lake", "kite flying sky wide"] },
-    { "idea": "cô đơn / chống chếnh / nhỏ bé", "portrait": ["single tree trunk fog vertical", "lone street lamp at night", "rain drop on window close up"], "landscape": ["lone tree in fog wide shot", "empty bench in park fog", "small boat on vast lake"] },
-    { "idea": "vũ trụ / bao la / góc nhìn từ xa", "portrait": ["milky way vertical night sky", "full moon close up"], "landscape": ["earth from space", "starry night sky milky way timelapse", "aerial view clouds above"] },
-    { "idea": "bực bội / căng thẳng / áp lực", "portrait": ["boiling water bubbles macro", "phone screen notification dark room", "lightning strike vertical"], "landscape": ["storm clouds rolling timelapse", "storm waves crashing rocks", "rain hitting window at night"] },
-    { "idea": "suy ngẫm / nội tâm / tự soi", "portrait": ["water drop ripple macro", "smoke wisps dark background", "candle flame close up"], "landscape": ["ripples on still lake", "lake reflection mountains symmetry", "mirror reflection empty room"] },
-    { "idea": "hy vọng / khởi đầu / tiếp nối", "portrait": ["seedling sprouting soil macro", "sunlight through leaves vertical", "flower blooming timelapse"], "landscape": ["sunrise over calm lake", "planting sapling in garden soil", "big tree shade summer field"] },
-    { "idea": "tử tế / nâng đỡ / hành động thầm lặng", "portrait": ["warm light through window close up", "rain puddle reflection street light"], "landscape": ["old wooden bridge over river", "lit window at night house", "heavy rain puddle street"] },
-    { "idea": "tình yêu / hiện diện / khoảnh khắc", "portrait": ["coffee brewing close up", "morning light dust particles", "steaming bowl of soup macro"], "landscape": ["morning sunlight through window curtain", "two coffee cups by window", "warm sunset field wide shot"] },
-    { "idea": "lao động bền bỉ / mưu sinh sớm hôm", "portrait": ["street lamp early morning fog vertical", "old bicycle wheel close up"], "landscape": ["empty street before dawn", "old motorbike parked alley", "city lights early morning wide"] },
-    { "idea": "lịch sử / di sản / bị lãng quên", "portrait": ["old book pages turning", "moss covered stone macro"], "landscape": ["old cemetery fog wide", "ancient ruins wide shot", "old library shelves"] },
-    { "idea": "âm nhạc / giai điệu kết thúc", "portrait": ["piano keys close up", "sheet music macro"], "landscape": ["grand piano empty stage", "concert hall empty seats"] },
-    { "idea": "Nhật Bản / trà đạo / chánh niệm", "portrait": ["matcha tea bowl steam", "zen stone garden close up"], "landscape": ["japanese tea ceremony matcha", "zen garden raked sand wide", "bamboo forest wind"] },
-    { "idea": "tiền bạc / tham / so sánh", "portrait": ["coins stacked close up", "empty wallet macro"], "landscape": ["city skyline night wide", "stock chart screen dark room"] },
-    { "idea": "cái tôi / danh tiếng / hình ảnh bản thân", "portrait": ["broken mirror reflection close up", "statue face weathered macro"], "landscape": ["statue in fog", "empty stage spotlight"] }
-  ],
-  "avoid": [
-    "busy street (hay dính người)",
-    "office / meeting / handshake (dính người)",
-    "query chung chung lặp mọi tập: misty mountains, ocean waves, sunset sky — chỉ dùng khi đúng ý"
-  ]
+ "_doc": "Thư viện mô-típ hình ảnh b-roll dùng chung MỌI tập (footage-plan đưa vào brief shot-list). Mỗi motif = 1 ý/cảm xúc hay gặp → query Pexels TIẾNG ANH gợi ý (cảnh KHÔNG người, hợp ý). Query nào chạy thực tế ra clip tốt thì giữ, ra người/lạc ý thì chuyển sang avoid. 'portrait' = ưu tiên cho khung dọc (cận/macro, đường thẳng đứng), 'landscape' = khung ngang (cảnh toàn/viễn, khoảng trống). Làm xong 1 tập → THÊM motif/query mới hiệu quả, BỎ query hay ra người/lạc ý (ghi vào 'avoid').",
+ "motifs": [
+  {
+   "idea": "thời gian trôi / trì hoãn / hữu hạn",
+   "portrait": [
+    "hourglass sand falling close up",
+    "old clock ticking macro",
+    "candle wax dripping macro"
+   ],
+   "landscape": [
+    "clouds timelapse over valley",
+    "sunlight moving across room timelapse",
+    "hourglass on table wide shot"
+   ]
+  },
+  {
+   "idea": "ký ức / gia đình / người đã xa",
+   "portrait": [
+    "old photographs close up",
+    "steam rising from tea cup",
+    "vintage letter handwriting macro"
+   ],
+   "landscape": [
+    "empty chair by window",
+    "old wooden house interior sunlight",
+    "family dinner table food"
+   ]
+  },
+  {
+   "idea": "mất mát / vô thường / chia ly",
+   "portrait": [
+    "wilting flower timelapse",
+    "candle burning out close up",
+    "falling autumn leaf macro"
+   ],
+   "landscape": [
+    "footprints washed by waves",
+    "empty swing in fog",
+    "autumn leaves falling forest wide"
+   ]
+  },
+  {
+   "idea": "buông bỏ / thả lỏng",
+   "portrait": [
+    "dandelion seeds blowing macro",
+    "feather falling slow motion",
+    "leaf floating on water close up"
+   ],
+   "landscape": [
+    "leaf floating on river",
+    "small boat drifting on lake",
+    "kite flying sky wide"
+   ]
+  },
+  {
+   "idea": "cô đơn / chống chếnh / nhỏ bé",
+   "portrait": [
+    "single tree trunk fog vertical",
+    "lone street lamp at night",
+    "rain drop on window close up"
+   ],
+   "landscape": [
+    "lone tree in fog wide shot",
+    "empty bench in park fog",
+    "small boat on vast lake"
+   ]
+  },
+  {
+   "idea": "vũ trụ / bao la / góc nhìn từ xa",
+   "portrait": [
+    "milky way vertical night sky",
+    "full moon close up"
+   ],
+   "landscape": [
+    "earth from space",
+    "starry night sky milky way timelapse",
+    "aerial view clouds above"
+   ]
+  },
+  {
+   "idea": "bực bội / căng thẳng / áp lực",
+   "portrait": [
+    "boiling water bubbles macro",
+    "phone screen notification dark room",
+    "lightning strike vertical"
+   ],
+   "landscape": [
+    "storm clouds rolling timelapse",
+    "storm waves crashing rocks",
+    "rain hitting window at night"
+   ]
+  },
+  {
+   "idea": "suy ngẫm / nội tâm / tự soi",
+   "portrait": [
+    "water drop ripple macro",
+    "smoke wisps dark background",
+    "candle flame close up"
+   ],
+   "landscape": [
+    "ripples on still lake",
+    "lake reflection mountains symmetry",
+    "mirror reflection empty room"
+   ]
+  },
+  {
+   "idea": "hy vọng / khởi đầu / tiếp nối",
+   "portrait": [
+    "seedling sprouting soil macro",
+    "sunlight through leaves vertical",
+    "flower blooming timelapse"
+   ],
+   "landscape": [
+    "sunrise over calm lake",
+    "planting sapling in garden soil",
+    "big tree shade summer field"
+   ]
+  },
+  {
+   "idea": "tử tế / nâng đỡ / hành động thầm lặng",
+   "portrait": [
+    "warm light through window close up",
+    "rain puddle reflection street light"
+   ],
+   "landscape": [
+    "old wooden bridge over river",
+    "lit window at night house",
+    "heavy rain puddle street"
+   ]
+  },
+  {
+   "idea": "tình yêu / hiện diện / khoảnh khắc",
+   "portrait": [
+    "coffee brewing close up",
+    "morning light dust particles",
+    "steaming bowl of soup macro"
+   ],
+   "landscape": [
+    "morning sunlight through window curtain",
+    "two coffee cups by window",
+    "warm sunset field wide shot"
+   ]
+  },
+  {
+   "idea": "lao động bền bỉ / mưu sinh sớm hôm",
+   "portrait": [
+    "street lamp early morning fog vertical",
+    "old bicycle wheel close up"
+   ],
+   "landscape": [
+    "empty street before dawn",
+    "old motorbike parked alley",
+    "city lights early morning wide"
+   ]
+  },
+  {
+   "idea": "lịch sử / di sản / bị lãng quên",
+   "portrait": [
+    "old book pages turning",
+    "moss covered stone macro"
+   ],
+   "landscape": [
+    "old cemetery fog wide",
+    "ancient ruins wide shot",
+    "old library shelves"
+   ]
+  },
+  {
+   "idea": "âm nhạc / giai điệu kết thúc",
+   "portrait": [
+    "piano keys close up",
+    "sheet music macro"
+   ],
+   "landscape": [
+    "grand piano empty stage",
+    "concert hall empty seats"
+   ]
+  },
+  {
+   "idea": "Nhật Bản / trà đạo / chánh niệm",
+   "portrait": [
+    "matcha tea bowl steam",
+    "zen stone garden close up"
+   ],
+   "landscape": [
+    "japanese tea ceremony matcha",
+    "zen garden raked sand wide",
+    "bamboo forest wind"
+   ]
+  },
+  {
+   "idea": "tiền bạc / tham / so sánh",
+   "portrait": [
+    "coins stacked close up",
+    "empty wallet macro"
+   ],
+   "landscape": [
+    "city skyline night wide",
+    "stock chart screen dark room"
+   ]
+  },
+  {
+   "idea": "cái tôi / danh tiếng / hình ảnh bản thân",
+   "portrait": [
+    "broken mirror reflection close up",
+    "statue face weathered macro"
+   ],
+   "landscape": [
+    "statue in fog",
+    "empty stage spotlight"
+   ]
+  },
+  {
+   "idea": "truyện cổ Á Đông / nhà nghèo xưa (Chuyện Xưa — render tự grade phim xưa)",
+   "portrait": [
+    "piglet close up",
+    "thatched roof rural village",
+    "great wall mist",
+    "horse running grassland",
+    "woven bamboo basket close up"
+   ],
+   "landscape": [
+    "great wall mist wide",
+    "horse herd grassland wide shot"
+   ]
+  },
+  {
+   "idea": "ký ức gia đình / đồ vật cũ (Dòng Họ Việt)",
+   "portrait": [
+    "old wooden chest close up",
+    "red silk fabric close up",
+    "old black and white photographs table",
+    "incense sticks smoke close up",
+    "rice wine cup close up"
+   ],
+   "landscape": [
+    "incense smoke altar wide",
+    "old photo album pages"
+   ]
+  },
+  {
+   "idea": "lựa chọn quá tải / tiêu dùng",
+   "portrait": [
+    "supermarket shelves products",
+    "jam jars shelf close up",
+    "candy store colorful shelves",
+    "bunch of keys close up"
+   ],
+   "landscape": [
+    "supermarket aisle wide shot",
+    "road fork aerial"
+   ]
+  },
+  {
+   "idea": "lời chê / mũi tên / tự dằn vặt",
+   "portrait": [
+    "arrow hitting target close up",
+    "balance scale close up",
+    "velcro close up",
+    "hourglass sand close up"
+   ],
+   "landscape": [
+    "archery target wide",
+    "spiral staircase from above"
+   ]
+  }
+ ],
+ "avoid": [
+  "busy street (hay dính người)",
+  "office / meeting / handshake (dính người)",
+  "query chung chung lặp mọi tập: misty mountains, ocean waves, sunset sky — chỉ dùng khi đúng ý",
+  "ancient chinese book / old book pages (Pexels ra kinh Thánh, kinh Ả Rập/Do Thái có que chỉ chữ — lạc bối cảnh Á Đông)",
+  "zither strings (ra ruột đàn piano)",
+  "pig pen (ra khỉ sau lưới); dùng 'piglet close up'",
+  "handwriting on paper / pencil on paper / phone scrolling (gần như luôn lộ bàn tay)",
+  "old vietnamese kitchen / empty bamboo chair (ra quán bãi biển, nhà hàng Tây)",
+  "old house / gate / palace gate (ra nhà, cổng châu Âu)"
+ ]
 }

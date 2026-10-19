@@ -27,6 +27,7 @@ import {
   chunkDone,
 } from "../../scripts/footage-composite";
 import { speechLeadFrames } from "../../src/episode";
+import { getSeries } from "../../src/series";
 import { FORMATS, type VideoFormat } from "../../src/layout";
 import { mixBgmIntoVoice } from "@shared/audio/bgm-mix";
 import { getModel } from "../../../shared/transcribe/whisper-config";
@@ -676,6 +677,7 @@ async function runJob(job: JobInternal): Promise<void> {
           await buildFootageBg(footageAbs, durationSec, footageBg, {
             themeColor: episodeConfig.accentColor,
             size: FORMATS[job.format],
+            look: getSeries(episodeConfig.series).footageLook,
           });
         }
         checkAbort();

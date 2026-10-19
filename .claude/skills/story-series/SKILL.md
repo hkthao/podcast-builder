@@ -18,7 +18,7 @@ Luồng: **nội dung → story.json → Gemini TTS → user nghe QC → story-a
 Transcript = chữ kịch bản căn vào timing whisper + chương từ kịch bản → render BỎ QUA whisper sửa chữ, spell-fix, LLM editorial (không tốn OpenAI).
 
 ## Bước 1 — Tạo tập
-Tạo qua UI (trang danh sách của series → "Tạo tập mới"; ô kế hoạch → "Tạo tập") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Server tự điền mặc định series (`editorialLocked: true`; `hook: null` nếu series `hookCard: false` như Chuyện Xưa; nhạc nền gần nhất của series) — không cần sửa config.
+Tạo qua UI (trang danh sách của series → "Tạo tập mới"; ô kế hoạch → "Tạo tập") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Server tự điền mặc định series (`editorialLocked: true`; `hook: null` nếu series `hookCard: false` (Chuyện Xưa, Dòng Họ Việt — hook nằm trong kịch bản); nhạc nền gần nhất của series) — không cần sửa config.
 
 ## Bước 2 — Viết `input/<slug>.story.json`
 ```json

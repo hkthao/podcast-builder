@@ -68,7 +68,7 @@ const clipHasPeople = async (videoPath: string): Promise<boolean> => {
       model: "gpt-4o",
       messages: [
         { role: "system", content: 'Trả JSON {"people":true|false}. people=true nếu ảnh có bất kỳ NGƯỜI nào (mặt, thân, tay, đám đông). Chỉ JSON.' },
-        { role: "user", content: [{ type: "text", text: "Ảnh này có người không?" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } }] as any },
+        { role: "user", content: [{ type: "text", text: "Ảnh này có người không?" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "low" } }] as any },
       ],
       temperature: 0,
       response_format: { type: "json_object" },

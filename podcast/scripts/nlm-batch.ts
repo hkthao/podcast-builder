@@ -21,7 +21,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 
 const MIN_MIN = 14;
-const MAX_MIN = 18;
+const MAX_MIN = 20; // user 2026-10-18: ~19' vẫn ổn nếu audio đủ chất lượng
 const TARGET_MIN = 16;
 const POLL_SEC = 45;
 const POLL_MAX_MIN = 40;
@@ -119,14 +119,28 @@ async function main() {
     } catch (e) {
       log(`⚠ audio create báo lỗi (có thể hết quota): ${(e as Error).message.slice(0, 160)}`);
     }
+    // nlm tự retry khi RESOURCE_EXHAUSTED và MỖI lần retry có thể đã tạo 1 artifact (bản ma —
+    // memory nlm-audio-create-retry-ghost-artifacts) → đợi status ổn định, giữ 1, xoá phần thừa.
+    await new Promise((r) => setTimeout(r, 15_000));
     const added = audioArtifacts().filter((a) => !before.has(a.id)).map((a) => a.id);
     if (!added.length) {
       log("Không tạo thêm được bản nào — dừng gen (quota?).");
       break;
     }
-    st.artifacts.push(...added.filter((id) => !st.artifacts.includes(id)));
+    const [keep, ...ghosts] = added;
+    for (const g of ghosts) {
+      try {
+        nlm(["studio", "delete", NB, g, "--confirm"]);
+      } catch (e) {
+        log(`⚠ không xoá được bản ma ${g}: ${(e as Error).message.slice(0, 120)}`);
+      }
+    }
+    if (ghosts.length) log(`xoá ${ghosts.length} bản ma do nlm tự retry`);
+    st.artifacts.push(keep);
     save();
-    log(`đã yêu cầu bản ${st.artifacts.length} (${added.join(",")})`);
+    log(`đã yêu cầu bản ${st.artifacts.length} (${keep})`);
+    // Giãn cách giữa các lần create để đỡ dính rate limit.
+    if (i < want - 1) await new Promise((r) => setTimeout(r, 60_000));
   }
 
   // 4+5. Poll → tải từng bản khi xong. Status "unknown" (nlm bản cũ luôn vậy — memory

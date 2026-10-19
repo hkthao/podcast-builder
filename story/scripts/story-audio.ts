@@ -35,7 +35,15 @@ for (let n = 1; n <= attempts; n++) {
   last.attempts = n;
   const tts = tsx("story-tts-gemini.ts", [slug]);
   if (tts.status !== 0) {
-    console.error(tts.stdout + tts.stderr);
+    // Lỗi mạng/timeout Gemini (HeadersTimeoutError, fetch failed, 5xx) hay gặp khi gen nhiều tập
+    // liền → thử lại lượt sau thay vì dừng cả hàng đợi.
+    const msg = (tts.stdout + tts.stderr).slice(-600);
+    if (n < attempts && /fetch failed|timeout|ECONNRESET|5\d\d|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg)) {
+      log(`lần ${n}: TTS lỗi mạng/quota → thử lại sau 30s`);
+      spawnSync("sleep", ["30"]); // file chạy CJS → không dùng top-level await
+      continue;
+    }
+    console.error(msg);
     process.exit(1);
   }
   const al = tsx("story-align.ts", [slug]);

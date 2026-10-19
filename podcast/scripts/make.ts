@@ -15,6 +15,7 @@ import {
   speechLeadFrames,
   type EpisodeConfig,
 } from "../src/episode";
+import { getSeries } from "../src/series";
 import { INTRO_SECONDS, hookSeconds, HEAD_MUSIC_EXTRA_SECONDS } from "../src/timing";
 import { processAudio } from "../../shared/audio/process-audio";
 import { transcribeAudio } from "../../shared/transcribe/transcribe";
@@ -395,6 +396,7 @@ async function main() {
         await buildFootageBg(footageAbs, durationSec, footageBg, {
           themeColor: episode.accentColor,
           size: FORMATS[format],
+          look: getSeries(episode.series).footageLook,
         });
       }
       // B2: render ProRes alpha theo đoạn + ghép ngay + xoá ProRes.

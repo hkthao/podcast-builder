@@ -83,6 +83,25 @@ export type FootageBgOpts = {
   themeColor?: string | null;
   /** Khung nền — mặc định dọc 1080×1920; bản YouTube truyền 1920×1080. */
   size?: { width: number; height: number };
+  /** Tông footage theo series (series.ts → footageLook). "vintage" = phim xưa. */
+  look?: FootageLook | null;
+};
+
+export type FootageLook = "vintage";
+
+/**
+ * "vintage" (Chuyện Xưa — khớp cover thuỷ mặc giấy dó): gần đen trắng ngả sepia
+ * nhẹ, tương phản mềm, tối nhẹ, viền tối + hạt phim. Clip Pexels màu sặc sỡ cũng
+ * về chung 1 tông → cả video như thước phim cũ.
+ */
+const LOOK_FILTERS: Record<FootageLook, string[]> = {
+  vintage: [
+    "eq=saturation=0.18:contrast=1.06:brightness=-0.045:gamma=0.97",
+    "colorbalance=rs=0.05:bs=-0.06:rm=0.07:gm=0.025:bm=-0.07:rh=0.05:bh=-0.05",
+    "vignette=PI/4.5",
+    // KHÔNG thêm noise/grain: hạt phim theo thời gian làm nền gần như không nén được
+    // (3,5' → 2,3GB, encode chậm gấp nhiều lần — đo 2026-10-18).
+  ],
 };
 
 /**
@@ -128,6 +147,7 @@ export async function buildFootageBg(
     eqParts.push(`eq=saturation=${FOOTAGE_DESAT}`);
     eqParts.push(cb);
   }
+  if (opts?.look) eqParts.push(...LOOK_FILTERS[opts.look]);
   const eqChain = eqParts.length ? "," + eqParts.join(",") : "";
 
   const chains: string[] = [];
