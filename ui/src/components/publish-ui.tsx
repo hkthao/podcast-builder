@@ -32,7 +32,8 @@ export function buildDisclosure(opts: {
   } else {
     lines.push(`Kịch bản gốc do ${opts.editor} biên soạn và biên tập.`);
   }
-  if (opts.musicCredit) lines.push(`Nhạc nền: ${opts.musicCredit}.`);
+  // Ghi công cũ có sẵn tiền tố "Nhạc:" → bỏ để không thành "Nhạc nền: Nhạc: …".
+  if (opts.musicCredit) lines.push(`Nhạc nền: ${opts.musicCredit.replace(/^Nhạc( nền)?:\s*/i, "").replace(/\.$/, "")}.`);
   if (opts.footageCredit) lines.push(`${opts.footageCredit}.`);
   if (opts.sources.length) {
     lines.push(`Nguồn tham khảo: ${opts.sources.join("; ")}.`);
