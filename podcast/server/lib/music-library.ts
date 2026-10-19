@@ -59,7 +59,8 @@ const readJson = <T>(file: string, fallback: T): T => {
 const licenseLabel = (l: string) => (l === "CC0" ? "CC0" : "Public Domain");
 
 export const musicCredit = (t: LibTrack): string =>
-  `Nhạc: ${t.composer} — ${t.work} (${t.performer}; ${licenseLabel(t.license)}, Wikimedia Commons)`;
+  // KHÔNG tiền tố "Nhạc:" — mô tả bài đã tự thêm "Nhạc nền: …".
+  `${t.composer} — ${t.work} (${t.performer}; ${licenseLabel(t.license)}, Wikimedia Commons)`;
 
 /** Tập chưa đăng (draft/ready/scheduled) → bài nhạc đang giữ. */
 function upcomingByTrack(): Map<string, string[]> {

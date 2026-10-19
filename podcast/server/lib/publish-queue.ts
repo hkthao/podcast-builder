@@ -71,7 +71,9 @@ export const buildEpisodeDescription = (config: EpisodeConfig): string => {
   } else {
     lines.push(`Kịch bản gốc do ${editor} biên soạn và biên tập.`);
   }
-  if (config.musicCredit?.trim()) lines.push(`Nhạc nền: ${config.musicCredit.trim()}.`);
+  // Ghi công cũ có sẵn tiền tố "Nhạc:" → bỏ để không thành "Nhạc nền: Nhạc: …" (khớp publish-ui).
+  const music = config.musicCredit?.trim().replace(/^Nhạc( nền)?:\s*/i, "").replace(/\.$/, "");
+  if (music) lines.push(`Nhạc nền: ${music}.`);
   if (config.footageCredit?.trim()) lines.push(`${config.footageCredit.trim()}.`);
   const sources = (config.sources ?? []).map((s) => s.trim()).filter(Boolean);
   if (sources.length) lines.push(`Nguồn tham khảo: ${sources.join("; ")}.`);
