@@ -1654,3 +1654,41 @@ export const commentsApi = {
 };
 
 export { ApiError };
+
+// ─── Hàng đợi đăng Facebook (upload nền trên server) ──────────────────────
+export type PublishJobStatus = "queued" | "uploading" | "done" | "error" | "cancelled";
+export type PublishJob = {
+  id: string;
+  episodeName: string;
+  title: string;
+  series: string;
+  scheduledAt: string | null;
+  playlistId?: string;
+  playlistName?: string;
+  status: PublishJobStatus;
+  percent: number;
+  bytesSent: number;
+  bytesTotal: number;
+  bytesPerSec: number;
+  message: string;
+  log: { at: number; line: string }[];
+  createdAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+  error: string | null;
+  result: { videoId: string; permalink: string | null; pageName: string; scheduled: boolean } | null;
+};
+export type PublishEnqueueItem = { episodeName: string; scheduledAt?: string | null; playlistId?: string; playlistName?: string };
+
+export const publishApi = {
+  list: () => jsonFetch<{ jobs: PublishJob[] }>("/api/publish/jobs"),
+  enqueue: (items: PublishEnqueueItem[]) =>
+    jsonFetch<{ jobs: PublishJob[]; errors: { episodeName: string; error: string }[] }>("/api/publish/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    }),
+  cancel: (id: string) => jsonFetch<{ cancelled: boolean }>(`/api/publish/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  retry: (id: string) => jsonFetch<PublishJob>(`/api/publish/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
+  clearFinished: () => jsonFetch<{ removed: number }>("/api/publish/jobs/_clear", { method: "POST" }),
+};

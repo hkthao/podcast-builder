@@ -63,56 +63,27 @@ import { GEMINI_TTS_BLOCKED_CODE } from "../../../shared/studio-core/tts-provide
 import { mixBgmIntoVoice } from "../../../shared/audio/bgm-mix";
 import { PATHS } from "../../../shared/studio-core/paths";
 import { getApiKey } from "../../../shared/studio-core/api-keys-store";
-import { publishReel, listPlaylists, resolvePage } from "../../../shared/studio-core/facebook";
+import { listPlaylists, resolvePage } from "../../../shared/studio-core/facebook";
 import { generateCoverImage } from "../lib/cover-image";
-import { buildEpisodeSrt } from "../lib/srt";
+import {
+  enqueuePublish,
+  fbPageIdFor,
+  listPublishJobs,
+  subscribePublishJob,
+  type PublishJob,
+} from "../lib/publish-queue";
 import { streamSSE } from "hono/streaming";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import crypto from "node:crypto";
 import type { LLMProvider } from "../../../shared/studio-core/llm-providers";
-import type { EpisodeConfig } from "../../src/episode";
 import { SERIES_IDS, getSeries, type SeriesId } from "../../src/series";
 
 export const episodesRoutes = new Hono();
 
-/** ID Trang FB của series (env theo series.fbPageIdEnv; trống → token tự chọn Trang). */
-const fbPageIdFor = (series: string | null | undefined): string | undefined =>
-  process.env[getSeries(series).fbPageIdEnv]?.trim() || undefined;
-
 const parseSeries = (v: unknown): SeriesId | undefined =>
   typeof v === "string" && (SERIES_IDS as readonly string[]).includes(v) ? (v as SeriesId) : undefined;
-
-/**
- * Dựng mô tả đầy đủ để đăng (khớp logic fullCaption + buildDisclosure ở
- * PublishTab): caption + hashtags + khối công bố AI/ghi công. Server tự dựng
- * từ config đã lưu (UI auto-save trước khi đăng).
- */
-const buildEpisodeDescription = (config: EpisodeConfig): string => {
-  const caption = config.publishCaption?.trim() ?? "";
-  const hashtagLine = (config.publishHashtags ?? []).map((h) => `#${h}`).join(" ");
-  // Tên kênh theo series (khớp PublishTab UI) — dùng khi scriptCredit trống.
-  const brandName = getSeries(config.series).channelName;
-  const editor = config.scriptCredit?.trim() || brandName;
-  const lines: string[] = [];
-  if (config.aiAssisted) {
-    lines.push(
-      `Kịch bản gốc do ${editor} biên soạn và biên tập từ nhiều nguồn tham khảo; phần lời dẫn được tạo bằng công cụ giọng nói AI, do ${brandName} định hướng và biên tập.`,
-    );
-  } else {
-    lines.push(`Kịch bản gốc do ${editor} biên soạn và biên tập.`);
-  }
-  if (config.musicCredit?.trim()) lines.push(`Nhạc nền: ${config.musicCredit.trim()}.`);
-  if (config.footageCredit?.trim()) lines.push(`${config.footageCredit.trim()}.`);
-  const sources = (config.sources ?? []).map((s) => s.trim()).filter(Boolean);
-  if (sources.length) lines.push(`Nguồn tham khảo: ${sources.join("; ")}.`);
-  const disclosure = lines.join("\n");
-  return [caption, hashtagLine, disclosure]
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .join("\n\n");
-};
 
 episodesRoutes.get("/", async (c) => {
   const styleParam = c.req.query("style");
@@ -700,10 +671,10 @@ episodesRoutes.post("/:name/playlist-suggestion", async (c) => {
 });
 
 /**
- * SSE: đăng video render (output/<name>.mp4) lên Trang Facebook dạng Reel.
- * Mô tả dựng từ config đã lưu (caption + hashtag + khối công bố). Khi xong ghi
- * fbReelId/fbPermalink + publishStatus="published"/publishedAt vào config.
- * Playlist (nếu chọn) chỉ lưu để nhắc thêm tay — API không cho tự thêm.
+ * SSE: đăng video render (output/<name>.mp4) lên Trang Facebook — lớp mỏng trên hàng
+ * đợi đăng (lib/publish-queue): xếp job rồi stream log tới khi xong. Ngắt kết nối KHÔNG
+ * huỷ upload (job chạy nền, xem /publish-queue). Event giữ như cũ: log / published / error / done.
+ * Query: scheduledAt (ISO), playlistId, playlistName.
  */
 episodesRoutes.get("/:name/publish", (c) => {
   const name = c.req.param("name");
@@ -712,149 +683,68 @@ episodesRoutes.get("/:name/publish", (c) => {
     const send = (event: string, data: unknown) =>
       stream.writeSSE({ event, data: JSON.stringify(data), id: String(++id) });
 
-    const summary = await getEpisode(name);
-    if (!summary) {
-      await send("error", { message: `Không tìm thấy tập "${name}".` });
-      await send("done", { code: 1 });
-      return;
-    }
-
-    const videoPath = path.join(PATHS.OUTPUT_DIR, `${name}.mp4`);
+    let job: PublishJob;
     try {
-      await fs.stat(videoPath);
-    } catch {
-      await send("error", { message: "Chưa có video render (output/" + name + ".mp4) — sang tab Render bấm 'Render full' trước." });
-      await send("done", { code: 1 });
-      return;
-    }
-
-    const token = getApiKey("facebook");
-    if (!token) {
-      await send("error", {
-        message: "Chưa có Facebook Page Access Token — vào Settings để nhập (provider Facebook).",
+      job = await enqueuePublish({
+        episodeName: name,
+        scheduledAt: c.req.query("scheduledAt")?.trim() || null,
+        playlistId: c.req.query("playlistId")?.trim() || undefined,
+        playlistName: c.req.query("playlistName")?.trim() || undefined,
       });
+    } catch (e) {
+      await send("error", { message: e instanceof Error ? e.message : String(e) });
       await send("done", { code: 1 });
       return;
     }
 
-    const description = buildEpisodeDescription(summary.config);
-    const playlistId = c.req.query("playlistId")?.trim() || undefined;
-    const playlistName = c.req.query("playlistName")?.trim() || undefined;
-
-    // Lên lịch (scheduler FB): scheduledAt là ISO. FB yêu cầu 10 phút–75 ngày.
-    let scheduledPublishTime: number | undefined;
-    let scheduledIso: string | undefined;
-    const scheduledAt = c.req.query("scheduledAt")?.trim();
-    if (scheduledAt) {
-      const ms = Date.parse(scheduledAt);
-      if (Number.isNaN(ms)) {
-        await send("error", { message: "Thời điểm lên lịch không hợp lệ." });
-        await send("done", { code: 1 });
-        return;
-      }
-      const now = Date.now();
-      if (ms < now + 10 * 60_000) {
-        await send("error", { message: "Lên lịch phải cách hiện tại ít nhất 10 phút (yêu cầu của Facebook)." });
-        await send("done", { code: 1 });
-        return;
-      }
-      if (ms > now + 75 * 24 * 3600_000) {
-        await send("error", { message: "Lên lịch tối đa 75 ngày kể từ bây giờ (yêu cầu của Facebook)." });
-        await send("done", { code: 1 });
-        return;
-      }
-      scheduledPublishTime = Math.floor(ms / 1000);
-      scheduledIso = new Date(ms).toISOString();
+    const lines: string[] = job.log.map((l) => l.line);
+    const ahead = listPublishJobs().filter((j) => j.status === "queued" && j.createdAt < job.createdAt).length;
+    if (job.status === "queued") {
+      lines.push(
+        `Đã xếp vào hàng đợi đăng${ahead ? ` (chờ ${ahead} tập trước)` : ""} — đóng trang không huỷ upload, theo dõi ở "Hàng đợi đăng".`,
+      );
     }
-
-    // Bridge onProgress (sync) → SSE (async) qua queue + wake.
-    const queue: string[] = [];
     let resume: (() => void) | null = null;
     const wake = () => { const r = resume; resume = null; r?.(); };
-    const onProgress = (msg: string) => { queue.push(msg); wake(); };
-
-    const ac = new AbortController();
-    stream.onAbort(() => ac.abort());
-
-    await send("log", {
-      line: scheduledIso
-        ? `Lên lịch "${name}.mp4" đăng lúc ${new Date(scheduledIso).toLocaleString("vi-VN")}…`
-        : `Đăng "${name}.mp4" lên Facebook…`,
+    let lastPct = -10;
+    const unsub = subscribePublishJob(job.id, (j, line) => {
+      if (line) lines.push(line);
+      else if (j.status === "uploading" && j.percent >= lastPct + 10) {
+        lastPct = Math.floor(j.percent / 10) * 10;
+        lines.push(`Đã tải ${lastPct}%…`);
+      }
+      wake();
     });
-
-    const holder: {
-      done: boolean;
-      result: Awaited<ReturnType<typeof publishReel>> | null;
-      error: string | null;
-    } = { done: false, result: null, error: null };
-    const task = publishReel({
-      token,
-      pageIdOverride: fbPageIdFor(summary.config.series),
-      // Phân loại cho thuật toán + nhãn riêng tư để lọc thống kê (đo reach đăng qua API).
-      contentCategory: getSeries(summary.config.series).fbContentCategory,
-      customLabels: [getSeries(summary.config.series).id, "studio-api"],
-      captionsSrt: getSeries(summary.config.series).fbUploadSrt ? buildEpisodeSrt(name, summary.config) : null,
-      videoPath,
-      description,
-      title: summary.config.title,
-      thumbPath: summary.config.coverImage
-        ? path.join(PATHS.INPUT_DIR, summary.config.coverImage)
-        : null,
-      scheduledPublishTime,
-      onProgress,
-      signal: ac.signal,
-    })
-      .then((r) => { holder.result = r; })
-      .catch((e) => { holder.error = e instanceof Error ? e.message : String(e); })
-      .finally(() => { holder.done = true; wake(); });
-
-    while (!holder.done || queue.length) {
-      if (!queue.length) {
+    stream.onAbort(() => { unsub(); wake(); });
+    const final = () => job.status === "done" || job.status === "error" || job.status === "cancelled";
+    try {
+      while (!stream.aborted) {
+        if (lines.length) {
+          await send("log", { line: lines.shift()! });
+          continue;
+        }
+        if (final()) break;
         await new Promise<void>((r) => { resume = r; });
-        continue;
       }
-      await send("log", { line: queue.shift()! });
+    } finally {
+      unsub();
     }
-    await task;
+    if (stream.aborted) return;
 
-    if (holder.error) {
-      await send("error", { message: holder.error });
-      await send("done", { code: 1 });
-      return;
-    }
-
-    if (holder.result) {
-      const r = holder.result;
-      const updated: EpisodeConfig = {
-        ...summary.config,
-        publishStatus: r.scheduled ? "scheduled" : "published",
-        publishedAt: r.scheduled ? summary.config.publishedAt : new Date().toISOString(),
-        scheduledPublishTime: r.scheduled ? (scheduledIso ?? null) : null,
-        fbReelId: r.videoId,
-        fbPermalink: r.permalink,
-        ...(playlistId ? { fbPlaylistId: playlistId } : {}),
-        ...(playlistName ? { fbPlaylistName: playlistName } : {}),
-      };
-      try {
-        await saveEpisode(name, updated);
-      } catch {
-        /* lưu config lỗi không chặn kết quả đăng */
-      }
-      if (playlistName) {
-        await send("log", {
-          line: `Nhắc: mở Reel trên Facebook → menu (⋯) → "Thêm vào playlist" → "${playlistName}" (Facebook không cho tự thêm qua API).`,
-        });
-      }
+    if (job.status === "done" && job.result) {
       await send("published", {
-        videoId: r.videoId,
-        permalink: r.permalink,
-        pageName: r.pageName,
-        scheduled: r.scheduled,
-        scheduledAt: r.scheduled ? (scheduledIso ?? null) : null,
-        playlistName: playlistName ?? null,
+        videoId: job.result.videoId,
+        permalink: job.result.permalink,
+        pageName: job.result.pageName,
+        scheduled: job.result.scheduled,
+        scheduledAt: job.result.scheduled ? job.scheduledAt : null,
+        playlistName: job.playlistName ?? null,
       });
+      await send("done", { code: 0 });
+    } else {
+      await send("error", { message: job.error ?? "Đã huỷ upload." });
+      await send("done", { code: 1 });
     }
-    await send("done", { code: 0 });
   });
 });
 

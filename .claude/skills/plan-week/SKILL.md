@@ -24,7 +24,7 @@ curl -s http://localhost:3000/api/cleanup                  # dung lượng ổ +
 ## Cổng tự QC (thay các lần user duyệt trước đây)
 | Bước | Cổng tự động | Không đạt |
 |---|---|---|
-| Audio ByteCast (NotebookLM) | **Thời lượng 14–18'** (user chốt: chất lượng đã tốt, chỉ cần đúng thời lượng) + cắt đuôi im lặng | Roll bản khác (quota: Plus 6/5h, tài khoản khác 3) |
+| Audio ByteCast (NotebookLM) | **Thời lượng 14–20'** (gần 16' tốt nhất; bản 18–20' phải qua `audio-qc --podcast` — user 2026-10-18: "19 phút cũng tạm ổn miễn là audio đủ chất lượng") + cắt đuôi im lặng | Roll bản khác (quota: Plus 6/5h, tài khoản khác 3) |
 | Audio kể chuyện (Gemini TTS) | `npx tsx story/scripts/audio-qc.ts <slug>` (exit 0 = giọng Bắc đều) + whisper.cpp **có timestamp** đối chiếu đủ chữ + % neo ≥85 | Gen lại tối đa 2 lần, vẫn lỗi → báo cáo |
 | Footage | Contact sheet khung giữa từng shot → Claude XEM: không người, không lạc ý, không lặp | Sửa query / thay riêng shot |
 | Cover | Claude XEM ảnh: chữ tiếng Việt đúng từng dấu, đọc rõ, đúng phong cách kênh | Tạo lại tối đa 3 lần (yêu cầu chữ serif rõ) |
@@ -49,10 +49,19 @@ curl -s http://localhost:3000/api/cleanup                  # dung lượng ổ +
 9. **Cover cả loạt** (prompt theo phong cách kênh → `POST /api/episodes/<slug>/cover-image?provider=gemini`) → cổng cover.
 10. **Render:** `POST /api/render {"episodeName","preview":false,"regenTranscribe":false,"regenPlan":true}` cho mọi tập đủ điều kiện (server chạy 2 job song song; KHÔNG `git checkout` khi đang render) → chờ bằng Bash nền (`until` poll `/api/render/jobs`), không ngồi poll tay → cổng render.
 11. **Caption + playlist:** điền `publishCaption`, `publishHashtags`, `sources`, `musicCredit`, `aiAssisted:true`, `fbPlaylistId/Name`, `publishStatus:"ready"` theo hướng dẫn từng kênh.
-12. **Báo cáo cuối** (bảng ngày × kênh): ✓ sẵn sàng hẹn giờ / ⚠ việc còn dở + lý do (quota, thiếu nguyên văn, QC trượt) + dung lượng ổ còn lại. Nhắc user: **mở /plan → bấm "Hẹn giờ N tập đã render"** (FB yêu cầu giờ hẹn cách hiện tại ≥10 phút, ≤75 ngày; tập >90s đăng qua `/{page}/videos` + tiêu đề + cover). Chỉ khi user nhờ mới tự hẹn giờ bằng CLI:
+12. **Báo cáo cuối** (bảng ngày × kênh): ✓ sẵn sàng hẹn giờ / ⚠ việc còn dở + lý do (quota, thiếu nguyên văn, QC trượt) + dung lượng ổ còn lại. Nhắc user: **mở /plan → bấm "Hẹn giờ N tập đã render"** (FB yêu cầu giờ hẹn cách hiện tại ≥10 phút, ≤75 ngày; tập >90s đăng qua `/{page}/videos` chia chunk + tiêu đề + cover). Upload chạy NỀN trên server qua **hàng đợi đăng** (tuần tự, ~1 MB/s → tập 1GB ≈ 20-30'), tiến độ hiện ở **/publish-queue** + ô trên /plan + badge sidebar. Chỉ khi user nhờ mới tự hẹn giờ — xếp 1 lần rồi để server chạy, KHÔNG giữ curl/SSE:
     ```bash
-    curl -sN "http://localhost:3000/api/episodes/<slug>/publish?scheduledAt=<ISO>"
+    curl -s -X POST http://localhost:3000/api/publish/jobs -H 'Content-Type: application/json' \
+      -d '{"items":[{"episodeName":"<slug>","scheduledAt":"2026-10-21T19:00:00+07:00"}, ...]}'
+    curl -s http://localhost:3000/api/publish/jobs   # trạng thái: status/percent/bytesPerSec/error
     ```
+    Lỗi `code 190/463` = token FB hết hạn → nhờ user nhập **token dài hạn** (Access Token Debugger → Extend; token ngắn chỉ sống 1-2h, chết giữa đợt upload) rồi `POST /api/publish/jobs/<id>/retry`.
+
+## Bẫy đã gặp (lượt chạy 18/10/2026)
+- **footage-plan --apply chạy TUẦN TỰ** (cùng ghi `input/_footage-used.json`); xếp theo NGÀY ĐĂNG, không theo thứ tự làm. Pexels hay trả: tay người (people-check bỏ sót), đồ tôn giáo khác (thánh giá, kinh Ả Rập/Do Thái), kiến trúc châu Âu → luôn xem contact sheet khung giữa, thay shot lỗi bằng shot đạt cùng beat (sửa `config.footage[i]`), không cần tải lại.
+- **NotebookLM:** bản "in_progress" >45' = kẹt → gen thêm bản mới (`nlm-batch --takes=1`), đừng chờ. Thời lượng dao động mạnh (10' / 23' / 15.5' cùng 1 notebook) → thường cần 3 bản/tập; cổng 14–20'.
+- **Sửa file server/render (tsx watch) khi đang render = giết job** → gom sửa code vào lúc hàng đợi trống.
+- Gemini TTS đôi khi timeout mạng → `story-audio.ts` tự thử lại.
 
 ## Đo reach (đang thử nghiệm)
 Từ 2026-10-18 hẹn giờ đăng qua API **1 tuần để đo lại reach** (trước đây đăng API qua Reels chỉ 100–200 view so với đăng tay 2k–4k; đã đổi sang `/videos` kèm tiêu đề + cover). Sau tuần thử, so view các tập đăng API với các tập đăng tay trước đó và báo user trước khi quyết định giữ hay quay lại đăng tay.

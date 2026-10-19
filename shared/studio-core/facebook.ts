@@ -555,9 +555,11 @@ async function uploadPageVideo(opts: {
   /** Nhãn RIÊNG TƯ (không công khai) — lọc video trong thống kê, vd đo reach đăng qua API. */
   customLabels?: string[];
   onProgress?: FbProgress;
+  /** Gọi sau mỗi chunk: số byte FB đã nhận / tổng (hàng đợi đăng hiện % + tốc độ). */
+  onUploadBytes?: (sent: number, total: number) => void;
   signal?: AbortSignal;
 }): Promise<string> {
-  const { token, pageId, videoPath, title, description, thumbPath, scheduledPublishTime, contentCategory, customLabels, onProgress, signal } = opts;
+  const { token, pageId, videoPath, title, description, thumbPath, scheduledPublishTime, contentCategory, customLabels, onProgress, onUploadBytes, signal } = opts;
   const fileSize = fs.statSync(videoPath).size;
 
   // 1) start
@@ -599,6 +601,7 @@ async function uploadPageVideo(opts: {
       }
       start = Number(body.start_offset);
       end = Number(body.end_offset);
+      onUploadBytes?.(start >= end ? fileSize : Math.min(start, fileSize), fileSize);
       const pct = Math.floor((start / fileSize) * 100);
       if (pct >= lastPct + 10 || start >= end) {
         onProgress?.(`Đã tải ${Math.min(pct, 100)}%…`);
@@ -674,11 +677,13 @@ export async function publishReel(opts: {
   /** Nội dung SRT → gắn phụ đề CC sau khi tải (lỗi không chặn việc đăng). */
   captionsSrt?: string | null;
   onProgress?: FbProgress;
+  /** Byte đã tải / tổng (video thường: sau mỗi chunk; Reel: 1 lần khi tải xong). */
+  onUploadBytes?: (sent: number, total: number) => void;
   signal?: AbortSignal;
 }): Promise<PublishReelResult> {
   const {
     token, pageIdOverride, videoPath, description, title, thumbPath, scheduledPublishTime,
-    contentCategory, customLabels, captionsSrt, onProgress, signal,
+    contentCategory, customLabels, captionsSrt, onProgress, onUploadBytes, signal,
   } = opts;
   if (!fs.existsSync(videoPath)) {
     throw new Error(`Không tìm thấy video: ${videoPath} — hãy Assemble (ráp mp4) trước.`);
@@ -704,6 +709,8 @@ export async function publishReel(opts: {
     videoId = s.videoId;
     onProgress?.(`Đang tải video lên Facebook (${sizeMb} MB)…`);
     await uploadBinary(s.uploadUrl, pageToken, videoPath, signal);
+    const size = fs.statSync(videoPath).size;
+    onUploadBytes?.(size, size);
     onProgress?.(isScheduled ? "Đang chốt & lên lịch Reel…" : "Đang chốt & xuất bản Reel…");
     await finishReel(pageToken, page.id, videoId, description, scheduledPublishTime, signal);
   } else {
@@ -723,6 +730,7 @@ export async function publishReel(opts: {
       contentCategory,
       customLabels,
       onProgress,
+      onUploadBytes,
       signal,
     });
   }

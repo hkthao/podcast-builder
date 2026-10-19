@@ -13,6 +13,7 @@ import { PromptsPage } from "./pages/Prompts";
 import { CommentsPage } from "./pages/Comments";
 import { PlanPage } from "./pages/Plan";
 import { RenderQueuePage } from "./pages/RenderQueue";
+import { PublishQueuePage } from "./pages/PublishQueue";
 import { CleanupPage } from "./pages/Cleanup";
 import { useEpisodesChangedSync } from "./lib/sse";
 
@@ -34,6 +35,7 @@ export function App() {
           <Route path="/comments" element={<CommentsPage />} />
           <Route path="/plan" element={<PlanPage />} />
           <Route path="/render-queue" element={<RenderQueuePage />} />
+          <Route path="/publish-queue" element={<PublishQueuePage />} />
           <Route path="/cleanup" element={<CleanupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/prompts" element={<PromptsPage />} />

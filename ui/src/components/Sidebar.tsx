@@ -13,8 +13,9 @@ import {
   CalendarDays,
   HardDrive,
   Clapperboard,
+  UploadCloud,
 } from "lucide-react";
-import { api, cleanupApi, type EpisodeStatus } from "@/lib/api";
+import { api, cleanupApi, publishApi, type EpisodeStatus } from "@/lib/api";
 import { LOW_DISK_BYTES, fmtBytes } from "@/pages/Cleanup";
 import { cn } from "@/lib/utils";
 import { usePersistedState } from "@/lib/persist";
@@ -48,6 +49,15 @@ export function Sidebar() {
   // Dung lượng ổ trống — đỏ khi < 15 GB (render tập dài cần ~8 GB scratch).
   const diskQ = useQuery({ queryKey: ["disk"], queryFn: () => cleanupApi.disk(), refetchInterval: 60_000 });
   const lowDisk = !!diskQ.data && diskQ.data.freeBytes < LOW_DISK_BYTES;
+  // Hàng đợi đăng FB: badge "còn N · %" khi đang tải (job chạy nền trên server, kể cả từ skill).
+  const publishQ = useQuery({
+    queryKey: ["publish-jobs"],
+    queryFn: () => publishApi.list(),
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some((j) => j.status === "queued" || j.status === "uploading") ? 3000 : 30_000,
+  });
+  const pubActive = (publishQ.data?.jobs ?? []).filter((j) => j.status === "queued" || j.status === "uploading");
+  const pubUploading = pubActive.find((j) => j.status === "uploading");
   const seriesOf = (ep: { config: { series?: string } }) => ep.config.series ?? "bytecast";
   /** "Podcast · 70 tập" — đang tải thì chỉ hiện loại (tránh "0 tập" chớp lên). */
   const metaOf = (kind: string, series: string) =>
@@ -113,6 +123,16 @@ export function Sidebar() {
             to="/render-queue"
             icon={<Clapperboard className="size-4" />}
             label="Hàng đợi render"
+          />
+          <NavItem
+            to="/publish-queue"
+            icon={<UploadCloud className={cn("size-4", pubUploading && "text-accent")} />}
+            label="Hàng đợi đăng"
+            badge={
+              pubActive.length
+                ? `${pubActive.length}${pubUploading ? ` · ${Math.floor(pubUploading.percent)}%` : ""}`
+                : undefined
+            }
           />
           <NavLink
             to="/cleanup"
@@ -256,11 +276,13 @@ function NavItem({
   icon,
   label,
   end = true,
+  badge,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   end?: boolean;
+  badge?: string;
 }) {
   return (
     <NavLink
@@ -276,6 +298,7 @@ function NavItem({
     >
       {icon}
       {label}
+      {badge && <span className="ml-auto text-xs tabular-nums text-muted-foreground">{badge}</span>}
     </NavLink>
   );
 }

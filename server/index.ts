@@ -20,6 +20,8 @@ import { visualRoutes } from "../podcast/server/routes/visual";
 import { commentsRoutes } from "../podcast/server/routes/comments";
 import { planRoutes } from "../podcast/server/routes/plan";
 import { cleanupRoutes } from "../podcast/server/routes/cleanup";
+import { publishRoutes } from "../podcast/server/routes/publish";
+import { resumePublishQueue } from "../podcast/server/lib/publish-queue";
 import { startFsWatcher } from "../shared/studio-core/events";
 import { sseFromBus } from "../shared/studio-core/sse";
 import {
@@ -88,6 +90,7 @@ app.route("/api/scenes", scenesRoutes);
 app.route("/api/comments", commentsRoutes);
 app.route("/api/plan", planRoutes);
 app.route("/api/cleanup", cleanupRoutes);
+app.route("/api/publish", publishRoutes);
 
 /**
  * Serve static files cho 3 dir: input/, output/, tmp/.
@@ -177,6 +180,7 @@ app.get("/footage/*", async (c) => {
 });
 
 startFsWatcher();
+resumePublishQueue();
 
 app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
 app.onError((e, c) => {

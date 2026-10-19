@@ -4,7 +4,7 @@
  *
  * User chỉ rảnh chủ nhật: chủ nhật Claude Code (skill plan-week) làm hàng loạt các
  * tập trong lịch; trang này hiện tiến độ từng ô (suy ra từ file tập) + hẹn giờ đăng
- * qua API (dùng lại SSE /api/episodes/:name/publish?scheduledAt=…).
+ * qua hàng đợi đăng của server (POST /api/publish/jobs — tải nền, xem ở /publish-queue).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -25,8 +25,9 @@ import {
   Trash2,
   X as XIcon,
   FilePlus2,
+  UploadCloud,
 } from "lucide-react";
-import { api, planApi, type PlanIdea, type PlanSlot } from "@/lib/api";
+import { api, planApi, publishApi, type PlanIdea, type PlanSlot, type PublishJob } from "@/lib/api";
 import { SERIES_OPTIONS, seriesInfo, type SeriesId } from "@/lib/series";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,33 +58,6 @@ const addDays = (date: string, n: number) => {
   d.setDate(d.getDate() + n);
   return ymd(d);
 };
-
-/** Hẹn giờ đăng 1 tập qua SSE publish; resolve khi xong / lỗi. */
-function scheduleEpisode(name: string, scheduledAt: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const es = new EventSource(api.publishEpisodeUrl(name, { scheduledAt }));
-    let settled = false;
-    const finish = (err?: string) => {
-      if (settled) return;
-      settled = true;
-      es.close();
-      if (err) reject(new Error(err));
-      else resolve();
-    };
-    es.addEventListener("published", () => finish());
-    es.addEventListener("error", (e) => {
-      try {
-        finish(JSON.parse((e as MessageEvent).data).message as string);
-      } catch {
-        finish("Mất kết nối khi hẹn giờ");
-      }
-    });
-    es.addEventListener("done", (e) => {
-      const code = JSON.parse((e as MessageEvent).data).code as number;
-      finish(code === 0 ? undefined : "Hẹn giờ thất bại");
-    });
-  });
-}
 
 export function PlanPage() {
   const qc = useQueryClient();
@@ -116,6 +90,28 @@ export function PlanPage() {
     if (activeCount < prevActive.current) refresh();
     prevActive.current = activeCount;
   }, [activeCount]);
+
+  // Tập → job đăng FB đang chờ/đang tải (hàng đợi server) để ô hiện % tải.
+  const publishQ = useQuery({
+    queryKey: ["publish-jobs"],
+    queryFn: () => publishApi.list(),
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some((j) => j.status === "queued" || j.status === "uploading") ? 3000 : 30_000,
+  });
+  const publishingEps = useMemo(() => {
+    const m = new Map<string, PublishJob>();
+    for (const j of publishQ.data?.jobs ?? []) {
+      if (j.status === "queued" || j.status === "uploading") m.set(j.episodeName, j);
+    }
+    return m;
+  }, [publishQ.data]);
+  // Có tập vừa đăng/hẹn xong → làm mới tiến độ ô.
+  const pubCount = publishingEps.size;
+  const prevPub = useRef(pubCount);
+  useEffect(() => {
+    if (pubCount < prevPub.current) refresh();
+    prevPub.current = pubCount;
+  }, [pubCount]);
 
   // Render hàng loạt: đủ kịch bản + audio + footage + cover, chưa render (hoặc render cũ), chưa hẹn/đăng.
   const renderable = (q.data?.slots ?? []).filter(
@@ -165,22 +161,16 @@ export function PlanPage() {
       s.progress.rendered &&
       !s.progress.scheduled &&
       !s.progress.published &&
+      !publishingEps.has(s.episode) &&
       slotAt(s).getTime() > Date.now() + 15 * 60_000,
   );
-  const [batch, setBatch] = useState<{ done: number; total: number; errors: string[] } | null>(null);
-  const scheduleAll = async () => {
-    const list = schedulable;
-    setBatch({ done: 0, total: list.length, errors: [] });
-    for (const s of list) {
-      try {
-        await scheduleEpisode(s.episode!, slotAt(s).toISOString());
-      } catch (e) {
-        setBatch((b) => b && { ...b, errors: [...b.errors, `${s.date} ${seriesInfo(s.series).channelName}: ${(e as Error).message}`] });
-      }
-      setBatch((b) => b && { ...b, done: b.done + 1 });
-    }
-    refresh();
-  };
+  const scheduleMut = useMutation({
+    mutationFn: async () => {
+      const r = await publishApi.enqueue(schedulable.map((s) => ({ episodeName: s.episode!, scheduledAt: slotAt(s).toISOString() })));
+      if (r.errors.length) throw new Error(r.errors.map((e) => `${e.episodeName}: ${e.error}`).join(" · "));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["publish-jobs"] }),
+  });
 
   const days = useMemo(() => Array.from({ length: DAYS }, (_, i) => addDays(from, i)), [from]);
   const slotsBy = useMemo(() => {
@@ -243,14 +233,20 @@ export function PlanPage() {
             {renderMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Clapperboard className="size-4" />} Render{" "}
             {renderable.length} tập sẵn sàng
           </Button>
-          <Button size="sm" onClick={scheduleAll} disabled={!schedulable.length || (batch !== null && batch.done < batch.total)}>
-            <Send className="size-4" /> Hẹn giờ {schedulable.length} tập đã render
+          <Button
+            size="sm"
+            onClick={() => scheduleMut.mutate()}
+            disabled={!schedulable.length || scheduleMut.isPending}
+            title="Xếp các tập đã render vào hàng đợi đăng (server tải nền tuần tự, hẹn đúng giờ đăng của ô)"
+          >
+            {scheduleMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Hẹn giờ{" "}
+            {schedulable.length} tập đã render
           </Button>
         </div>
       </header>
 
-      {(activeCount > 0 || renderMut.error || createAllMut.error) && (
-        <Card className="mb-4 p-3 text-sm">
+      {(activeCount > 0 || pubCount > 0 || renderMut.error || createAllMut.error || scheduleMut.error) && (
+        <Card className="mb-4 space-y-1 p-3 text-sm">
           {activeCount > 0 && (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="size-4 animate-spin" /> Đang render {activeCount} tập —{" "}
@@ -259,27 +255,22 @@ export function PlanPage() {
               </Link>
             </span>
           )}
+          {pubCount > 0 && (
+            <div className="flex items-center gap-2">
+              <UploadCloud className="size-4 text-accent" /> Đang tải {pubCount} tập lên Facebook
+              {[...publishingEps.values()].find((j) => j.status === "uploading") &&
+                ` (${[...publishingEps.values()].find((j) => j.status === "uploading")!.title} ${Math.floor(
+                  [...publishingEps.values()].find((j) => j.status === "uploading")!.percent,
+                )}%)`}{" "}
+              —{" "}
+              <Link to="/publish-queue" className="text-accent hover:underline">
+                xem hàng đợi đăng
+              </Link>
+            </div>
+          )}
+          {scheduleMut.error && <div className="text-xs text-destructive">{String(scheduleMut.error)}</div>}
           {renderMut.error && <div className="text-xs text-destructive">{String(renderMut.error)}</div>}
           {createAllMut.error && <div className="text-xs text-destructive">{String(createAllMut.error)}</div>}
-        </Card>
-      )}
-
-      {batch && (
-        <Card className="mb-4 p-3 text-sm">
-          {batch.done < batch.total ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" /> Đang hẹn giờ {batch.done + 1}/{batch.total}…
-            </span>
-          ) : (
-            <span>
-              Đã xử lý {batch.total} tập{batch.errors.length ? ` — ${batch.errors.length} lỗi:` : " ✓"}
-            </span>
-          )}
-          {batch.errors.map((e) => (
-            <div key={e} className="text-xs text-destructive">
-              {e}
-            </div>
-          ))}
         </Card>
       )}
 
@@ -334,6 +325,7 @@ export function PlanPage() {
                         slot={slot}
                         at={slotAt(slot)}
                         renderJob={slot.episode ? renderingEps.get(slot.episode) ?? null : null}
+                        publishJob={slot.episode ? publishingEps.get(slot.episode) ?? null : null}
                         onChange={refresh}
                       />
                     ))}
@@ -354,27 +346,32 @@ function SlotCard({
   slot,
   at,
   renderJob,
+  publishJob,
   onChange,
 }: {
   slot: PlanSlot;
   at: Date;
   renderJob: RenderJob | null;
+  publishJob: PublishJob | null;
   onChange: () => void;
 }) {
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const createMut = useMutation({ mutationFn: () => planApi.createEpisode(slot.id), onSuccess: onChange });
   const p = slot.progress;
-  const canSchedule = !!slot.episode && p.rendered && !p.scheduled && !p.published && at.getTime() > Date.now() + 15 * 60_000;
+  const canSchedule =
+    !!slot.episode && p.rendered && !p.scheduled && !p.published && !publishJob && at.getTime() > Date.now() + 15 * 60_000;
 
   const schedule = async () => {
     setScheduling(true);
     setErr(null);
     try {
-      await scheduleEpisode(slot.episode!, at.toISOString());
-      onChange();
+      const r = await publishApi.enqueue([{ episodeName: slot.episode!, scheduledAt: at.toISOString() }]);
+      if (r.errors.length) setErr(r.errors[0].error);
+      qc.invalidateQueries({ queryKey: ["publish-jobs"] });
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -413,6 +410,11 @@ function SlotCard({
           </button>
         )}
       </div>
+      {publishJob?.status === "uploading" && (
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" title={publishJob.message}>
+          <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${publishJob.percent.toFixed(1)}%` }} />
+        </div>
+      )}
       {renderJob && renderJob.status !== "queued" && (
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" title={renderJob.message}>
           <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.round(renderJob.percent)}%` }} />
@@ -430,6 +432,11 @@ function SlotCard({
               <Clock className="size-3" />
               {new Date(p.scheduledAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
             </span>
+          ) : publishJob ? (
+            <Link to="/publish-queue" className="inline-flex items-center gap-1 text-sky-600 hover:underline dark:text-sky-400">
+              <UploadCloud className="size-3" />
+              {publishJob.status === "queued" ? "Chờ tải FB" : `Tải FB ${Math.floor(publishJob.percent)}%`}
+            </Link>
           ) : renderJob ? (
             <span className="inline-flex items-center gap-1 text-accent">
               <Loader2 className="size-3 animate-spin" />

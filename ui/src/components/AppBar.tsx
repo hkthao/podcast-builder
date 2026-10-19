@@ -11,6 +11,7 @@ import { OPEN_SHORTCUTS_EVENT } from "./ShortcutsHelp";
 const TOOL_PAGES: Record<string, string> = {
   "/plan": "Kế hoạch đăng",
   "/render-queue": "Hàng đợi render",
+  "/publish-queue": "Hàng đợi đăng",
   "/cleanup": "Dọn ổ cứng",
   "/comments": "Comment Facebook",
   "/scenes": "Mẫu cảnh podcast",
