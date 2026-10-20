@@ -19,7 +19,27 @@ uv run --no-project --with pymupdf python -I story/scripts/cohoc_split.py refere
 | `bai-hoc` | "Bài học hôm nay" | 2–3 tình huống hiện đại cụ thể (công sở, mạng xã hội, cha mẹ già, xa quê). |
 | `ket` | — | 1–2 câu hỏi mở cho người xem. |
 
-`source`: `{ "name": "Cổ học tinh hoa", "title": "<tên truyện>" }`. Độ dài ~700 chữ ≈ 4'.
+Độ dài audio ≥5' (NotebookLM tự diễn giải, thường 6–9').
+
+## ⭐ AUDIO = NOTEBOOKLM VIDEO OVERVIEW, 1 NGƯỜI KỂ (user chốt 2026-10-20) — KHÔNG Gemini TTS
+User muốn 1 người kể, ≥5', dùng NotebookLM. Audio Overview không làm được (deep_dive luôn 2 host, brief ~1.5').
+→ **Video Overview "explainer"** = 1 người thuyết minh, tiếng Việt OK; tải video rồi CHỈ LẤY TIẾNG.
+Thử "Tái ông mất ngựa" (2026-10-20): 9.2', giọng Bắc suốt, đúng khung truyện → bối cảnh → lời bàn → ngẫm nay → câu hỏi.
+Bảng cấu trúc ở trên giờ là KHUNG NỘI DUNG cho nguồn + focus (không còn là story.json đọc nguyên văn).
+
+1. Tạo tập: `POST /api/episodes {"title","series":"chuyen-xua"}`.
+2. Claude viết `input/<slug>.essay.txt` = truyện SÁT NGUYÊN VĂN + giải nghĩa + Lời bàn gốc của sách + góc bình riêng + 2–3 gợi ý bài học hôm nay (văn xuôi, không tiêu đề; ~600–900 chữ),
+   `input/<slug>.focus.txt` (**ASCII thuần**) theo mẫu dưới. Không cần sources.txt (nguồn là sách).
+3. `npx tsx podcast/scripts/nlm-batch.ts <slug>` — series này tự đi luồng VIDEO (SERIES_GATE: explainer, style heritage, 1 bản, cổng 5–15', ưu tiên ~8'), tách tiếng → `input/<slug>.m4a`.
+4. QC: `npx tsx story/scripts/audio-qc.ts <slug>` (giọng Bắc) → `npm run make -- input/<slug>.m4a --plan-only` → spell-fix-manual dump → Claude sửa → apply → `rm tmp/<slug>.plan.json`.
+   ⚠️ Whisper hay BỊA câu kiểu "Hãy subscribe cho kênh Ghiền Mì Gõ…" ở khoảng lặng cuối → xoá câu đó khi sửa.
+5. Editorial: Claude viết chương (tên truyện / Lời bàn người xưa / góc bình / Bài học hôm nay) + trích dẫn "Cổ học tinh hoa — <tên truyện>" → `editorial-manual.ts apply`.
+6. Footage-shotlist + cover + render + đăng như cũ.
+
+Mẫu focus (thay tên truyện; giữ ASCII):
+```
+One single narrator only, no second host, no dialogue. The narrator is a warm, wise Vietnamese storyteller with a Northern Vietnamese (Hanoi) accent, speaking slowly like a grandparent telling an old tale at night. Follow the source exactly and in this order: first tell the old story in full, vivid detail, faithful to the source, with natural pauses; then briefly explain the historical background; then present the commentary of the old scholars (loi ban) as written in the source; then reflect on what the story means for life today with two or three everyday Vietnamese examples; end with one gentle question for the viewer. Do not summarize or rush; take your time on each part. Target length: 6 to 8 minutes. Do not invent new facts.
+```
 
 ## Hình
 - **Footage:** render TỰ áp tông phim xưa (`series.ts → footageLook: "vintage"`: gần đen trắng, sepia nhẹ, tối, viền + hạt phim — user 2026-10-18 muốn "cổ trang trắng đen tối như ngày xưa" khớp cover) → query ưu tiên cảnh/đồ vật CỔ (gỗ, giấy, tre, mái ngói, sương), màu clip không quan trọng. Tránh đồ tôn giáo khác (thánh giá, kinh Ả Rập/Do Thái), đồ Tây (hải đăng, dầu ô liu). Phần truyện → cảnh Á Đông xưa, KHÔNG người (bờ đầm, lau sậy, đèn dầu, mái ngói, sách cổ, ấm trà, sương núi); phần bài học → đồ vật/đô thị hiện đại tạo tương phản.

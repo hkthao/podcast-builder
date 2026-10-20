@@ -11,7 +11,8 @@
  * → chạy lại tiếp tục được (không tạo notebook/nạp nguồn lại; --takes=N gen THÊM N bản).
  *
  * Usage: npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>] [--force]
- *   [--min=14 --max=20 --target=16 --length=default]  (mặc định theo series — SERIES_GATE)
+ *   [--min=14 --max=20 --target=16 --length=default]  (mặc định theo series — SERIES_GATE;
+ *   chuyen-xua = Video Overview explainer 1 người kể → tách tiếng)
  * Exit: 0 = đã chọn được bản đạt · 2 = chưa có bản trong cổng thời lượng (chạy lại với --takes=1 / đổi profile) · 1 = lỗi.
  *
  * Quota (user xác nhận 2026-10-18): Plus 6 audio / 5 giờ; tài khoản khác 3. "Rate limited" khi
@@ -29,8 +30,13 @@ const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`
  * - ByteCast: 14–20' (user 2026-10-18: ~19' vẫn ổn nếu audio đủ chất lượng), length default.
  * - Tiền & Tâm Lý: podcast NGẮN (user 2026-10-20) — NotebookLM thay Gemini TTS, length short.
  */
-const SERIES_GATE: Record<string, { min: number; max: number; target: number; length: string }> = {
+type Gate = { min: number; max: number; target: number; length: string; kind?: "audio" | "video"; videoStyle?: string; takes?: number };
+const SERIES_GATE: Record<string, Gate> = {
   "tien-tam-ly": { min: 4, max: 10, target: 7, length: "short" },
+  // Chuyện Xưa (user 2026-10-20): MỘT người kể ≥5' → audio overview không làm được (deep_dive luôn
+  // 2 host, brief chỉ ~1.5') → Video Overview "explainer" (1 người thuyết minh, tiếng Việt OK, thử
+  // "Tái ông mất ngựa" ra 9.2' giọng Bắc) rồi TÁCH TIẾNG. Video tốn quota hơn → mặc định 1 bản.
+  "chuyen-xua": { min: 5, max: 15, target: 8, length: "default", kind: "video", videoStyle: "heritage", takes: 1 },
 };
 const seriesOf = (slug: string): string => {
   try {
@@ -39,7 +45,8 @@ const seriesOf = (slug: string): string => {
     return "bytecast";
   }
 };
-const GATE = SERIES_GATE[seriesOf(process.argv[2] ?? "")] ?? { min: 14, max: 20, target: 16, length: "default" };
+const GATE: Gate = SERIES_GATE[seriesOf(process.argv[2] ?? "")] ?? { min: 14, max: 20, target: 16, length: "default" };
+const KIND = GATE.kind ?? "audio";
 const MIN_MIN = Number(arg("min") ?? GATE.min);
 const MAX_MIN = Number(arg("max") ?? GATE.max);
 const TARGET_MIN = Number(arg("target") ?? GATE.target);
@@ -125,19 +132,24 @@ async function main() {
     log(`nạp bài luận + ${urls.length} URL`);
   }
 
+  // KIND "video": Video Overview explainer (1 người thuyết minh) — chỉ lấy tiếng.
   const audioArtifacts = () =>
     (JSON.parse(nlm(["studio", "status", NB, "--json"], { json: true })) as Array<{ id: string; type: string; status: string }>).filter(
-      (a) => a.type === "audio",
+      (a) => a.type === KIND,
     );
 
   // 3. Gen thêm N bản (đếm qua status, không tin exit code create — bẫy bản ma)
-  const want = Number(arg("takes") ?? (st.artifacts.length ? 0 : 2));
+  const want = Number(arg("takes") ?? (st.artifacts.length ? 0 : (GATE.takes ?? 2)));
   for (let i = 0; i < want; i++) {
     const before = new Set(audioArtifacts().map((a) => a.id));
     try {
-      nlm(["audio", "create", NB, "--language", "vi", "--format", "deep_dive", "--length", LENGTH, "--focus", focus, "--confirm"]);
+      nlm(
+        KIND === "video"
+          ? ["video", "create", NB, "--format", "explainer", "--style", GATE.videoStyle ?? "auto_select", "--language", "vi", "--focus", focus, "--confirm"]
+          : ["audio", "create", NB, "--language", "vi", "--format", "deep_dive", "--length", LENGTH, "--focus", focus, "--confirm"],
+      );
     } catch (e) {
-      log(`⚠ audio create báo lỗi (có thể hết quota): ${(e as Error).message.slice(0, 160)}`);
+      log(`⚠ ${KIND} create báo lỗi (có thể hết quota): ${(e as Error).message.slice(0, 160)}`);
     }
     // nlm tự retry khi RESOURCE_EXHAUSTED và MỖI lần retry có thể đã tạo 1 artifact (bản ma —
     // memory nlm-audio-create-retry-ghost-artifacts) → đợi status ổn định, giữ 1, xoá phần thừa.
@@ -170,7 +182,16 @@ async function main() {
     const n = Object.keys(st.takes).length + 1;
     const file = path.join(input, `${slug}.take${n}.m4a`);
     try {
-      nlm(["download", "audio", NB, "--id", id, "--output", file, "--no-progress"]);
+      if (KIND === "video") {
+        const mp4 = path.resolve("tmp", `${slug}.take${n}.video.mp4`);
+        nlm(["download", "video", NB, "--id", id, "--output", mp4, "--no-progress"]);
+        if (!fs.existsSync(mp4) || fs.statSync(mp4).size < 100_000) return false;
+        // Chỉ lấy tiếng (AAC sẵn → copy, không mã hoá lại); hình của video không dùng.
+        execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", mp4, "-vn", "-c:a", "copy", file]);
+        fs.rmSync(mp4, { force: true });
+      } else {
+        nlm(["download", "audio", NB, "--id", id, "--output", file, "--no-progress"]);
+      }
     } catch {
       return false;
     }
