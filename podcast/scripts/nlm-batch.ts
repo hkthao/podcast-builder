@@ -11,7 +11,8 @@
  * → chạy lại tiếp tục được (không tạo notebook/nạp nguồn lại; --takes=N gen THÊM N bản).
  *
  * Usage: npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>] [--force]
- * Exit: 0 = đã chọn được bản đạt · 2 = chưa có bản 14–18' (chạy lại với --takes=1 / đổi profile) · 1 = lỗi.
+ *   [--min=14 --max=20 --target=16 --length=default]  (mặc định theo series — SERIES_GATE)
+ * Exit: 0 = đã chọn được bản đạt · 2 = chưa có bản trong cổng thời lượng (chạy lại với --takes=1 / đổi profile) · 1 = lỗi.
  *
  * Quota (user xác nhận 2026-10-18): Plus 6 audio / 5 giờ; tài khoản khác 3. "Rate limited" khi
  * create vẫn có thể đã tạo bản ma → script KHÔNG tự create lại, đọc status để đếm.
@@ -20,15 +21,34 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 
-const MIN_MIN = 14;
-const MAX_MIN = 20; // user 2026-10-18: ~19' vẫn ổn nếu audio đủ chất lượng
-const TARGET_MIN = 16;
+const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
+
+/**
+ * Cổng thời lượng + độ dài gen theo series (config.series của tập). Ghi đè bằng
+ * --min= --max= --target= --length=.
+ * - ByteCast: 14–20' (user 2026-10-18: ~19' vẫn ổn nếu audio đủ chất lượng), length default.
+ * - Tiền & Tâm Lý: podcast NGẮN (user 2026-10-20) — NotebookLM thay Gemini TTS, length short.
+ */
+const SERIES_GATE: Record<string, { min: number; max: number; target: number; length: string }> = {
+  "tien-tam-ly": { min: 4, max: 10, target: 7, length: "short" },
+};
+const seriesOf = (slug: string): string => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join("input", `${slug}.json`), "utf-8")).series ?? "bytecast";
+  } catch {
+    return "bytecast";
+  }
+};
+const GATE = SERIES_GATE[seriesOf(process.argv[2] ?? "")] ?? { min: 14, max: 20, target: 16, length: "default" };
+const MIN_MIN = Number(arg("min") ?? GATE.min);
+const MAX_MIN = Number(arg("max") ?? GATE.max);
+const TARGET_MIN = Number(arg("target") ?? GATE.target);
+const LENGTH = arg("length") ?? GATE.length;
 const POLL_SEC = 45;
 const POLL_MAX_MIN = 40;
 
 const ENV = { ...process.env, PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:${process.env.PATH}` };
 
-const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
 const log = (m: string) => console.log(`[nlm-batch] ${m}`);
 
 function nlm(args: string[], opts: { json?: boolean } = {}): string {
@@ -115,7 +135,7 @@ async function main() {
   for (let i = 0; i < want; i++) {
     const before = new Set(audioArtifacts().map((a) => a.id));
     try {
-      nlm(["audio", "create", NB, "--language", "vi", "--format", "deep_dive", "--length", "default", "--focus", focus, "--confirm"]);
+      nlm(["audio", "create", NB, "--language", "vi", "--format", "deep_dive", "--length", LENGTH, "--focus", focus, "--confirm"]);
     } catch (e) {
       log(`⚠ audio create báo lỗi (có thể hết quota): ${(e as Error).message.slice(0, 160)}`);
     }

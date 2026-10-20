@@ -11,7 +11,7 @@ Một pipeline chung cho mọi series kể chuyện; khác nhau ở **nội dung
 |---|---|---|
 | `chuyen-xua` — Chuyện Xưa - Ngẫm Nay | [references/chuyen-xua.md](references/chuyen-xua.md) | Nữ Autonoe, tempo 1.1 (đã duyệt) |
 | `dong-ho-viet` — Dòng Họ Việt | [references/dong-ho-viet.md](references/dong-ho-viet.md) | Nam Alnilam dẫn tài liệu, tempo 1.0 (đổi từ Charon 2026-10-19) |
-| `tien-tam-ly` — Tiền & Tâm Lý (kinh tế × tâm lý, ≥3') | [references/tien-tam-ly.md](references/tien-tam-ly.md) | **Đối thoại 2 giọng**: Minh=Alnilam + Lan=Aoede, tempo 1.0, EQ bớt ồm (user duyệt 2026-10-19) |
+| `tien-tam-ly` — Tiền & Tâm Lý (kinh tế × tâm lý, ≥3') | [references/tien-tam-ly.md](references/tien-tam-ly.md) | **Audio NotebookLM** (podcast ngắn, từ tập 2 — 2026-10-20) + cảnh vẽ tay `viz-anchor.ts`; Gemini đối thoại chỉ còn ở tập 1 |
 
 **Đọc file hướng dẫn của series TRƯỚC khi viết.** Cấu hình series (thương hiệu, bảng màu, logo, giọng, Trang FB, playlist) ở `podcast/src/series.ts` (bản sao gọn cho UI: `ui/src/lib/series.ts` — sửa cả hai).
 

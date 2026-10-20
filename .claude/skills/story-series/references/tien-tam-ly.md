@@ -4,19 +4,23 @@ Kênh kinh tế × tâm lý học hành vi, **độc lập với ByteCast** (kh�
 
 **Vì sao kênh này phải "gốc":** không có giọng thật → độ gốc dựa vào (1) **phân tích + số liệu tự tổng hợp** (thông tin feed chưa có, không phải tóm tắt sách), (2) hình tự dựng mỗi tập khác nhau, (3) công bố AI + ghi nguồn. Kể lại sách/TED/bài báo = đóng góp yếu.
 
-## ĐỊNH DẠNG: ĐỐI THOẠI 2 NGƯỜI DẪN (user chốt 2026-10-19)
-Độc thoại phân tích bị user chê "đều đều, nghe là biết máy" + "quá kinh tế học, chung chung". → Kịch bản là **cuộc trò chuyện đời thường** kiểu podcast NotebookLM, Gemini multi-speaker đọc (series.ts `tts.speakers`).
-- **Minh** (nam, Alnilam): kể chuyện, giải thích cơ chế. **Lan** (nữ, Aoede): hỏi như người nghe bình thường, đoán sai, ngạc nhiên, tóm lại ý.
-- Xưng hô: Minh xưng "tôi" gọi "chị"; Lan xưng "tôi" gọi "anh". Nói với khán giả: "các bạn".
-- Mỗi dòng trong `text` = 1 lượt nói, bắt đầu `Minh: ` / `Lan: `, cách nhau `\n`. **Mọi lượt kết thúc bằng dấu câu** (tách câu theo dấu). Lượt ngắn xen kẽ ("Hả? Hai tỷ ba?", "Mỗi năm.") làm nhịp tự nhiên.
-- **Câu chuyện trước, kiến thức sau:** mở bằng tình huống ai cũng gặp (tin nhắn của bạn cũ, phim dở vẫn xem hết vì đã mua vé), số liệu xuất hiện như câu trả lời cho thắc mắc của Lan. Ví von đời thường kiểu Việt (vỡ hụi, chơi họ…) thay thuật ngữ.
-- Không bịa chuyện người thật: giai thoại của host phải là giả định ("nhỡ có người…") hoặc có nguồn.
-- Neo cảnh viz bằng `"at": "<đoạn chữ trong câu>"` (bền hơn số thứ tự câu khi sửa kịch bản).
-- Dài ~900–1.050 chữ ≈ 4–5 phút (đối thoại đọc nhanh ~200 chữ/phút).
-- Âm thanh: series có `eq: VOICE_CLARITY_EQ` (bớt ồm dải trầm của Gemini 24kHz) áp lúc ghép.
+## ⭐ AUDIO = NOTEBOOKLM PODCAST NGẮN (user chốt 2026-10-20) — KHÔNG dùng Gemini TTS
+Gemini TTS (độc thoại lẫn đối thoại 2 giọng) bị user chê "không tự nhiên". Từ tập 2: audio do **NotebookLM** gen
+(skill `notebooklm-podcast`), hình vẫn là cảnh vẽ tay `viz`. Quy trình:
+1. Tạo tập: `POST /api/episodes {"title","series":"tien-tam-ly"}`.
+2. Claude viết `input/<slug>.essay.txt` (~1.000–1.200 chữ, văn xuôi kể chuyện: nhân vật có tên → câu hỏi → số liệu có nguồn → 1–2 cơ chế tâm lý → phản biện → 3 câu hỏi/quy tắc; KHÔNG tiêu đề, số viết chữ),
+   `input/<slug>.focus.txt` (**ASCII thuần**, 2 host: nam giải thích, nữ hỏi/đoán sai; "short, focused 6 to 8 minute"; flow Hook→Part→Outro; "do not invent new statistics"),
+   `input/<slug>.sources.txt` (5–8 URL crawl được, ưu tiên nguồn VN).
+3. `npx tsx podcast/scripts/nlm-batch.ts <slug> --takes=2` — series này tự gen `--length short`, cổng **4–10'**, chọn bản gần 7' (SERIES_GATE trong nlm-batch). Tập 2 ra 5.3' / 4.7'.
+4. QC: `npx tsx story/scripts/audio-qc.ts <slug> --podcast` + `npm run make -- input/<slug>.m4a --plan-only` → spell-fix-manual dump → Claude sửa → apply → `rm tmp/<slug>.plan.json`.
+5. Cảnh: Claude đọc mốc câu trong `tmp/<slug>.corrected.json`, viết `input/<slug>.viz.json` = `{"beats":[{"at":"<đoạn chữ host nói>","type":…}]}` (~1 cảnh/15–25s) → `npx tsx story/scripts/viz-anchor.ts <slug>` → `tmp/<slug>.viz.json`. Xem trước: copy beats vào `public/_viz-preview.json` + still `VizPreview`.
+6. Editorial: Claude viết `tmp/<slug>.editorial.claude.json` → `editorial-manual.ts apply` (tập series này đã editorialLocked).
+7. Cover (prompt bảng trắng, kiểm dấu), config (caption/hashtag/sources/playlist), render `POST /api/render` (regenTranscribe=false, regenPlan=true), đăng hàng đợi `/api/publish/jobs`.
+- Host NotebookLM tự xưng "tớ/cậu" kiểu bạn trẻ — chấp nhận được (audio-qc không báo đảo).
+- Pipeline Gemini đối thoại (series.ts `tts.speakers`, story.json) vẫn còn trong code — tập 1 làm bằng nó.
 
 ## Độ dài
-**≥3 phút** (user chốt 2026-10-19), dài hơn khi chủ đề cần (xem số chữ ở mục đối thoại). Không độn — mỗi đoạn phải thêm dữ kiện hoặc lập luận mới.
+Podcast ngắn ~5–8 phút (user 2026-10-20, ghi đè mốc ≥3' cũ không đổi). Không độn — mỗi đoạn phải thêm dữ kiện hoặc lập luận mới.
 
 ## Khung kịch bản (sections trong story.json) — viết dưới dạng đối thoại
 1. **Cú sốc** (15–20s, không `chapter`): case study đời thực hoặc nghịch lý bằng con số. Câu đầu tiên phải tự đứng được khi lướt feed. Nhân vật minh hoạ thì nói rõ là minh hoạ ("hình dung một kỹ sư…"), KHÔNG bịa người thật.
