@@ -118,6 +118,8 @@ const sendFile = async (
       : ext === "aac" ? "audio/aac"
       : ext === "mp3" ? "audio/mpeg"
       : ext === "wav" ? "audio/wav"
+      : ext === "ogg" ? "audio/ogg"
+      : ext === "flac" ? "audio/flac"
       : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
       : ext === "png" ? "image/png"
       : ext === "json" ? "application/json"
@@ -179,6 +181,16 @@ app.get("/footage/*", async (c) => {
     return c.json({ error: "invalid path" }, 400);
   }
   return sendFile(c, path.join(INPUT_DIR, "footage", rel), rel);
+});
+
+// Kho nhạc nền (input/_music/, cho phép subdir lib/) — nghe thử ở trang /music.
+// /input/:filename chỉ nhận 1 cấp tên file nên file nhạc trong thư mục con bị 404.
+app.get("/input/_music/*", async (c) => {
+  const rel = decodeURIComponent(c.req.path.slice("/input/_music/".length));
+  if (!rel || rel.includes("..") || rel.startsWith("/") || rel.startsWith(".")) {
+    return c.json({ error: "invalid path" }, 400);
+  }
+  return sendFile(c, path.join(INPUT_DIR, "_music", rel), rel);
 });
 
 startFsWatcher();
