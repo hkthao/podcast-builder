@@ -345,10 +345,15 @@ const GrowBar: React.FC<{ x: number; base: number; w: number; h: number; from: n
 
 // ───────────────────────── flow ─────────────────────────
 const Flow: React.FC<{ s: Extract<VizScene, { type: "flow" }>; dur: number }> = ({ s, dur }) => {
-  const nodeW = 330;
   const nodeH = 140;
   const top = BOX.y0 + (s.title ? 120 : 30);
   const pos = (n: { x: number; y: number }): [number, number] => [BOX.x0 + 40 + n.x * (BW - 80), top + n.y * (BOX.y1 - top - 40)];
+  // Khối co lại khi nhiều khối chung 1 hàng (vd 3 ngăn kéo) để không chồng nhau.
+  const pts = s.nodes.map(pos);
+  const rowGaps = pts.flatMap((a, i) =>
+    pts.slice(i + 1).flatMap((b) => (Math.abs(a[1] - b[1]) < nodeH ? [Math.abs(a[0] - b[0])] : [])),
+  );
+  const nodeW = Math.max(200, Math.min(330, ...rowGaps.map((g) => g - 30)));
   const nStag = Math.max(14, Math.min(36, (dur * 0.35) / s.nodes.length));
   const edgeStart = 12 + s.nodes.length * nStag;
   const eStag = Math.max(18, Math.min(60, (dur - edgeStart - 30) / Math.max(1, s.edges.length)));
@@ -367,12 +372,12 @@ const Flow: React.FC<{ s: Extract<VizScene, { type: "flow" }>; dur: number }> = 
         const [x, y] = pos(n);
         const t = 12 + i * nStag;
         const color = colorOf(n.color);
-        const lines = wrapLines(n.label, nodeW - 30, 52);
+        const lines = wrapLines(n.label, nodeW - 30, nodeW < 300 ? 46 : 52);
         return (
           <g key={n.id}>
             <RoughDraw shape={{ kind: "rect", x: x - nodeW / 2, y: y - nodeH / 2, w: nodeW, h: nodeH }} from={t} dur={14} stroke={color} strokeWidth={5} seed={seedOf(`n${n.id}`)} roughness={1.4} />
             {lines.map((line, li) => (
-              <HandText key={li} x={x} y={y + 18 + (li - (lines.length - 1) / 2) * 54} from={t + 6} dur={12} size={52} color={color} anchor="middle">
+              <HandText key={li} x={x} y={y + 18 + (li - (lines.length - 1) / 2) * 54} from={t + 6} dur={12} size={nodeW < 300 ? 46 : 52} color={color} anchor="middle">
                 {line}
               </HandText>
             ))}
@@ -441,7 +446,9 @@ const BigItem: React.FC<{ it: Extract<VizScene, { type: "bigNumber" }>["items"][
   const pop = spring({ frame: frame - from, fps, config: { damping: 14 } });
   const color = colorOf(it.color);
   const text = `${it.prefix ?? ""}${fmtNum(v, it.decimals)}${it.suffix ?? ""}`;
-  const size = text.length > 9 ? 150 : 200;
+  const size = text.length > 9 ? 150 : text.length > 6 ? 170 : 200;
+  // Vòng khoanh giãn theo bề rộng số (Be Vietnam Pro 800 ~0.62em/ký tự) — "30 triệu" dài hơn "30%".
+  const ringW = Math.min(BW + 60, Math.max(BW * 0.6, text.length * size * 0.62 + 140));
   return (
     <g>
       {frame >= from ? (
@@ -464,7 +471,7 @@ const BigItem: React.FC<{ it: Extract<VizScene, { type: "bigNumber" }>["items"][
         </HandText>
       ))}
       {circle ? (
-        <RoughDraw shape={{ kind: "ellipse", cx: CX, cy: y - size * 0.1, w: BW * 0.86, h: size * 2.1 }} from={from + 40} dur={30} stroke={pal.accentRed} strokeWidth={7} seed={3} roughness={1.6} pen />
+        <RoughDraw shape={{ kind: "ellipse", cx: CX, cy: y - size * 0.05, w: ringW, h: size * 2.3 }} from={from + 40} dur={30} stroke={pal.accentRed} strokeWidth={7} seed={3} roughness={1.6} pen />
       ) : null}
     </g>
   );
