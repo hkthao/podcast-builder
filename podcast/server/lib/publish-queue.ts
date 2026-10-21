@@ -57,8 +57,18 @@ export const fbPageIdFor = (series: string | null | undefined): string | undefin
  * PublishTab): caption + hashtags + khối công bố AI/ghi công. Server tự dựng
  * từ config đã lưu (UI auto-save trước khi đăng).
  */
+/** Dòng đầu caption = tiêu đề tập (khớp withTitleLead ở publish-ui); đã mở bằng tiêu đề thì giữ. */
+const withTitleLead = (title: string | null | undefined, caption: string): string => {
+  const t = (title ?? "").trim();
+  const c = caption.trim();
+  if (!t) return c;
+  const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (norm(c).startsWith(norm(t))) return c;
+  return c ? `${t}\n\n${c}` : t;
+};
+
 export const buildEpisodeDescription = (config: EpisodeConfig): string => {
-  const caption = config.publishCaption?.trim() ?? "";
+  const caption = withTitleLead(config.title, config.publishCaption ?? "");
   const hashtagLine = (config.publishHashtags ?? []).map((h) => `#${h}`).join(" ");
   // Tên kênh theo series (khớp PublishTab UI) — dùng khi scriptCredit trống.
   const brandName = getSeries(config.series).channelName;

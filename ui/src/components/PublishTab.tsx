@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   buildDisclosure,
+  withTitleLead,
   CollapsibleCard,
   CopyButton,
   CopyChip,
@@ -321,7 +322,7 @@ function FacebookPublishTab({
   });
   const hashtagLine = hashtags.map((h) => `#${h}`).join(" ");
   // Mô tả cuối = caption + hashtags + khối công bố (bỏ phần rỗng).
-  const fullCaption = [caption, hashtagLine, disclosure]
+  const fullCaption = [withTitleLead(ep.config.title, caption), hashtagLine, disclosure]
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .join("\n\n");

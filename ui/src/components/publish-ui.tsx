@@ -15,6 +15,19 @@ import { cn } from "@/lib/utils";
  * đóng góp người thật (kịch bản gốc, biên tập, nguồn). Xem
  * docs/originality-upgrade-plan.md §5.1.
  */
+/**
+ * Caption đăng luôn MỞ ĐẦU bằng chủ đề (tiêu đề) của tập (user 2026-10-20). Caption đã tự mở
+ * bằng tiêu đề (so khớp bỏ dấu câu/hoa) thì giữ nguyên, không lặp.
+ */
+export function withTitleLead(title: string | null | undefined, caption: string): string {
+  const t = (title ?? "").trim();
+  const c = caption.trim();
+  if (!t) return c;
+  const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (norm(c).startsWith(norm(t))) return c;
+  return c ? `${t}\n\n${c}` : t;
+}
+
 export function buildDisclosure(opts: {
   aiAssisted: boolean;
   /** Tên kênh theo series (seriesInfo(ep.config.series).channelName). */
