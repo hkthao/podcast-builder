@@ -128,6 +128,48 @@ async function setFileViaChooser(
   }
 }
 
+/** Đợi video mới (tạo sau `since`, chưa published, đúng tiêu đề) xuất hiện trên Trang qua Graph. */
+async function waitScheduledOnGraph(
+  pageId: string,
+  title: string,
+  since: number,
+  timeoutMs: number,
+  log: (m: string) => void,
+): Promise<string | null> {
+  const { getApiKey } = await import("../../shared/studio-core/api-keys-store");
+  const { resolvePage } = await import("../../shared/studio-core/facebook");
+  const token = getApiKey("facebook");
+  if (!token) {
+    log("⚠ không có token FB để xác minh — đợi cố định 3 phút.");
+    await new Promise((r) => setTimeout(r, 180_000));
+    return null;
+  }
+  const page = await resolvePage(token, pageId);
+  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 15_000));
+    try {
+      const r = await (
+        await fetch(
+          `https://graph.facebook.com/v21.0/${page.id}/videos?fields=id,created_time,published,title,description,post_id&limit=5&access_token=${page.token}`,
+        )
+      ).json();
+      const hit = (r.data ?? []).find(
+        (v: { created_time: string; published: boolean; title?: string; description?: string; post_id?: string }) =>
+          Date.parse(v.created_time) > since - 30 * 60_000 &&
+          !v.published &&
+          !!v.post_id &&
+          (norm(v.title ?? "") === norm(title) || norm(v.description ?? "").startsWith(norm(title))),
+      );
+      if (hit) return hit.id as string;
+    } catch {
+      /* mạng chập chờn — thử lại */
+    }
+  }
+  return null;
+}
+
 async function fill(
   page: Page,
   slug: string,
@@ -342,6 +384,7 @@ async function fill(
   );
   fs.mkdirSync(path.dirname(shot), { recursive: true });
   await page.screenshot({ path: shot });
+  let fbVideoId: string | null = null;
   if (submit) {
     // User cho phép tự bấm (2026-10-21). FB hay treo spinner "Scheduling your post" dù lịch
     // đã tạo xong → thấy spinner/rời composer là coi như xong, đợi thêm 20s cho chắc.
@@ -353,14 +396,16 @@ async function fill(
       throw new Error("Không thấy nút Schedule ở chân composer.");
     await btn.click();
     log("Đã bấm Schedule.");
-    await page
-      .getByText(/Scheduling your post|has been scheduled|scheduled/i)
-      .first()
-      .waitFor({ timeout: 60_000 })
-      .catch(() =>
-        log("⚠ không thấy phản hồi sau khi bấm — kiểm tra lịch trên FB."),
-      );
-    await page.waitForTimeout(20_000);
+    // Spinner "Scheduling your post" có thể treo rất lâu; ĐÓNG/RELOAD tab lúc này với file lớn
+    // làm FB huỷ lịch (Ôm cây 2026-10-21). → KHÔNG rời trang cho tới khi Graph thấy video mới.
+    const t0 = Date.now();
+    const found = await waitScheduledOnGraph(pageId, config.title ?? "", t0, 15 * 60_000, log);
+    if (found) {
+      log(`Graph xác nhận video ${found} (sau ${Math.round((Date.now() - t0) / 1000)}s).`);
+      fbVideoId = found;
+    } else log("⚠ 15 phút chưa thấy video trên Graph — KIỂM TRA lịch trên Business Suite, đừng đóng tab.");
+    // Thoát spinner treo: về Planner cho màn hình sạch (lịch đã nằm trên FB).
+    if (found) await page.goto("https://business.facebook.com/latest/home", { waitUntil: "domcontentloaded" }).catch(() => {});
   } else {
     log(
       `✓ Đã điền xong (${shot}). KIỂM TRA rồi bấm nút "Schedule" xanh ở góc dưới.`,
@@ -400,6 +445,7 @@ async function fill(
   await saveEpisode(slug, {
     ...config,
     publishStatus: "scheduled",
+    ...(fbVideoId ? { fbReelId: fbVideoId } : {}),
     scheduledPublishTime: new Date(Date.parse(at)).toISOString(),
     ...(playlist ? { fbPlaylistName: playlist } : {}),
   });

@@ -104,6 +104,10 @@ const Steps: React.FC<{ s: Extract<VizScene, { type: "steps" }>; dur: number }> 
         const t = 12 + i * stag;
         const x0 = BOX.x0 + 40;
         const w = BW - 160;
+        // Nhãn dài + số bên phải từng đè nhau (tập Sale 50%) → co cỡ chữ nhãn cho vừa phần còn trống.
+        const valueW = st.value ? st.value.length * 64 * 0.62 : 0;
+        const labelRoom = w - 72 - valueW - (st.value ? 28 : 0);
+        const labelSize = Math.max(32, Math.min(58, labelRoom / Math.max(1, st.label.length * 0.55)));
         return (
           <g key={i}>
             {i > 0 ? (
@@ -118,7 +122,7 @@ const Steps: React.FC<{ s: Extract<VizScene, { type: "steps" }>; dur: number }> 
               seed={seedOf(`sb${i}${st.label}`)}
               roughness={1.4}
             />
-            <HandText x={x0 + 36} y={y + boxH / 2 + 20} from={t + 6} dur={14} size={58} color={pal.ink}>
+            <HandText x={x0 + 36} y={y + boxH / 2 + labelSize * 0.34} from={t + 6} dur={14} size={labelSize} color={pal.ink}>
               {st.label}
             </HandText>
             {st.value ? (
