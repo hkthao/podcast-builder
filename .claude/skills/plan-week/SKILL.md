@@ -49,13 +49,13 @@ curl -s http://localhost:3000/api/cleanup                  # dung lượng ổ +
 9. **Cover cả loạt** (prompt theo phong cách kênh → `POST /api/episodes/<slug>/cover-image?provider=gemini`) → cổng cover.
 10. **Render:** `POST /api/render {"episodeName","preview":false,"regenTranscribe":false,"regenPlan":true}` cho mọi tập đủ điều kiện (server chạy 2 job song song; KHÔNG `git checkout` khi đang render) → chờ bằng Bash nền (`until` poll `/api/render/jobs`), không ngồi poll tay → cổng render.
 11. **Caption + playlist:** điền `publishCaption`, `publishHashtags`, `sources`, `musicCredit`, `aiAssisted:true`, `fbPlaylistId/Name`, `publishStatus:"ready"` theo hướng dẫn từng kênh.
-12. **Báo cáo cuối** (bảng ngày × kênh): ✓ sẵn sàng hẹn giờ / ⚠ việc còn dở + lý do (quota, thiếu nguyên văn, QC trượt) + dung lượng ổ còn lại. Nhắc user: **mở /plan → bấm "Hẹn giờ N tập đã render"** (FB yêu cầu giờ hẹn cách hiện tại ≥10 phút, ≤75 ngày; tập >90s đăng qua `/{page}/videos` chia chunk + tiêu đề + cover). Upload chạy NỀN trên server qua **hàng đợi đăng** (tuần tự, ~1 MB/s → tập 1GB ≈ 20-30'), tiến độ hiện ở **/publish-queue** + ô trên /plan + badge sidebar. Chỉ khi user nhờ mới tự hẹn giờ — xếp 1 lần rồi để server chạy, KHÔNG giữ curl/SSE:
+12. **Báo cáo cuối** (bảng ngày × kênh): ✓ sẵn sàng hẹn giờ / ⚠ việc còn dở + lý do (quota, thiếu nguyên văn, QC trượt) + dung lượng ổ còn lại.
+13. **Hẹn giờ đăng — QUA BUSINESS SUITE, KHÔNG qua API** (đo 2026-10-21: bài API 344 view, xem TB 13.7s vs đăng tay 2–3.5k view, 83–138s; user đã xoá hết bài hẹn giờ API). User cho phép tự đăng ("làm tự động hết", 2026-10-21). Chạy TUẦN TỰ, 1 tập/lần, theo ngày đăng:
     ```bash
-    curl -s -X POST http://localhost:3000/api/publish/jobs -H 'Content-Type: application/json' \
-      -d '{"items":[{"episodeName":"<slug>","scheduledAt":"2026-10-21T19:00:00+07:00"}, ...]}'
-    curl -s http://localhost:3000/api/publish/jobs   # trạng thái: status/percent/bytesPerSec/error
+    npx tsx podcast/scripts/fb-browser.ts fill <slug> --submit            # giờ = config.scheduledPublishTime
+    npx tsx podcast/scripts/fb-browser.ts fill <slug> --at 2026-10-26T12:00:00Z --submit
     ```
-    Lỗi `code 190/463` = token FB hết hạn → nhờ user nhập **token dài hạn** (Access Token Debugger → Extend; token ngắn chỉ sống 1-2h, chết giữa đợt upload) rồi `POST /api/publish/jobs/<id>/retry`.
+    Script nối Chrome riêng (CDP 9333, profile `~/.config/podcast-builder/fb-chrome`, đã đăng nhập; chưa mở thì tự mở — hết phiên thì `fb-browser.ts open` nhờ user login) → Create reel đúng Trang theo series → tải mp4 → tiêu đề + mô tả (buildEpisodeDescription) + Tags (hashtag) → đợi quét bản quyền → Schedule (giờ VN) + playlist → bấm Schedule → ghi `publishStatus:"scheduled"`. Spinner "Scheduling your post" hay treo dù lịch đã tạo → bình thường. Sau đợt: lấy `fbReelId` bằng Graph `/{page}/videos` (bài mới có `published:false`) ghi vào config. Playlist chưa có trên Trang → script bỏ qua, nhắc user tạo. Trong app: tab Đăng → "Lên lịch qua Business Suite" (`POST /api/publish/browser`). Hàng đợi API `/api/publish/jobs` chỉ dùng khi user yêu cầu rõ.
 
 ## Bẫy đã gặp (lượt chạy 18/10/2026)
 - **footage-plan --apply chạy TUẦN TỰ** (cùng ghi `input/_footage-used.json`); xếp theo NGÀY ĐĂNG, không theo thứ tự làm. Pexels hay trả: tay người (people-check bỏ sót), đồ tôn giáo khác (thánh giá, kinh Ả Rập/Do Thái), kiến trúc châu Âu → luôn xem contact sheet khung giữa, thay shot lỗi bằng shot đạt cùng beat (sửa `config.footage[i]`), không cần tải lại.

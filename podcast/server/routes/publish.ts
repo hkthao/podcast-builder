@@ -7,6 +7,7 @@ import {
   listPublishJobs,
   retryPublishJob,
 } from "../lib/publish-queue";
+import { startBrowserFill } from "../lib/publish-browser";
 
 /**
  * Hàng đợi đăng Facebook (upload chạy nền trên server, tuần tự).
@@ -72,5 +73,29 @@ publishRoutes.post("/jobs/:id/retry", async (c) => {
     return c.json(await retryPublishJob(c.req.param("id")));
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+
+/**
+ * Đăng qua Meta Business Suite (Chrome riêng, script tự điền + tự bấm Schedule).
+ *   POST /api/publish/browser  body { episodeName, scheduledAt, playlistName? } → { started, log }
+ */
+publishRoutes.post("/browser", async (c) => {
+  let body: Item;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body JSON không hợp lệ." }, 400);
+  }
+  const episodeName = str(body.episodeName);
+  const scheduledAt = str(body.scheduledAt);
+  if (!episodeName || !scheduledAt || Number.isNaN(Date.parse(scheduledAt))) {
+    return c.json({ error: "Cần episodeName + scheduledAt (ISO)." }, 400);
+  }
+  try {
+    const r = startBrowserFill({ episodeName, scheduledAt, playlistName: str(body.playlistName) ?? null });
+    return c.json({ started: true, log: r.log });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 409);
   }
 });

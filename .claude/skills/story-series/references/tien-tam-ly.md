@@ -24,7 +24,7 @@ Gemini TTS (độc thoại lẫn đối thoại 2 giọng) bị user chê "khôn
 4. QC: `npx tsx story/scripts/audio-qc.ts <slug> --podcast` + `npm run make -- input/<slug>.m4a --plan-only` → spell-fix-manual dump → Claude sửa → apply → `rm tmp/<slug>.plan.json`.
 5. Cảnh: Claude đọc mốc câu trong `tmp/<slug>.corrected.json`, viết `input/<slug>.viz.json` = `{"beats":[{"at":"<đoạn chữ host nói>","type":…}]}` (~1 cảnh/15–25s) → `npx tsx story/scripts/viz-anchor.ts <slug>` → `tmp/<slug>.viz.json`. Xem trước: copy beats vào `public/_viz-preview.json` + still `VizPreview`.
 6. Editorial: Claude viết `tmp/<slug>.editorial.claude.json` → `editorial-manual.ts apply` (tập series này đã editorialLocked).
-7. Cover (prompt bảng trắng, kiểm dấu), config (caption/hashtag/sources/playlist), render `POST /api/render` (regenTranscribe=false, regenPlan=true), đăng hàng đợi `/api/publish/jobs`.
+7. Cover (prompt bảng trắng, kiểm dấu), config (caption/hashtag/sources/playlist), render `POST /api/render` (regenTranscribe=false, regenPlan=true), hẹn giờ qua Business Suite: `npx tsx podcast/scripts/fb-browser.ts fill <slug> --submit` (KHÔNG qua API — reach thấp; xem plan-week bước 13).
 - Host NotebookLM tự xưng "tớ/cậu" kiểu bạn trẻ — chấp nhận được (audio-qc không báo đảo).
 - Pipeline Gemini đối thoại (series.ts `tts.speakers`, story.json) vẫn còn trong code — tập 1 làm bằng nó.
 

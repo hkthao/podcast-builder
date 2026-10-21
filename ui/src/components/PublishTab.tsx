@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  publishApi,
   ApiError,
   type EpisodeConfig,
   type EpisodeFiles,
@@ -872,6 +873,31 @@ function FacebookPublishCard({
   const publishedAt = ep.config.publishedAt;
   const permalink = ep.config.fbPermalink;
 
+  // Đăng qua Business Suite (bản tay được phân phối tốt hơn API — memory fb-api-upload-low-reach).
+  const [browserMsg, setBrowserMsg] = useState<string | null>(null);
+  const browserFill = async () => {
+    const ms = new Date(scheduleAt).getTime();
+    if (!scheduleOn || Number.isNaN(ms) || ms < Date.now() + 15 * 60_000) {
+      setBrowserMsg("Bật Lên lịch và chọn giờ cách hiện tại ít nhất 15 phút.");
+      return;
+    }
+    try {
+      await onBeforePublish();
+    } catch {
+      /* server đọc config gần nhất */
+    }
+    try {
+      await publishApi.browserFill({
+        episodeName: ep.name,
+        scheduledAt: new Date(ms).toISOString(),
+        playlistName: selectedPlaylist?.title ?? null,
+      });
+      setBrowserMsg("Đang đăng qua Business Suite (Chrome riêng): tải video, điền tiêu đề/mô tả/tags/giờ/playlist rồi tự bấm Schedule. Log: tmp/fb-browser/" + ep.name + ".log");
+    } catch (e) {
+      setBrowserMsg(`Lỗi: ${(e as Error).message}`);
+    }
+  };
+
   const publish = async () => {
     let scheduledAtIso: string | undefined;
     if (scheduleOn) {
@@ -1193,6 +1219,18 @@ function FacebookPublishCard({
         )}
       </div>
       <footer className="px-5 py-3 border-t flex items-center justify-end gap-2 flex-wrap">
+        {browserMsg && <p className="text-xs text-muted-foreground mr-auto max-w-md">{browserMsg}</p>}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={!isReady || !scheduleOn || !scheduleAt}
+          onClick={browserFill}
+          title="Đăng qua Meta Business Suite (Chrome riêng): tự điền video, tiêu đề, mô tả, tags, giờ, playlist và bấm Schedule"
+        >
+          <Clock className="size-3.5" />
+          Lên lịch qua Business Suite
+        </Button>
         <Button variant="outline" size="sm" asChild>
           <a href={FB_REELS_URL} target="_blank" rel="noreferrer">
             <ExternalLink className="size-3.5" />

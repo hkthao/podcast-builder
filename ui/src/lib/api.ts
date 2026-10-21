@@ -1693,6 +1693,13 @@ export const publishApi = {
   cancel: (id: string) => jsonFetch<{ cancelled: boolean }>(`/api/publish/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   retry: (id: string) => jsonFetch<PublishJob>(`/api/publish/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
   clearFinished: () => jsonFetch<{ removed: number }>("/api/publish/jobs/_clear", { method: "POST" }),
+  /** Bán tự động: mở Business Suite trong Chrome riêng + điền sẵn; người bấm nút "Schedule" cuối. */
+  browserFill: (item: { episodeName: string; scheduledAt: string; playlistName?: string | null }) =>
+    jsonFetch<{ started: boolean; log: string }>("/api/publish/browser", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item),
+    }),
 };
 
 // ─── Kho nhạc nền xoay vòng (an toàn Content ID) ──────────────────────────
