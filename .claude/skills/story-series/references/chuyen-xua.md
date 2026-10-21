@@ -9,7 +9,7 @@ uv run --no-project --with pymupdf python -I story/scripts/cohoc_split.py refere
 ```
 (PyMuPDF trích chữ Việt sạch; pypdf chèn khoảng trắng giữa âm tiết.) Tên trong sách có thể khác tên quen: Tăng Tử giết lợn = #92 "Thành thực", Mạnh mẫu = #93 "Mẹ hiền dạy con", Tái ông mất ngựa = #77 "Họa phúc khôn lường". User dán truyện từ nguồn khác → sửa lỗi OCR và liệt kê chỗ đã sửa.
 
-## Cấu trúc (user đã chốt: KHÔNG hook mở đầu — đọc tiêu đề rồi vào truyện luôn; config `hook: null`)
+## Cấu trúc (hook: TỪ TẬP 7 BẬT LẠI — 2026-10-21, xem mục Hook bên dưới)
 | section | chapter | Nội dung |
 |---|---|---|
 | `truyen` (`cite: true`) | tên truyện | Câu đầu = tiêu đề ("Không quên được cái cũ."), rồi truyện SÁT NGUYÊN VĂN (giữ chất cổ: "độ trước", "sở dĩ", "vì cớ gì"); lời thoại giữ nguyên. |
@@ -32,13 +32,19 @@ Bảng cấu trúc ở trên giờ là KHUNG NỘI DUNG cho nguồn + focus (kh�
    `input/<slug>.focus.txt` (**ASCII thuần**) theo mẫu dưới. Không cần sources.txt (nguồn là sách).
 3. `npx tsx podcast/scripts/nlm-batch.ts <slug>` — series này tự đi luồng VIDEO (SERIES_GATE: explainer, style heritage, 1 bản, cổng 5–15', ưu tiên ~8'), tách tiếng → `input/<slug>.m4a`.
 4. QC: `npx tsx story/scripts/audio-qc.ts <slug>` (giọng Bắc) → `npm run make -- input/<slug>.m4a --plan-only` → spell-fix-manual dump → Claude sửa → apply → `rm tmp/<slug>.plan.json`.
-   ⚠️ Whisper hay BỊA câu kiểu "Hãy subscribe cho kênh Ghiền Mì Gõ…" ở khoảng lặng cuối → xoá câu đó khi sửa.
+   ⚠️ Whisper hay BỊA câu cuối kiểu "Hãy subscribe/đăng ký kênh …" (Ghiền Mì Gõ, lalaschool…) ở khoảng lặng cuối → để text rỗng khi sửa rồi lọc câu rỗng khỏi corrected.json.
+   ⚠️ Nghe/đọc transcript xem người kể có ĐỌC TO nhãn "Phần 1… Phần 5" hay gọi là "bài phân tích tư liệu" không (Mạnh Tử 2026-10-20 bị) → lỗi trong tiếng, phải gen lại (focus mẫu đã cấm).
 5. Editorial: Claude viết chương (tên truyện / Lời bàn người xưa / góc bình / Bài học hôm nay) + trích dẫn "Cổ học tinh hoa — <tên truyện>" → `editorial-manual.ts apply`.
 6. Footage-shotlist + cover + render + đăng như cũ.
 
+**⭐ HOOK (từ tập 7, user 2026-10-21):** audio NotebookLM mở chậm ("Này, đêm nay…") → mất người xem vài giây đầu.
+- `series.ts → chuyen-xua.hookCard: true`. Mỗi tập Claude viết `config.hook` = 1 câu ≤20 chữ nhắm thẳng người xem hôm nay (vd tập 6 dự kiến: "Bạn đang học người khác, hay đang biến mình thành Đông Thi?") — thẻ chữ ~3.5s trên nền nhạc trước lời kể.
+- Focus thêm câu mở đầu gây tò mò (xem mẫu) — người kể vào thẳng nghịch lý của truyện, không chào hỏi dài.
+- Tập 1–6 đã đăng/lên lịch không hook — giữ nguyên, không làm lại.
+
 Mẫu focus (thay tên truyện; giữ ASCII):
 ```
-One single narrator only, no second host, no dialogue. The narrator is a warm, wise Vietnamese storyteller with a Northern Vietnamese (Hanoi) accent, speaking slowly like a grandparent telling an old tale at night. Follow the source exactly and in this order: first tell the old story in full, vivid detail, faithful to the source, with natural pauses; then briefly explain the historical background; then present the commentary of the old scholars (loi ban) as written in the source; then reflect on what the story means for life today with two or three everyday Vietnamese examples; end with one gentle question for the viewer. Do not summarize or rush; take your time on each part. Target length: 6 to 8 minutes. Do not invent new facts.
+One single narrator only, no second host, no dialogue. This is storytelling, not a lecture: never announce parts, sections or numbers (do not say part one, part two, phan 1, phan 2), never call it an analysis, a document or source material; move between parts with natural storyteller transitions. The narrator is a warm, wise Vietnamese storyteller with a Northern Vietnamese (Hanoi) accent, speaking slowly like a grandparent telling an old tale at night. Open within the first ten seconds with one intriguing line about the paradox of the story, then greet briefly; no long warm-up. Follow the source exactly and in this order: first tell the old story in full, vivid detail, faithful to the source, with natural pauses; then briefly explain the historical background; then present the commentary of the old scholars (loi ban) as written in the source; then reflect on what the story means for life today with two or three everyday Vietnamese examples; end with one gentle question for the viewer. Do not summarize or rush; take your time on each part. Target length: 6 to 8 minutes. Do not invent new facts.
 ```
 
 ## Hình

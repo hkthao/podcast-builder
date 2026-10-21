@@ -4,6 +4,15 @@ Kênh kinh tế × tâm lý học hành vi, **độc lập với ByteCast** (kh�
 
 **Vì sao kênh này phải "gốc":** không có giọng thật → độ gốc dựa vào (1) **phân tích + số liệu tự tổng hợp** (thông tin feed chưa có, không phải tóm tắt sách), (2) hình tự dựng mỗi tập khác nhau, (3) công bố AI + ghi nguồn. Kể lại sách/TED/bài báo = đóng góp yếu.
 
+## ⭐ ĐỜI THƯỜNG, DỄ TIẾP CẬN (user 2026-10-21) — ưu tiên hơn mọi mục bên dưới
+"Phần NotebookLM nên đời thường hơn để dễ tiếp cận với nhiều đối tượng." → bài nguồn + focus:
+- TỐI ĐA 1 nghiên cứu/tập, kể như chuyện vui bằng lời thường (không dồn tên học giả, không thuật ngữ); bỏ "phân tích", "tư liệu".
+- Mở bằng NHÂN VẬT + TÌNH HUỐNG quen (chị Hoa canh sale nửa đêm, anh Hùng trước kệ điện thoại); ví von bằng cảnh Việt (đi chợ mặc cả, xếp hàng mua kem, livestream, gom đơn freeship).
+- Ít số, số tròn, chỉ số thật sự cần + có nguồn.
+- **Đan xen các cơn sốt/vụ việc THẬT của Việt Nam** (user 2026-10-21): thương lái mua lá điều khô (Đồng Nai 2012), lan đột biến 2021–22 (ôm nợ, mất nhà), cau tươi 2024 (>100k rồi rơi ~50k)… — mỗi vụ 2–4 câu có năm + nguồn báo, rút ra điểm chung với chủ đề tập. Kho ví dụ còn: sốt đất nền, tiền ảo, vàng, đa cấp, "thương lái Trung Quốc thu mua lạ".
+- Focus ghi rõ "audience: everyone from students to housewives to retirees… very everyday and easy".
+- Focus thêm: "Never mention documents, sources, materials, Wikipedia or analysing documents; talk as if from your own knowledge and life." (tập Sale 2026-10-21 host nói "phân tích tài liệu… Wikipedia" — nghe như báo cáo).
+
 ## ⭐ AUDIO = NOTEBOOKLM PODCAST NGẮN (user chốt 2026-10-20) — KHÔNG dùng Gemini TTS
 Gemini TTS (độc thoại lẫn đối thoại 2 giọng) bị user chê "không tự nhiên". Từ tập 2: audio do **NotebookLM** gen
 (skill `notebooklm-podcast`), hình vẫn là cảnh vẽ tay `viz`. Quy trình:

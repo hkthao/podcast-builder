@@ -144,7 +144,9 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     playlistsFile: "_fb-playlists.chuyen-xua.json",
     fbContentCategory: "LIFESTYLE",
     fbUploadSrt: false,
-    hookCard: false, // user chốt: không hook, vào truyện luôn
+    // 2026-10-21: BẬT lại — audio NotebookLM mở đầu chậm ("Này, đêm nay…") nên cần thẻ hook giữ người xem
+    // (trước đây tắt vì kịch bản Gemini tự có câu hook). Từ tập 6.
+    hookCard: true,
     footageLook: "vintage", // user 2026-10-18: footage cổ trang trắng đen/tối như ngày xưa, khớp cover
   },
   "dong-ho-viet": {
