@@ -12,7 +12,7 @@
  *
  * Usage: npx tsx podcast/scripts/nlm-batch.ts <slug> [--takes=2] [--notebook=<id>] [--profile=<name>] [--force]
  *   [--min=14 --max=20 --target=16 --length=default]  (mặc định theo series — SERIES_GATE;
- *   chuyen-xua = Video Overview explainer 1 người kể → tách tiếng)
+ *   chuyen-xua / dong-ho-viet = Video Overview explainer 1 người kể → tách tiếng)
  * Exit: 0 = đã chọn được bản đạt · 2 = chưa có bản trong cổng thời lượng (chạy lại với --takes=1 / đổi profile) · 1 = lỗi.
  *
  * Quota (user xác nhận 2026-10-18): Plus 6 audio / 5 giờ; tài khoản khác 3. "Rate limited" khi
@@ -37,6 +37,8 @@ const SERIES_GATE: Record<string, Gate> = {
   // 2 host, brief chỉ ~1.5') → Video Overview "explainer" (1 người thuyết minh, tiếng Việt OK, thử
   // "Tái ông mất ngựa" ra 9.2' giọng Bắc) rồi TÁCH TIẾNG. Video tốn quota hơn → mặc định 1 bản.
   "chuyen-xua": { min: 5, max: 15, target: 8, length: "default", kind: "video", videoStyle: "heritage", takes: 1 },
+  // Dòng Họ Việt (user 2026-10-21): bỏ Gemini TTS → cùng luồng 1 người kể như Chuyện Xưa, 5–8'.
+  "dong-ho-viet": { min: 5, max: 12, target: 7, length: "default", kind: "video", videoStyle: "heritage", takes: 1 },
 };
 const seriesOf = (slug: string): string => {
   try {

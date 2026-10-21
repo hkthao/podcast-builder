@@ -188,7 +188,9 @@ export const SERIES: Record<SeriesId, SeriesInfo> = {
     playlistsFile: "_fb-playlists.dong-ho-viet.json",
     fbContentCategory: "FAMILY",
     fbUploadSrt: false,
-    hookCard: false, // hook = 2 câu đầu kịch bản (đọc thành tiếng) → không thẻ hook trùng
+    // Từ 2026-10-21 audio = NotebookLM 1 người kể (mở chậm) → thẻ hook ~3.5s trước lời kể.
+    // Tập Gemini TTS cũ đã đăng hết nên bật cho cả series.
+    hookCard: true,
     footageLook: null,
   },
   "tien-tam-ly": {

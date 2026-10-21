@@ -10,7 +10,7 @@ Một pipeline chung cho mọi series kể chuyện; khác nhau ở **nội dung
 | Series (`config.series`) | Hướng dẫn nội dung | Giọng (series.ts → `tts`) |
 |---|---|---|
 | `chuyen-xua` — Chuyện Xưa - Ngẫm Nay | [references/chuyen-xua.md](references/chuyen-xua.md) | **NotebookLM Video Overview, 1 người kể** (từ 2026-10-20 — xem file hướng dẫn); Gemini Autonoe chỉ còn ở tập cũ |
-| `dong-ho-viet` — Dòng Họ Việt | [references/dong-ho-viet.md](references/dong-ho-viet.md) | Nam Alnilam dẫn tài liệu, tempo 1.0 (đổi từ Charon 2026-10-19) |
+| `dong-ho-viet` — Dòng Họ Việt | [references/dong-ho-viet.md](references/dong-ho-viet.md) | **NotebookLM Video Overview, 1 người kể "Tôi", 5–8'** (từ 2026-10-21 — xem file hướng dẫn); Alnilam chỉ còn ở tập cũ |
 | `tien-tam-ly` — Tiền & Tâm Lý (kinh tế × tâm lý, ≥3') | [references/tien-tam-ly.md](references/tien-tam-ly.md) | **Audio NotebookLM** (podcast ngắn, từ tập 2 — 2026-10-20) + cảnh vẽ tay `viz-anchor.ts`; Gemini đối thoại chỉ còn ở tập 1 |
 
 **Đọc file hướng dẫn của series TRƯỚC khi viết.** Cấu hình series (thương hiệu, bảng màu, logo, giọng, Trang FB, playlist) ở `podcast/src/series.ts` (bản sao gọn cho UI: `ui/src/lib/series.ts` — sửa cả hai).
@@ -19,7 +19,7 @@ Luồng: **nội dung → story.json → Gemini TTS → user nghe QC → story-a
 Transcript = chữ kịch bản căn vào timing whisper + chương từ kịch bản → render BỎ QUA whisper sửa chữ, spell-fix, LLM editorial (không tốn OpenAI).
 
 ## Bước 1 — Tạo tập
-Tạo qua UI (trang danh sách của series → "Tạo tập mới"; ô kế hoạch → "Tạo tập") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Server tự điền mặc định series (`editorialLocked: true`; `hook: null` nếu series `hookCard: false` (Chuyện Xưa, Dòng Họ Việt — hook nằm trong kịch bản); nhạc nền gần nhất của series) — không cần sửa config.
+Tạo qua UI (trang danh sách của series → "Tạo tập mới"; ô kế hoạch → "Tạo tập") hoặc API `POST /api/episodes {"title","series"}` → `input/<slug>.json` có `series` + **số tập tự đếm riêng theo series**. Server tự điền mặc định series (`editorialLocked: true`; `hook: null` nếu series `hookCard: false` (Chuyện Xưa và Dòng Họ Việt đã BẬT hookCard — ghi `config.hook`); nhạc nền gần nhất của series) — không cần sửa config.
 
 ## Bước 2 — Viết `input/<slug>.story.json`
 ```json
