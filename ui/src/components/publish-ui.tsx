@@ -47,9 +47,23 @@ export function buildDisclosure(opts: {
   }
   // Ghi công cũ có sẵn tiền tố "Nhạc:" → bỏ để không thành "Nhạc nền: Nhạc: …".
   if (opts.musicCredit) lines.push(`Nhạc nền: ${opts.musicCredit.replace(/^Nhạc( nền)?:\s*/i, "").replace(/\.$/, "")}.`);
-  if (opts.footageCredit) lines.push(`${opts.footageCredit}.`);
-  if (opts.sources.length) {
-    lines.push(`Nguồn tham khảo: ${opts.sources.join("; ")}.`);
+  // Gọn như server (publish-description.ts): danh sách tác giả Pexels → "Footage: Pexels"; nguồn bỏ URL.
+  const footage = opts.footageCredit.trim().replace(/\.$/, "");
+  if (footage) lines.push(`${/\(Pexels\)\s*$/i.test(footage) ? "Footage: Pexels" : footage}.`);
+  const sources = opts.sources
+    .map((s) => {
+      // Khớp compactSource ở server: bài báo/tin tức (vnexpress, .vn…) không đưa vào mô tả.
+      const url = s.match(/https?:\/\/\S+/)?.[0];
+      if (url) {
+        let host = "";
+        try { host = new URL(url).hostname; } catch { /* bỏ */ }
+        if (!/(wikipedia\.org|plato\.stanford\.edu|iep\.utm\.edu|britannica\.com|\.edu$|apa\.org|simplypsychology\.org|verywellmind\.com|psychologytoday\.com|greatergood\.berkeley\.edu|positivepsychology\.com|frontiersin\.org|nobelprize\.org)/i.test(host)) return "";
+      }
+      return s.replace(/\s*[:—–-]?\s*https?:\/\/\S+/g, "").trim();
+    })
+    .filter(Boolean);
+  if (sources.length) {
+    lines.push(`Nguồn tham khảo: ${sources.join("; ")}.`);
   }
   return lines.join("\n");
 }

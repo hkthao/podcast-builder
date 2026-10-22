@@ -129,6 +129,35 @@ async function setFileViaChooser(
 }
 
 /** Đợi video mới (tạo sau `since`, chưa published, đúng tiêu đề) xuất hiện trên Trang qua Graph. */
+/** Ô "Upload image" của composer Reel hay không mở được hộp chọn file → đặt thumbnail bằng Graph
+ * (POST /{video}/thumbnails, is_preferred) ngay khi video đã lên lịch. */
+async function setThumbnailViaGraph(
+  pageId: string | undefined,
+  videoId: string,
+  coverPath: string,
+  log: (m: string) => void,
+): Promise<void> {
+  try {
+    const { getApiKey } = await import("../../shared/studio-core/api-keys-store");
+    const { resolvePage } = await import("../../shared/studio-core/facebook");
+    const token = getApiKey("facebook");
+    if (!token) return log("⚠ không có token FB — chưa đặt được thumbnail.");
+    const page = await resolvePage(token, pageId);
+    const fd = new FormData();
+    const type = coverPath.endsWith(".png") ? "image/png" : "image/jpeg";
+    fd.append("source", new Blob([fs.readFileSync(coverPath)], { type }), path.basename(coverPath));
+    fd.append("is_preferred", "true");
+    fd.append("access_token", page.token);
+    const r = await (
+      await fetch(`https://graph.facebook.com/v21.0/${videoId}/thumbnails`, { method: "POST", body: fd })
+    ).json();
+    if (r.success) log(`Thumbnail (Graph): ${path.basename(coverPath)}`);
+    else log(`⚠ Graph chưa đặt được thumbnail: ${JSON.stringify(r.error ?? r)}`);
+  } catch (e) {
+    log(`⚠ Graph chưa đặt được thumbnail (${(e as Error).message.split("\n")[0]}).`);
+  }
+}
+
 async function waitScheduledOnGraph(
   pageId: string,
   title: string,
@@ -403,6 +432,7 @@ async function fill(
     if (found) {
       log(`Graph xác nhận video ${found} (sau ${Math.round((Date.now() - t0) / 1000)}s).`);
       fbVideoId = found;
+      if (coverPath && fs.existsSync(coverPath)) await setThumbnailViaGraph(pageId, found, coverPath, log);
     } else log("⚠ 15 phút chưa thấy video trên Graph — KIỂM TRA lịch trên Business Suite, đừng đóng tab.");
     // Thoát spinner treo: về Planner cho màn hình sạch (lịch đã nằm trên FB).
     if (found) await page.goto("https://business.facebook.com/latest/home", { waitUntil: "domcontentloaded" }).catch(() => {});

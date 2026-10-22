@@ -21,6 +21,29 @@ const withTitleLead = (title: string | null | undefined, caption: string): strin
 };
 
 /**
+ * Ghi công gọn cho mô tả đăng: danh sách >100 tên tác giả Pexels làm mô tả dài gấp đôi
+ * (2026-10-22) → chỉ ghi "Footage: Pexels"; nguồn tham khảo bỏ URL, giữ tên.
+ */
+export const compactFootageCredit = (credit: string | null | undefined): string => {
+  const c = (credit ?? "").trim().replace(/\.$/, "");
+  if (!c) return "";
+  if (/\(Pexels\)\s*$/i.test(c)) return "Footage: Pexels";
+  return c;
+};
+/** Nguồn tham khảo hiển thị trong mô tả: chỉ sách/nghiên cứu/bách khoa; bài báo-tin tức
+ * (vnexpress, các trang .vn…) bỏ hẳn (user 2026-10-22). Nguồn không có URL (sách, tác giả) giữ. */
+const REFERENCE_HOSTS = /(wikipedia\.org|plato\.stanford\.edu|iep\.utm\.edu|britannica\.com|\.edu$|apa\.org|simplypsychology\.org|verywellmind\.com|psychologytoday\.com|greatergood\.berkeley\.edu|positivepsychology\.com|frontiersin\.org|nobelprize\.org)/i;
+export const compactSource = (s: string): string => {
+  const url = s.match(/https?:\/\/\S+/)?.[0];
+  if (url) {
+    let host = "";
+    try { host = new URL(url).hostname; } catch { /* URL hỏng → coi như bài báo */ }
+    if (!REFERENCE_HOSTS.test(host)) return "";
+  }
+  return s.replace(/\s*[:—–-]?\s*https?:\/\/\S+/g, "").trim();
+};
+
+/**
  * Dựng mô tả đầy đủ để đăng (khớp logic fullCaption + buildDisclosure ở
  * PublishTab): caption + hashtags + khối công bố AI/ghi công. Server tự dựng
  * từ config đã lưu (UI auto-save trước khi đăng).
@@ -42,8 +65,9 @@ export const buildEpisodeDescription = (config: EpisodeConfig): string => {
   // Ghi công cũ có sẵn tiền tố "Nhạc:" → bỏ để không thành "Nhạc nền: Nhạc: …" (khớp publish-ui).
   const music = config.musicCredit?.trim().replace(/^Nhạc( nền)?:\s*/i, "").replace(/\.$/, "");
   if (music) lines.push(`Nhạc nền: ${music}.`);
-  if (config.footageCredit?.trim()) lines.push(`${config.footageCredit.trim()}.`);
-  const sources = (config.sources ?? []).map((s) => s.trim()).filter(Boolean);
+  const footage = compactFootageCredit(config.footageCredit);
+  if (footage) lines.push(`${footage}.`);
+  const sources = (config.sources ?? []).map((s) => compactSource(s.trim())).filter(Boolean);
   if (sources.length) lines.push(`Nguồn tham khảo: ${sources.join("; ")}.`);
   const disclosure = lines.join("\n");
   return [caption, hashtagLine, disclosure]
