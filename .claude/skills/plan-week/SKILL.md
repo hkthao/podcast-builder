@@ -42,7 +42,13 @@ curl -s http://localhost:3000/api/cleanup                  # dung lượng ổ +
    - User duyệt ("ok điền vào lịch") → PATCH từng ô `{title, hook, notes}` (lấy id ô bằng GET `?from=…&days=7`). Ý tưởng dư → kho ý tưởng (`POST /ideas`).
 3. **Tạo tập** cho mọi ô đã duyệt: nút "Tạo N tập" trên /plan (hoặc `create-episode` từng ô). Server tự điền mặc định theo series (Chuyện Xưa không hook, kể chuyện `editorialLocked`, nhạc nền bản chọn gần nhất CỦA SERIES) — không sửa config tay.
 4. **Dọn ổ:** server TỰ dọn các mục an toàn khi trống < 25 GB lúc hàng đợi render bắt đầu chạy. Chỉ cần làm tay mục nặng (footage/video tập cũ, `POST /api/cleanup`) khi vẫn thiếu — ghi vào báo cáo.
-5. **Audio ByteCast TRƯỚC** (NotebookLM chậm + có quota): research → bài luận theo `notebooklm-podcast/references/essay-pattern.md` + focus + danh sách URL → **`nlm-batch.ts <slug>` chạy nền** (tự tạo notebook, nạp nguồn, gen 2 bản, tải, chọn bản 14–18'). Exit 2 → `--takes=1` roll thêm (để ý quota). Trong lúc chờ NotebookLM, làm song song các tập kể chuyện.
+5. **Kiểm quota NotebookLM TRƯỚC khi gen** — NotebookLM/`nlm` KHÔNG có API xem lượt còn lại, hết lượt thì `create` vẫn "OK" nhưng bản gen kẹt `in_progress` mãi (23/10 mất ~3h vì vậy). Sổ tự ghi `input/_nlm-quota.json`:
+   ```bash
+   npx tsx podcast/scripts/nlm-quota.ts          # mỗi tài khoản còn mấy lượt / mở lại lúc nào
+   NLM_PROFILE=$(npx tsx podcast/scripts/nlm-quota.ts pick) npx tsx podcast/scripts/nlm-batch.ts <slug>
+   ```
+   Hạn mức quan sát: Plus ~5 lượt gen (audio + video CHUNG)/5h; tài khoản thường ~3/24h. Lên kế hoạch dàn ~14 tập qua các tài khoản trước khi bấm (ưu tiên video kể chuyện lên Plus — tài khoản thường hay kẹt video). `nlm-batch` tự dừng (exit 4) khi tài khoản hết lượt và tự khoá tài khoản khi bản gen kẹt quá 40'. Dùng `NLM_PROFILE=` chứ không `--profile` (đổi default toàn máy, xem memory nlm-profile-env-per-process).
+   **Audio ByteCast TRƯỚC** (NotebookLM chậm + có quota): research → bài luận theo `notebooklm-podcast/references/essay-pattern.md` + focus + danh sách URL → **`nlm-batch.ts <slug>` chạy nền** (tự tạo notebook, nạp nguồn, gen 2 bản, tải, chọn bản 14–18'). Exit 2 → `--takes=1` roll thêm (để ý quota). Trong lúc chờ NotebookLM, làm song song các tập kể chuyện.
 6. **Kể chuyện cả loạt:** Claude viết `story.json` (skill story-series Bước 2) → **`npx tsx story/scripts/story-audio.ts <slug>`** (TTS → căn chữ → audio-qc, trượt thì tự gen lại tối đa 3 lần; exit 0 = đạt). Chuyện Xưa thiếu nguyên văn truyện → bỏ qua ô đó, ghi báo cáo (KHÔNG tự bịa nguyên văn/lời bàn).
 7. **Transcript + editorial ByteCast:** spell-fix bằng Claude (dump/apply) → `editorial-manual.ts brief|apply` (Claude viết chương/trích dẫn, không gpt-4o).
 8. **Footage cả loạt** (skill footage-shotlist; TRƯỚC cover — footage-plan ghi đè config) → cổng footage.
@@ -56,6 +62,16 @@ curl -s http://localhost:3000/api/cleanup                  # dung lượng ổ +
     npx tsx podcast/scripts/fb-browser.ts fill <slug> --at 2026-10-26T12:00:00Z --submit
     ```
     Script nối Chrome riêng (CDP 9333, profile `~/.config/podcast-builder/fb-chrome`, đã đăng nhập; chưa mở thì tự mở — hết phiên thì `fb-browser.ts open` nhờ user login) → Create reel đúng Trang theo series → tải mp4 → tiêu đề + mô tả (buildEpisodeDescription) + Tags (hashtag) → đợi quét bản quyền → Schedule (giờ VN) + playlist → bấm Schedule → ghi `publishStatus:"scheduled"`. Spinner "Scheduling your post" hay treo dù lịch đã tạo → bình thường. Sau đợt: lấy `fbReelId` bằng Graph `/{page}/videos` (bài mới có `published:false`) ghi vào config. Playlist chưa có trên Trang → script bỏ qua, nhắc user tạo. Trong app: tab Đăng → "Lên lịch qua Business Suite" (`POST /api/publish/browser`). Hàng đợi API `/api/publish/jobs` chỉ dùng khi user yêu cầu rõ.
+
+## Theo dõi sau đăng — hoãn khi bài đang "cắn đề xuất" (user chốt 2026-10-24)
+Bài trên 1 Trang đang lan mạnh (lượt phát/chia sẻ tăng đột biến) → **hoãn bài hẹn giờ kế tiếp của CHÍNH Trang đó thêm 24h**, để không cắt luồng phân phối tự nhiên của bài hot. Chỉ dời 1 bài (không lùi cả chuỗi); bài sau lại trùng bài hot khác thì quy tắc tự lặp.
+```bash
+npx tsx --env-file=.env podcast/scripts/hot-post-guard.ts      # exit 3 = có bài cần hoãn (in slug + giờ cũ → mới)
+```
+- Ngưỡng "hot" (so với chính Trang, vì reach mỗi Trang khác hẳn): đăng ≤72h và lượt phát ≥ 3× trung vị 10 bài trước (sàn 300), hoặc chia sẻ ≥ 3× trung vị (sàn 5); hoặc bài cũ tăng ≥ trung vị trong 24h (snapshot `tmp/hot-post-guard.json`).
+- Chạy **mỗi ngày ~16:00** (trước giờ đăng 19:00) — đầu mỗi phiên làm việc cũng chạy 1 lần.
+- Graph KHÔNG trả giờ hẹn của bài tạo qua Business Suite, và đổi lịch qua API chưa được phép → **dời trên Business Suite (Planner → bài → Reschedule)**, rồi sửa `scheduledPublishTime` trong `input/<slug>.json`. Báo user trước khi dời (thao tác ra ngoài).
+- Báo cáo chủ nhật: liệt kê các lần đã hoãn + lượt phát bài hot / bài bị hoãn để đo quy tắc có hiệu quả không.
 
 ## Bẫy đã gặp (lượt chạy 18/10/2026)
 - **footage-plan --apply chạy TUẦN TỰ** (cùng ghi `input/_footage-used.json`); xếp theo NGÀY ĐĂNG, không theo thứ tự làm. Pexels hay trả: tay người (people-check bỏ sót), đồ tôn giáo khác (thánh giá, kinh Ả Rập/Do Thái), kiến trúc châu Âu → luôn xem contact sheet khung giữa, thay shot lỗi bằng shot đạt cùng beat (sửa `config.footage[i]`), không cần tải lại.

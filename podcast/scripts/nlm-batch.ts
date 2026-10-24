@@ -21,6 +21,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { currentProfile, markExhausted, record, status as quotaStatus } from "./nlm-quota";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
 
@@ -142,7 +143,18 @@ async function main() {
 
   // 3. Gen thêm N bản (đếm qua status, không tin exit code create — bẫy bản ma)
   const want = Number(arg("takes") ?? (st.artifacts.length ? 0 : (GATE.takes ?? 2)));
+  // Quota: NotebookLM không báo hết lượt (create vẫn OK, bản gen kẹt in_progress) → tự đếm
+  // theo sổ input/_nlm-quota.json. Hết lượt → dừng sớm, gợi ý tài khoản khác (exit 4).
+  const nlmProfile = currentProfile();
   for (let i = 0; i < want; i++) {
+    const q = quotaStatus(nlmProfile);
+    if (q.left <= 0 && !process.argv.includes("--ignore-quota")) {
+      const reopen = q.reopensAt?.toLocaleString("vi-VN") ?? "?";
+      log(`✗ ${nlmProfile} hết quota (${q.used}/${q.max} trong ${q.windowH}h) — mở lại ~${reopen}. ` +
+        `Xem \`npx tsx podcast/scripts/nlm-quota.ts\`, chạy lại với NLM_PROFILE=<tài khoản còn lượt> (hoặc --ignore-quota).`);
+      if (!st.artifacts.length) process.exit(4);
+      break;
+    }
     const before = new Set(audioArtifacts().map((a) => a.id));
     try {
       nlm(
@@ -171,6 +183,7 @@ async function main() {
     }
     if (ghosts.length) log(`xoá ${ghosts.length} bản ma do nlm tự retry`);
     st.artifacts.push(keep);
+    record({ profile: nlmProfile, kind: KIND, slug, artifact: keep });
     save();
     log(`đã yêu cầu bản ${st.artifacts.length} (${keep})`);
     // Giãn cách giữa các lần create để đỡ dính rate limit.
@@ -215,7 +228,13 @@ async function main() {
       }
       pending++;
     }
-    if (!pending || Date.now() > deadline) break;
+    if (!pending) break;
+    if (Date.now() > deadline) {
+      // Kẹt ≥ POLL_MAX_MIN = dấu hiệu hết quota (không có lỗi nào báo) → khoá tài khoản tới khi mở lại.
+      const until = markExhausted(nlmProfile);
+      log(`⚠ ${pending} bản kẹt in_progress sau ${POLL_MAX_MIN}' — coi ${nlmProfile} HẾT QUOTA tới ~${until.toLocaleString("vi-VN")}.`);
+      break;
+    }
     log(`chờ ${pending}/${mine.length} bản đang gen…`);
     await new Promise((r) => setTimeout(r, POLL_SEC * 1000));
   }
