@@ -199,6 +199,39 @@ async function waitScheduledOnGraph(
   return null;
 }
 
+/**
+ * Trạng thái lượt đăng Business Suite → tmp/fb-browser/<slug>.job.json để trang "Hàng đợi đăng"
+ * hiện cả lượt chạy từ CLI/skill (server đọc ở publish-queue.listBrowserPublishJobs).
+ */
+type BrowserJob = {
+  episodeName: string;
+  title: string;
+  series: string;
+  scheduledAt: string | null;
+  status: "uploading" | "done" | "error";
+  message: string;
+  log: { at: number; line: string }[];
+  pid: number;
+  bytesTotal: number;
+  startedAt: number;
+  finishedAt: number | null;
+  error: string | null;
+  videoId: string | null;
+  pageName: string;
+};
+let browserJob: BrowserJob | null = null;
+const jobFile = (slug: string) => path.join(process.cwd(), "tmp", "fb-browser", `${slug}.job.json`);
+export function writeBrowserJob(patch: Partial<BrowserJob>) {
+  if (!browserJob) return;
+  browserJob = { ...browserJob, ...patch };
+  try {
+    fs.mkdirSync(path.dirname(jobFile(browserJob.episodeName)), { recursive: true });
+    fs.writeFileSync(jobFile(browserJob.episodeName), JSON.stringify(browserJob));
+  } catch {
+    /* không ghi được trạng thái thì vẫn đăng tiếp */
+  }
+}
+
 async function fill(
   page: Page,
   slug: string,
@@ -229,7 +262,28 @@ async function fill(
   const channel = getSeries(config.series).channelName;
   const description = buildEpisodeDescription(config);
   const playlist = playlistArg ?? config.fbPlaylistName ?? null;
-  const log = (m: string) => console.log(`[fb-browser] ${m}`);
+  browserJob = {
+    episodeName: slug,
+    title: config.title ?? slug,
+    series: config.series ?? "bytecast",
+    scheduledAt: new Date(Date.parse(at)).toISOString(),
+    status: "uploading",
+    message: "Mở Business Suite…",
+    log: [],
+    pid: process.pid,
+    bytesTotal: fs.statSync(videoPath).size,
+    startedAt: Date.now(),
+    finishedAt: null,
+    error: null,
+    videoId: null,
+    pageName: channel,
+  };
+  writeBrowserJob({});
+  const log = (m: string) => {
+    console.log(`[fb-browser] ${m}`);
+    if (browserJob)
+      writeBrowserJob({ message: m, log: [...browserJob.log, { at: Date.now(), line: m }].slice(-200) });
+  };
 
   await page.bringToFront();
   page.on("dialog", (d) => void d.accept().catch(() => {})); // "rời trang?" khi composer cũ còn dở
@@ -306,24 +360,29 @@ async function fill(
     }
   }
 
-  // Thumbnail: mục "Thumbnail → Upload image" chỉ hiện sau khi upload video xong → ảnh cover.
+  // Thumbnail: card "Choose thumbnail" → tab "Choose suggested" → bấm ảnh gợi ý số 1 (= frame
+  // đầu = ảnh cover của intro). Không bấm thì Reel lấy ảnh ngẫu nhiên (user 2026-10-24). Tab
+  // "Upload image" không mở được hộp chọn file và để card trống → bỏ; Graph đặt cover sau khi lên lịch.
   const coverPath = config.coverImage
     ? path.join(process.cwd(), "input", config.coverImage)
     : null;
-  if (coverPath && fs.existsSync(coverPath)) {
-    try {
-      const up = page
-        .getByRole("button", { name: "Upload image", exact: true })
-        .first();
-      await up.scrollIntoViewIfNeeded({ timeout: 15_000 });
-      await setFileViaChooser(page, () => up.click(), coverPath);
-      await page.waitForTimeout(3000);
-      log(`Thumbnail: ${config.coverImage}`);
-    } catch (e) {
-      log(
-        `⚠ chưa đặt được thumbnail (${(e as Error).message.split("\n")[0]}) — FB dùng frame gợi ý.`,
-      );
-    }
+  try {
+    const suggested = page
+      .getByRole("button", { name: "Choose suggested", exact: true })
+      .first();
+    await suggested.scrollIntoViewIfNeeded({ timeout: 15_000 });
+    await suggested.click({ timeout: 10_000 });
+    const first = page
+      .getByRole("button", { name: "Auto-generated thumbnail image 1", exact: true })
+      .first();
+    await first.waitFor({ timeout: 60_000 });
+    await first.click({ timeout: 10_000 });
+    await page.waitForTimeout(1500);
+    log("Thumbnail: ảnh gợi ý số 1 (frame cover).");
+  } catch (e) {
+    log(
+      `⚠ chưa chọn được thumbnail gợi ý (${(e as Error).message.split("\n")[0]}) — chọn tay ảnh đầu trong card Thumbnail.`,
+    );
   }
   // Quét bản quyền chạy sau upload ("Checking for copyrighted content…") → đợi ra kết quả.
   const checking = page
@@ -472,6 +531,18 @@ async function fill(
       }
     }
   }
+  // Popup "Reel scheduled" sau khi hẹn giờ (lịch ĐÃ tạo, chỉ cần đóng), 2 biến thể (FB 2026-10):
+  //  - "…scheduled to publish on <ngày> after it has finished processing" → nút Done
+  //  - "adjust your content for our new player… Create reel?" / "Reach new audiences by creating a reel" → Not now / Maybe later (KHÔNG bấm Create reel)
+  // Có thể hiện lần lượt cả hai → đóng tới khi hết.
+  for (let i = 0; i < 3; i++) {
+    const close = page.getByRole("button", { name: /^(not now|done|maybe later)$/i }).first();
+    if (!(await close.waitFor({ state: "visible", timeout: 8000 }).then(() => true, () => false))) break;
+    const name = (await close.innerText().catch(() => "")).trim();
+    await close.click().catch(() => {});
+    log(`Đóng popup "Reel scheduled" (${name || "nút đóng"}).`);
+    await page.waitForTimeout(800);
+  }
   await saveEpisode(slug, {
     ...config,
     publishStatus: "scheduled",
@@ -480,6 +551,7 @@ async function fill(
     ...(playlist ? { fbPlaylistName: playlist } : {}),
   });
   log(`✓ Đã ghi ${slug}: scheduled ${at} (đăng qua Business Suite).`);
+  writeBrowserJob({ status: "done", finishedAt: Date.now(), videoId: fbVideoId ?? null });
 }
 
 /** Liệt kê phần tử tương tác đang hiện (role + tên) + chụp màn — để dò selector. */
@@ -555,6 +627,8 @@ async function main() {
 if (process.argv[1]?.endsWith("fb-browser.ts")) {
   main().catch((e) => {
     console.error(e);
+    const msg = (e instanceof Error ? e.message : String(e)).split("\n")[0];
+    writeBrowserJob({ status: "error", error: msg, message: msg, finishedAt: Date.now() });
     process.exit(1);
   });
 }

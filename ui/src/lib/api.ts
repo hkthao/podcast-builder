@@ -1679,6 +1679,8 @@ export type PublishJob = {
   finishedAt: number | null;
   error: string | null;
   result: { videoId: string; permalink: string | null; pageName: string; scheduled: boolean } | null;
+  /** "business-suite" = đăng qua fb-browser.ts — chỉ hiển thị (không huỷ/thử lại từ đây). */
+  via?: "graph" | "business-suite";
 };
 export type PublishEnqueueItem = { episodeName: string; scheduledAt?: string | null; playlistId?: string; playlistName?: string };
 

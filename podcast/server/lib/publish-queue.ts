@@ -43,6 +43,8 @@ export type PublishJob = {
   finishedAt: number | null;
   error: string | null;
   result: { videoId: string; permalink: string | null; pageName: string; scheduled: boolean } | null;
+  /** "business-suite" = lượt đăng qua fb-browser.ts (CLI/skill/UI) — chỉ hiển thị, không huỷ/thử lại ở đây. */
+  via?: "graph" | "business-suite";
 };
 
 const STATE_FILE = path.join(PATHS.TMP_DIR, "_publish-queue.json");
@@ -115,7 +117,61 @@ export function subscribePublishJob(id: string, fn: Listener): () => void {
   };
 }
 
-export const listPublishJobs = (): PublishJob[] => jobs;
+/**
+ * Lượt đăng qua Business Suite (scripts/fb-browser.ts ghi tmp/fb-browser/<slug>.job.json) — chạy
+ * ngoài hàng đợi Graph nên trước đây không hiện ở /publish-queue dù đã hẹn giờ xong.
+ */
+const BROWSER_DIR = path.join(PATHS.TMP_DIR, "fb-browser");
+const pidAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+function listBrowserPublishJobs(): PublishJob[] {
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(BROWSER_DIR).filter((f) => f.endsWith(".job.json"));
+  } catch {
+    return [];
+  }
+  const out: PublishJob[] = [];
+  for (const f of files) {
+    try {
+      const b = JSON.parse(fs.readFileSync(path.join(BROWSER_DIR, f), "utf-8"));
+      // Tiến trình chết giữa chừng (Ctrl-C, máy tắt) → không để "đang tải" mãi.
+      const dead = b.status === "uploading" && !pidAlive(b.pid);
+      const status: PublishJobStatus = dead ? "error" : b.status;
+      out.push({
+        id: `bs:${b.episodeName}`,
+        episodeName: b.episodeName,
+        title: b.title,
+        series: b.series,
+        scheduledAt: b.scheduledAt,
+        status,
+        percent: status === "done" ? 100 : 0,
+        bytesSent: status === "done" ? b.bytesTotal : 0,
+        bytesTotal: b.bytesTotal,
+        bytesPerSec: 0,
+        message: `Business Suite · ${b.message}`,
+        log: b.log ?? [],
+        createdAt: b.startedAt,
+        startedAt: b.startedAt,
+        finishedAt: b.finishedAt ?? (dead ? b.startedAt : null),
+        error: dead ? "Tiến trình fb-browser dừng giữa chừng — kiểm tra lịch trên Business Suite." : b.error,
+        result: b.videoId ? { videoId: b.videoId, permalink: null, pageName: b.pageName, scheduled: true } : null,
+        via: "business-suite",
+      });
+    } catch {
+      /* file đang ghi dở — bỏ qua lượt này */
+    }
+  }
+  return out;
+}
+
+export const listPublishJobs = (): PublishJob[] => [...jobs, ...listBrowserPublishJobs()];
 export const getPublishJob = (id: string): PublishJob | undefined => jobs.find((j) => j.id === id);
 
 /** Kiểm điều kiện đăng — lỗi trả message tiếng Việt (route trả 400). */
@@ -211,7 +267,17 @@ export function clearFinishedPublishJobs(): number {
   const before = jobs.length;
   jobs = jobs.filter((j) => j.status === "queued" || j.status === "uploading");
   persist(true);
-  return before - jobs.length;
+  let removed = before - jobs.length;
+  for (const j of listBrowserPublishJobs()) {
+    if (j.status === "uploading") continue;
+    try {
+      fs.rmSync(path.join(BROWSER_DIR, `${j.episodeName}.job.json`));
+      removed++;
+    } catch {
+      /* đã xoá */
+    }
+  }
+  return removed;
 }
 
 async function processQueue(): Promise<void> {

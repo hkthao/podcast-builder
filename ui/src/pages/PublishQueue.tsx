@@ -61,13 +61,13 @@ export function PublishQueuePage() {
     uploading.reduce((s, j) => s + (j.bytesTotal - j.bytesSent), 0) + waiting.reduce((s, j) => s + j.bytesTotal, 0);
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="container max-w-5xl py-5 pb-24 md:py-10">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+          <h1 className="flex items-center gap-2 font-serif text-2xl md:text-3xl tracking-tight">
             <UploadCloud className="size-7 text-accent" /> Hàng đợi đăng
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
             {q.data
               ? `${uploading.length} đang tải · ${waiting.length} đang chờ` +
                 (remainingBytes ? ` · còn ${fmtBytes(remainingBytes)}` : "") +
@@ -77,7 +77,7 @@ export function PublishQueuePage() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => clearMut.mutate()} disabled={clearMut.isPending || !finished.length}>
-          <Trash2 className="size-4" /> Xoá mục đã xong
+          <Trash2 className="size-4" /> Xoá đã xong
         </Button>
       </header>
 
@@ -90,7 +90,12 @@ export function PublishQueuePage() {
         <>
           <Section title="Đang tải" empty="Không có video nào đang tải.">
             {uploading.map((j) => (
-              <JobRow key={j.id} job={j} defaultOpen onCancel={() => cancelMut.mutate(j.id)} />
+              <JobRow
+                key={j.id}
+                job={j}
+                defaultOpen
+                onCancel={j.via !== "business-suite" ? () => cancelMut.mutate(j.id) : undefined}
+              />
             ))}
           </Section>
           <Section title="Đang chờ" empty="Hàng đợi trống.">
@@ -100,7 +105,11 @@ export function PublishQueuePage() {
           </Section>
           <Section title="Đã kết thúc" empty="Chưa có lượt đăng nào.">
             {finished.map((j) => (
-              <JobRow key={j.id} job={j} onRetry={j.status !== "done" ? () => retryMut.mutate(j.id) : undefined} />
+              <JobRow
+                key={j.id}
+                job={j}
+                onRetry={j.status !== "done" && j.via !== "business-suite" ? () => retryMut.mutate(j.id) : undefined}
+              />
             ))}
           </Section>
         </>
@@ -164,19 +173,27 @@ function JobRow({
           {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
         </button>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Link to={`/episodes/${encodeURIComponent(job.episodeName)}`} className="truncate text-sm font-medium hover:underline">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Link
+              to={`/episodes/${encodeURIComponent(job.episodeName)}`}
+              className="w-full truncate text-sm font-medium hover:underline sm:w-auto"
+            >
               {job.title || job.episodeName}
             </Link>
             <Badge variant="outline" className="shrink-0 text-[10px]">
               {info.channelName}
             </Badge>
+            {job.via === "business-suite" && (
+              <Badge variant="secondary" className="shrink-0 text-[10px]" title="Đăng qua Meta Business Suite (fb-browser)">
+                Business Suite
+              </Badge>
+            )}
             {position && <span className="shrink-0 text-xs text-muted-foreground">#{position} trong hàng</span>}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {job.scheduledAt ? `Hẹn đăng ${fmtWhen(job.scheduledAt)}` : "Đăng ngay"} · {fmtBytes(job.bytesTotal)}
           </div>
-          {job.status === "uploading" && (
+          {job.status === "uploading" && job.via !== "business-suite" && (
             <div className="mt-1.5 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${job.percent.toFixed(1)}%` }} />
@@ -189,7 +206,7 @@ function JobRow({
           </div>
         </div>
         <div className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-          {job.status === "uploading" ? (
+          {job.status === "uploading" && job.via !== "business-suite" ? (
             <>
               <div>
                 {fmtBytes(job.bytesSent)} · {job.bytesPerSec > 0 ? `${(job.bytesPerSec / 1024 ** 2).toFixed(2)} MB/s` : "…"}
