@@ -530,7 +530,7 @@ export function CompTab({ episodeName }: Props) {
               ) : (
                 <Wand2 className="size-4" />
               )}
-              Tạo bản ghép
+              Ghép
             </Button>
             {jobRunning && jobKind === "build" && (
               <span className="text-xs text-muted-foreground">
@@ -568,7 +568,7 @@ export function CompTab({ episodeName }: Props) {
               ) : (
                 <Check className="size-4" />
               )}
-              Dùng làm bản chính
+              Dùng bản này
             </Button>
             {promoteMut.isSuccess && (
               <span className="ml-2 text-xs text-emerald-600">

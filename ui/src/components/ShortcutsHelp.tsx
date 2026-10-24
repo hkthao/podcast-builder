@@ -99,11 +99,11 @@ export function ShortcutsHelp() {
       )}
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end justify-center sm:items-center p-0 sm:p-4"
           onClick={() => setOpen(false)}
         >
           <Card
-            className="max-w-2xl w-full p-0 overflow-hidden"
+            className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-b-none p-0 sm:rounded-b-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">

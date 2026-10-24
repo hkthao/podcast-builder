@@ -100,7 +100,7 @@ export function EpisodeEdit() {
 
   if (epQ.isLoading) {
     return (
-      <div className="container max-w-4xl py-10">
+      <div className="container max-w-4xl py-5 pb-24 md:py-10">
         <div className="h-8 w-48 animate-pulse rounded bg-muted/40 mb-6" />
         <Card className="h-96 animate-pulse bg-muted/30" />
       </div>
@@ -109,7 +109,7 @@ export function EpisodeEdit() {
 
   if (epQ.error || !epQ.data) {
     return (
-      <div className="container max-w-4xl py-10">
+      <div className="container max-w-4xl py-5 pb-24 md:py-10">
         <Link
           to="/"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -117,7 +117,7 @@ export function EpisodeEdit() {
           <ArrowLeft className="size-4" />
           Danh sách tập
         </Link>
-        <Card className="border-destructive/40 bg-destructive/5 p-6">
+        <Card className="border-destructive/40 bg-destructive/5 p-4 md:p-6">
           <div className="font-medium text-destructive">
             Không load được tập "{name}"
           </div>
@@ -134,7 +134,7 @@ export function EpisodeEdit() {
   const transcriptCount = transcriptQ.data?.totalSegments ?? 0;
 
   return (
-    <div className="container max-w-4xl py-10">
+    <div className="container max-w-4xl py-5 pb-24 md:py-10">
       <Link
         to={seriesListPath(ep.config.series)}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -143,13 +143,13 @@ export function EpisodeEdit() {
         {seriesInfo(ep.config.series).channelName}
       </Link>
 
-      <header className="mb-6 flex items-start justify-between gap-6">
+      <header className="mb-3 flex items-start justify-between gap-3 md:mb-6 md:gap-6">
         <div className="flex-1 min-w-0">
-          <h1 className="font-serif text-3xl tracking-tight">
+          <h1 className="font-serif text-2xl md:text-3xl tracking-tight">
             {ep.config.title}
           </h1>
           {ep.config.hook && (
-            <p className="mt-2 text-muted-foreground italic">
+            <p className="mt-2 line-clamp-3 text-sm italic text-muted-foreground md:line-clamp-none md:text-base">
               "{ep.config.hook}"
             </p>
           )}
@@ -171,7 +171,14 @@ export function EpisodeEdit() {
         </Badge>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      {/* Điện thoại: 1 dòng chip thay 4 ô to (đỡ chiếm nửa màn đầu). */}
+      <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:hidden">
+        <span className="font-mono">#{String(ep.config.episodeNumber).padStart(3, "0")}</span>
+        <span>Audio {ep.audioPath ? "✓" : "—"}</span>
+        <span>Render {ep.renderedAt ? new Date(ep.renderedAt).toLocaleDateString("vi-VN") : "—"}</span>
+        <span>{ep.hasOutput ? "mp4 ✓" : "chưa có mp4"}</span>
+      </div>
+      <div className="mb-8 hidden grid-cols-4 gap-4 md:grid">
         <Meta icon={<Hash className="size-4" />} label="Số tập">
           {String(ep.config.episodeNumber).padStart(3, "0")}
         </Meta>
@@ -187,23 +194,29 @@ export function EpisodeEdit() {
       </div>
 
       {/* Tabs — Kịch bản / Âm thanh / Nội dung / Footage / Render (gồm Cấu hình) / Đăng */}
-      <div className="mb-4 flex flex-wrap gap-x-1 gap-y-0 border-b">
+      {/* Điện thoại: 6 ô icon+nhãn ngắn chia đều 1 hàng, dính đầu vùng cuộn khi kéo xuống (tab nằm trong #app-scroll). */}
+      <div className="sticky top-0 z-20 -mx-4 mb-4 flex gap-x-0 border-b md:gap-x-1 bg-background/95 px-4 backdrop-blur md:static md:mx-0 md:flex-wrap md:overflow-visible md:bg-transparent md:px-0 md:backdrop-blur-none">
         <TabButton
           active={tab === "script"}
           onClick={() => setTab("script")}
           icon={<BookOpen className="size-4" />}
           label="Kịch bản"
+          short="Kịch bản"
         />
         <TabButton
           active={tab === "assets"}
           onClick={() => setTab("assets")}
           icon={<FileAudio2 className="size-4" />}
           label={`Âm thanh${ep.audioPath ? " ✓" : " —"}`}
+          short="Âm thanh"
+          done={!!ep.audioPath}
         />
         <TabButton
           active={tab === "content"}
           onClick={() => setTab("content")}
           icon={<FileText className="size-4" />}
+          short="Nội dung"
+          done={transcriptCount > 0}
           label={`Nội dung${
             transcriptCount > 0 || planCount > 0
               ? ` (${[transcriptCount && `${transcriptCount} câu`, planCount && `${planCount} cảnh`].filter(Boolean).join(" · ")})`
@@ -215,17 +228,23 @@ export function EpisodeEdit() {
           onClick={() => setTab("footage")}
           icon={<Film className="size-4" />}
           label={`Footage${ep.config.footage.length > 0 ? ` (${ep.config.footage.length})` : ""}`}
+          short="Footage"
+          done={ep.config.footage.length > 0}
         />
         <TabButton
           active={tab === "render"}
           onClick={() => setTab("render")}
           icon={<Play className="size-4" />}
           label={`Render${ep.hasOutput ? " ✓" : ""}`}
+          short="Render"
+          done={ep.hasOutput}
         />
         <TabButton
           active={tab === "publish"}
           onClick={() => setTab("publish")}
           icon={<Send className="size-4" />}
+          short="Đăng"
+          done={ep.config.publishStatus === "published" || ep.config.publishStatus === "scheduled"}
           label={`Đăng${
             ep.config.publishStatus === "published"
               ? " ✓"
@@ -486,7 +505,7 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
     uploadMut.isPending || deleteMut.isPending || volumeMut.isPending || rerollMut.isPending || claimMut.isPending;
 
   return (
-    <Card className="p-5 mb-6">
+    <Card className="p-4 md:p-5 mb-6">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Volume2 className="size-4 text-accent" />
         <h3 className="font-medium">Nhạc nền (BGM)</h3>
@@ -610,7 +629,7 @@ function BgmPanel({ ep }: { ep: EpisodeSummary }) {
           title="Bốc ngẫu nhiên bài khác trong kho an toàn (CC0/PD) hợp series, tránh bài tập khác đang dùng"
         >
           {rerollMut.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Shuffle className="size-3.5" />}
-          {hasBgm ? "Đổi bài khác" : "Bốc từ kho nhạc"}
+          {hasBgm ? "Đổi bài" : "Bốc nhạc"}
         </Button>
         {hasBgm && (
           <Button
@@ -670,24 +689,34 @@ function TabButton({
   onClick,
   icon,
   label,
+  short,
+  done,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  /** Nhãn trên điện thoại (icon trên, chữ dưới — 6 tab vừa 1 hàng 360px). */
+  short: string;
+  /** Chấm xanh góc icon (điện thoại) thay cho "✓" trong nhãn dài. */
+  done?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+        "-mb-px flex flex-1 flex-col items-center gap-0.5 whitespace-nowrap border-b-2 px-1 py-1.5 text-[11px] font-medium transition-colors md:flex-none md:flex-row md:gap-1.5 md:px-2.5 md:py-2 md:text-sm",
         active
           ? "border-primary text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
-      {icon}
-      {label}
+      <span className="relative">
+        {icon}
+        {done && <span className="absolute -right-1 -top-0.5 size-1.5 rounded-full bg-emerald-500 md:hidden" />}
+      </span>
+      <span className="md:hidden">{short}</span>
+      <span className="hidden md:inline">{label}</span>
     </button>
   );
 }
@@ -831,7 +860,7 @@ function ScenesPanel({
           ) : (
             <Sparkles className="size-4" />
           )}
-          Tạo plan cảnh
+          Tạo cảnh
         </Button>
         {planJobMut.isSuccess && (
           <p className="mt-3 text-xs text-muted-foreground">
@@ -1485,7 +1514,7 @@ function TranscriptPanel({
             title="Find & Replace"
           >
             <Pencil className="size-4" />
-            Find & Replace
+            Tìm & thay
           </Button>
         </div>
       </div>
@@ -1530,7 +1559,7 @@ function TranscriptPanel({
             {saveMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : null}
-            Replace all
+            Thay hết
           </Button>
         </div>
       )}
@@ -1745,7 +1774,7 @@ function FootagePanel({
   const start = cur * FOOTAGE_PAGE_SIZE;
   const pageClips = clips.slice(start, start + FOOTAGE_PAGE_SIZE);
   return (
-    <Card className="p-5">
+    <Card className="p-4 md:p-5">
       <div className="flex items-center gap-2 mb-1">
         <Film className="size-4 text-accent" />
         <h3 className="font-medium">
@@ -1764,9 +1793,13 @@ function FootagePanel({
         {landscape ? " --landscape" : " --all-pexels"} --apply
       </code>
       {credit && (
-        <p className="text-xs text-muted-foreground mb-4">
-          <span className="font-medium text-foreground">Ghi công:</span> {credit}
-        </p>
+        // Danh sách tác giả Pexels dài cả trăm tên → gập lại, bấm để xem.
+        <details className="mb-4 text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none">
+            <span className="font-medium text-foreground">Ghi công</span> ({credit.split(",").length} tác giả)
+          </summary>
+          <p className="mt-1">{credit}</p>
+        </details>
       )}
       {clips.length === 0 ? (
         <p className="text-sm text-muted-foreground italic">

@@ -17,7 +17,6 @@ import {
   CalendarPlus,
   Clock,
   ExternalLink,
-  Lightbulb,
   Loader2,
   Pencil,
   Plus,
@@ -27,7 +26,7 @@ import {
   FilePlus2,
   UploadCloud,
 } from "lucide-react";
-import { api, planApi, publishApi, type PlanIdea, type PlanSlot, type PublishJob } from "@/lib/api";
+import { api, planApi, publishApi, type PlanSlot, type PublishJob } from "@/lib/api";
 import { SERIES_OPTIONS, seriesInfo, type SeriesId } from "@/lib/series";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -189,13 +188,13 @@ export function PlanPage() {
   }, [q.data]);
 
   return (
-    <div className="container max-w-6xl py-10">
+    <div className="container max-w-6xl py-5 pb-24 md:py-10">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+          <h1 className="flex items-center gap-2 font-serif text-2xl md:text-3xl tracking-tight">
             <CalendarDays className="size-7 text-accent" /> Kế hoạch đăng
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
             Mỗi kênh {q.data ? Object.values(q.data.settings.cadenceDays)[0] : 2} ngày 1 tập · chủ nhật Claude làm
             hàng loạt (nói "làm kế hoạch tuần tới") · hẹn giờ đăng qua Facebook.
           </p>
@@ -211,7 +210,7 @@ export function PlanPage() {
             <ChevronRight className="size-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={() => fillMut.mutate()} disabled={fillMut.isPending}>
-            <CalendarPlus className="size-4" /> Điền lịch theo nhịp
+            <CalendarPlus className="size-4" /> Điền lịch
           </Button>
           <Button
             variant="outline"
@@ -221,7 +220,7 @@ export function PlanPage() {
             title="Tạo tập (config) cho mọi ô đã có chủ đề nhưng chưa gắn tập"
           >
             {createAllMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />} Tạo{" "}
-            {creatable.length} tập
+            {creatable.length}
           </Button>
           <Button
             variant="outline"
@@ -231,7 +230,7 @@ export function PlanPage() {
             title="Xếp hàng render các tập đã đủ kịch bản + audio + footage + cover (server chạy tối đa 2 job song song)"
           >
             {renderMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Clapperboard className="size-4" />} Render{" "}
-            {renderable.length} tập sẵn sàng
+            {renderable.length}
           </Button>
           <Button
             size="sm"
@@ -240,7 +239,7 @@ export function PlanPage() {
             title="Xếp các tập đã render vào hàng đợi đăng (server tải nền tuần tự, hẹn đúng giờ đăng của ô)"
           >
             {scheduleMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Hẹn giờ{" "}
-            {schedulable.length} tập đã render
+            {schedulable.length}
           </Button>
         </div>
       </header>
@@ -287,9 +286,45 @@ export function PlanPage() {
       {q.isLoading ? (
         <Card className="h-96 animate-pulse bg-muted/30" />
       ) : q.error ? (
-        <Card className="p-6 text-sm text-destructive">{String(q.error)}</Card>
+        <Card className="p-4 md:p-6 text-sm text-destructive">{String(q.error)}</Card>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <>
+        {/* Điện thoại: mỗi ngày 1 khối, ô xếp dọc kèm nhãn kênh (lưới 4 kênh quá chật < md). */}
+        <Card className="overflow-hidden p-0 md:hidden">
+          {days.map((date) => {
+            const dow = new Date(`${date}T00:00:00`).getDay();
+            const cells = SERIES_OPTIONS.flatMap((s) => (slotsBy.get(`${date}|${s.id}`) ?? []).map((slot) => ({ s, slot })));
+            return (
+              <div key={date} className={cn("border-b px-3 py-3 last:border-b-0", date === today && "bg-accent/5")}>
+                <div className={cn("mb-2 text-sm font-medium", date === today && "text-accent")}>
+                  {WEEKDAY[dow]} {date.slice(8)}/{date.slice(5, 7)}
+                  {dow === 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">ngày làm</span>}
+                </div>
+                {cells.length ? (
+                  <div className="space-y-2">
+                    {cells.map(({ s, slot }) => (
+                      <div key={slot.id}>
+                        <span className={cn("mb-1 inline-block rounded px-1.5 py-0.5 text-[11px]", s.tone)}>
+                          {s.channelName} · {postTime?.[s.id]}
+                        </span>
+                        <SlotCard
+                          slot={slot}
+                          at={slotAt(slot)}
+                          renderJob={slot.episode ? renderingEps.get(slot.episode) ?? null : null}
+                          publishJob={slot.episode ? publishingEps.get(slot.episode) ?? null : null}
+                          onChange={refresh}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Không có ô nào.</p>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+        <Card className="hidden overflow-hidden p-0 md:block">
           <div className="grid border-b bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground" style={gridCols}>
             <div className="px-3 py-2 text-center">Ngày</div>
             {SERIES_OPTIONS.map((s) => (
@@ -336,9 +371,9 @@ export function PlanPage() {
             );
           })}
         </Card>
+        </>
       )}
 
-      {q.data && <IdeasPanel ideas={q.data.ideas} slots={q.data.slots} onChange={refresh} />}
     </div>
   );
 }
@@ -521,11 +556,11 @@ function SlotEditDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-background/80 p-0 sm:p-4 backdrop-blur-sm"
       onKeyDown={onKey}
       onMouseDown={(e) => e.target === e.currentTarget && !pending && onClose()}
     >
-      <Card className="w-full max-w-2xl overflow-hidden p-0">
+      <Card className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-b-none p-0 sm:rounded-b-lg">
         <div className="flex items-center gap-2 border-b bg-secondary/30 px-5 py-3">
           <span className={cn("rounded px-1.5 py-0.5 text-xs", info.tone)}>{info.channelName}</span>
           <span className="text-sm font-medium">
@@ -587,89 +622,5 @@ function SlotEditDialog({
         </div>
       </Card>
     </div>
-  );
-}
-
-function IdeasPanel({ ideas, slots, onChange }: { ideas: PlanIdea[]; slots: PlanSlot[]; onChange: () => void }) {
-  const [series, setSeries] = useState<SeriesId>("chuyen-xua");
-  const [title, setTitle] = useState("");
-  const addMut = useMutation({
-    mutationFn: () => planApi.addIdea({ series, title }),
-    onSuccess: () => {
-      setTitle("");
-      onChange();
-    },
-  });
-  const delMut = useMutation({ mutationFn: (id: string) => planApi.deleteIdea(id), onSuccess: onChange });
-  const assignMut = useMutation({
-    mutationFn: ({ id, slotId }: { id: string; slotId: string }) => planApi.assignIdea(id, slotId),
-    onSuccess: onChange,
-  });
-  // Ô trống sớm nhất cùng kênh trong khung đang xem.
-  const firstEmpty = (s: SeriesId) =>
-    slots.filter((x) => x.series === s && !x.title && !x.episode).sort((a, b) => a.date.localeCompare(b.date))[0];
-
-  return (
-    <Card className="mt-6 p-5">
-      <h2 className="mb-3 flex items-center gap-2 font-medium">
-        <Lightbulb className="size-4 text-accent" /> Kho ý tưởng
-        <span className="text-xs font-normal text-muted-foreground">
-          — Claude đề xuất khi làm kế hoạch; bấm ↦ để đưa vào ô trống sớm nhất cùng kênh
-        </span>
-      </h2>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {SERIES_OPTIONS.map((s) => {
-          const list = ideas.filter((i) => i.series === s.id);
-          const target = firstEmpty(s.id);
-          return (
-            <div key={s.id}>
-              <div className={cn("mb-2 inline-block rounded px-1.5 py-0.5 text-xs", s.tone)}>{s.channelName}</div>
-              {list.length === 0 && <div className="text-xs text-muted-foreground">Chưa có ý tưởng.</div>}
-              <ul className="space-y-1">
-                {list.map((i) => (
-                  <li key={i.id} className="group flex items-start gap-1 text-sm">
-                    <span className="min-w-0 flex-1" title={[i.hook, i.notes].filter(Boolean).join("\n")}>
-                      {i.title}
-                    </span>
-                    <button
-                      onClick={() => target && assignMut.mutate({ id: i.id, slotId: target.id })}
-                      disabled={!target}
-                      className="text-xs text-accent hover:underline disabled:text-muted-foreground disabled:no-underline"
-                      title={target ? `Đưa vào ô ${target.date}` : "Không còn ô trống trong 2 tuần đang xem"}
-                    >
-                      ↦ {target ? `${target.date.slice(8)}/${target.date.slice(5, 7)}` : "—"}
-                    </button>
-                    <button
-                      onClick={() => delMut.mutate(i.id)}
-                      className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                      title="Xoá ý tưởng"
-                    >
-                      <XIcon className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-4 flex gap-2">
-        <select
-          value={series}
-          onChange={(e) => setSeries(e.target.value as SeriesId)}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          {SERIES_OPTIONS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.channelName}
-            </option>
-          ))}
-        </select>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Thêm ý tưởng…" className="h-9" />
-        <Button size="sm" onClick={() => addMut.mutate()} disabled={!title.trim() || addMut.isPending}>
-          <Plus className="size-4" /> Thêm
-        </Button>
-      </div>
-    </Card>
   );
 }

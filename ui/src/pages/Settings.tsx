@@ -86,13 +86,13 @@ export function SettingsPage() {
   });
 
   return (
-    <div className="container max-w-3xl py-10">
+    <div className="container max-w-3xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
           <SettingsIcon className="size-7 text-accent" />
           Settings
         </h1>
-        <p className="mt-1 text-muted-foreground text-sm">
+        <p className="mt-1 text-muted-foreground text-sm line-clamp-2 md:line-clamp-none">
           Quản lý API key của các nhà cung cấp AI (cho viết bài + đọc
           voiceover). Vì bảo mật, key đã lưu không hiện lại — muốn đổi thì
           nhập key mới rồi Save.
@@ -155,7 +155,7 @@ function ApiKeyRow({ status }: { status: ApiKeyStatus }) {
   });
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 md:p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

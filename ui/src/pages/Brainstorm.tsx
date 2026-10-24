@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/button";
 export function Brainstorm() {
   const navigate = useNavigate();
   return (
-    <div className="container max-w-2xl py-10">
-      <Card className="p-6">
+    <div className="container max-w-2xl py-5 pb-24 md:py-10">
+      <Card className="p-4 md:p-6">
         <div className="flex items-start gap-3">
           <Lightbulb className="size-6 text-accent mt-1 shrink-0" />
           <div className="min-w-0">
@@ -30,14 +30,14 @@ export function Brainstorm() {
             </p>
             <div className="mt-4 flex gap-2 flex-wrap">
               <Button onClick={() => navigate("/")} size="sm">
-                Đi tới danh sách tập
+                Danh sách tập
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/essay")}
               >
-                Đi tới Bài luận
+                Bài luận
               </Button>
             </div>
           </div>

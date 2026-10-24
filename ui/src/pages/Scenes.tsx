@@ -109,14 +109,14 @@ export function ScenesPage() {
   }, [scenes]);
 
   return (
-    <div className="container max-w-6xl py-10">
+    <div className="container max-w-6xl py-5 pb-24 md:py-10">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
             <Film className="size-7 text-accent" />
             Quản lý Scene
           </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
+          <p className="mt-1 text-muted-foreground text-sm line-clamp-2 md:line-clamp-none">
             {scenes.length} scene template — dùng{" "}
             {totalUsage.toLocaleString("vi-VN")} lần trong các plan đã render.
             Preview: {thumbsGenerated}/{scenes.length} thumb đã render.
@@ -207,7 +207,7 @@ export function ScenesPage() {
       )}
 
       {q.isError && (
-        <Card className="p-6 border-destructive/40 bg-destructive/5 text-sm text-destructive">
+        <Card className="p-4 md:p-6 border-destructive/40 bg-destructive/5 text-sm text-destructive">
           Lỗi tải catalog: {String(q.error)}
         </Card>
       )}

@@ -478,7 +478,7 @@ function FormatPanel({
           <p className="text-sm text-muted-foreground">
             Chưa có video {landscape ? "YouTube 16:9" : "Facebook 9:16"}. Bấm{" "}
             <strong>Render preview</strong> để test nhanh 10s đầu, hoặc{" "}
-            <strong>Render full</strong> cho bản hoàn chỉnh.
+            <strong>Render</strong> cho bản hoàn chỉnh.
           </p>
         </div>
       )}
@@ -537,7 +537,7 @@ function TriggerCard({
               </>
             ) : (
               <>
-                Preview = 10s đầu, ~30s render. Full = hoàn chỉnh (~5-10 phút
+                Preview = 10s đầu, ~30s render. Render = bản hoàn chỉnh (~5-10 phút
                 tuỳ độ dài audio).
               </>
             )}
@@ -601,17 +601,17 @@ function TriggerCard({
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button disabled={blocked} onClick={() => onRender(true)}>
+        <Button disabled={blocked} onClick={() => onRender(true)} title="Render thử 10 giây đầu">
           {pending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Play className="size-4" />
           )}
-          Render preview (10s)
+          Preview 10s
         </Button>
-        <Button variant="secondary" disabled={blocked} onClick={() => onRender(false)}>
+        <Button variant="secondary" disabled={blocked} onClick={() => onRender(false)} title="Render bản hoàn chỉnh (5–10 phút)">
           <Play className="size-4" />
-          Render full
+          Render
         </Button>
         {!ep.audioPath && (
           <p className="self-center text-sm text-muted-foreground">
@@ -809,7 +809,7 @@ function VideoCard({
           controls
           src={file.url}
           className="w-full object-contain mx-auto"
-          style={{ maxHeight }}
+          style={{ maxHeight: `min(${maxHeight}px, 55dvh)` }}
           preload="metadata"
           poster={poster}
         />

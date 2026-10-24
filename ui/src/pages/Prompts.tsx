@@ -33,13 +33,13 @@ export function PromptsPage() {
   });
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="container max-w-5xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
           <Settings2 className="size-7 text-accent" />
           System prompts
         </h1>
-        <p className="mt-1 text-muted-foreground text-sm">
+        <p className="mt-1 text-muted-foreground text-sm line-clamp-2 md:line-clamp-none">
           Quản lý system prompts của LLM. Sửa để A/B test phong cách output mà
           không phải đụng code. Empty hoặc identical default → tự reset về
           default.
@@ -50,7 +50,7 @@ export function PromptsPage() {
         <Card className="h-64 animate-pulse bg-muted/30" />
       )}
       {promptsQ.isError && (
-        <Card className="border-destructive/40 bg-destructive/5 p-6">
+        <Card className="border-destructive/40 bg-destructive/5 p-4 md:p-6">
           <div className="flex items-center gap-2 font-medium text-destructive">
             <AlertCircle className="size-5" />
             Không load được danh sách prompts
@@ -220,7 +220,7 @@ function PromptCard({ prompt }: { prompt: PromptMeta }) {
                 ) : (
                   <RotateCcw className="size-3.5" />
                 )}
-                Reset default
+                Mặc định
               </Button>
             )}
             <Button
@@ -236,7 +236,7 @@ function PromptCard({ prompt }: { prompt: PromptMeta }) {
               ) : (
                 <Save className="size-3.5" />
               )}
-              Lưu override
+              Lưu
             </Button>
           </div>
         </div>

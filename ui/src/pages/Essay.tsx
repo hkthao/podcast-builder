@@ -304,9 +304,9 @@ export function EssayPage() {
   const wordCount = countWords(liveContent);
 
   return (
-    <div className="container max-w-7xl py-10">
+    <div className="container max-w-7xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
           <FileText className="size-7 text-accent" />
           Essay
         </h1>
@@ -374,7 +374,7 @@ export function EssayPage() {
 
         {/* Main editor */}
         <div className="space-y-4">
-          <Card className="p-6 space-y-4">
+          <Card className="p-4 md:p-6 space-y-4">
             <div>
               <Label htmlFor="title">Tiêu đề</Label>
               <Input
@@ -503,7 +503,7 @@ export function EssayPage() {
 
           {/* Hint khi chưa có essay nào */}
           {!activeId && liveContent.length === 0 && !streaming && (
-            <Card className="p-6 border-dashed">
+            <Card className="p-4 md:p-6 border-dashed">
               <p className="text-sm font-medium mb-3">
                 Sau khi Generate sẽ xuất hiện 3 panel:
               </p>
@@ -706,7 +706,7 @@ export function EssayPage() {
                     rel="noreferrer"
                   >
                     <ExternalLink className="size-3.5" />
-                    Open NotebookLM ↗
+                    NotebookLM ↗
                   </a>
                 </Button>
               </div>
@@ -856,7 +856,7 @@ function SuggestionRow({ suggestion }: { suggestion: SuggestedRef }) {
           onClick={() => setModalOpen(true)}
         >
           <Library className="size-3.5" />
-          Thêm vào thư viện
+          Thêm
         </Button>
       </div>
       {modalOpen && (
@@ -1161,11 +1161,11 @@ function QuickAddRefModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end justify-center sm:items-center p-0 sm:p-4"
       onClick={onClose}
     >
       <Card
-        className="max-w-xl w-full p-0 overflow-hidden"
+        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-b-none p-0 sm:rounded-b-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-3 border-b bg-secondary/30 flex items-center gap-2">

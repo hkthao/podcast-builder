@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Keyboard, Lightbulb, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
+import { ChevronRight, Keyboard, Menu, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
 import { SERIES_OPTIONS, seriesInfo } from "@/lib/series";
 import { cn } from "@/lib/utils";
@@ -45,25 +45,35 @@ function useCrumbs(): string[] {
 }
 
 /** Thanh trên cùng: breadcrumb trái, tiện ích hệ thống phải (phím tắt, prompts, giao diện, settings). */
+export const TOGGLE_SIDEBAR_EVENT = "app:toggle-sidebar";
+
 export function AppBar() {
   const crumbs = useCrumbs();
   return (
-    <header className="z-30 flex h-14 shrink-0 items-center gap-4 border-b bg-card/80 px-6 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <header className="z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-card/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-card/60 md:gap-4 md:px-6">
+      <button
+        type="button"
+        aria-label="Mở menu"
+        className={cn(btn, "-ml-1 md:hidden")}
+        onClick={() => window.dispatchEvent(new Event(TOGGLE_SIDEBAR_EVENT))}
+      >
+        <Menu className="size-5" />
+      </button>
       <nav aria-label="Vị trí" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
         {crumbs.map((c, i) => (
-          <span key={i} className="flex min-w-0 items-center gap-1.5">
-            {i > 0 && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />}
+          // Điện thoại: chỉ crumb cuối (tên trang) — đường dẫn đầy đủ bị cắt còn "Cô… > Kế ho…".
+          <span key={i} className={cn("min-w-0 items-center gap-1.5", i === crumbs.length - 1 ? "flex" : "hidden md:flex")}>
+            {i > 0 && <ChevronRight className="hidden size-3.5 shrink-0 text-muted-foreground/60 md:block" />}
             <span className={cn("truncate", i === crumbs.length - 1 ? "font-medium" : "text-muted-foreground")}>{c}</span>
           </span>
         ))}
       </nav>
       <div className="flex items-center gap-1">
-        <BarButton label="Phím tắt (?)" onClick={() => window.dispatchEvent(new Event(OPEN_SHORTCUTS_EVENT))}>
-          <Keyboard className="size-4" />
-        </BarButton>
-        <BarLink to="/prompts" label="System prompts">
-          <Lightbulb className="size-4" />
-        </BarLink>
+        <span className="hidden md:contents">
+          <BarButton label="Phím tắt (?)" onClick={() => window.dispatchEvent(new Event(OPEN_SHORTCUTS_EVENT))}>
+            <Keyboard className="size-4" />
+          </BarButton>
+        </span>
         <ThemeMenu />
         <span className="mx-1 h-5 w-px bg-border" />
         <BarLink to="/settings" label="Settings">

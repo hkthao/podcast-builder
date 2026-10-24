@@ -289,7 +289,7 @@ export function YouTubePublishPanel({
           <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
           <span>
             Chưa có bản YouTube. Sang tab <strong>Render → YouTube 16:9</strong>{" "}
-            bấm "Render full" trước.
+            bấm "Render" trước.
           </span>
         </Card>
       )}
@@ -582,14 +582,14 @@ export function YouTubePublishPanel({
           <Button variant="outline" size="sm" asChild>
             <a href="https://studio.youtube.com" target="_blank" rel="noreferrer">
               <ExternalLink className="size-3.5" />
-              Mở YouTube Studio
+              YouTube Studio
             </a>
           </Button>
         </footer>
       </CollapsibleCard>
 
       {/* Đánh dấu đã đăng */}
-      <Card className={cn("p-5 space-y-3", published && "border-accent/40 bg-accent/5")}>
+      <Card className={cn("p-4 md:p-5 space-y-3", published && "border-accent/40 bg-accent/5")}>
         <div className="flex items-center gap-2">
           {published ? (
             <CheckCircle2 className="size-4 text-accent" />
@@ -642,7 +642,7 @@ export function YouTubePublishPanel({
           ) : (
             <Button size="sm" onClick={() => markMut.mutate(true)} disabled={markMut.isPending}>
               <CheckCircle2 className="size-3.5" />
-              Đánh dấu đã đăng
+              Đã đăng
             </Button>
           )}
         </div>

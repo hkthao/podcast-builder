@@ -138,7 +138,7 @@ export function SpellFixPanel({
           disabled={pending}
           title="Khôi phục danh sách mặc định"
         >
-          Reset default
+          Mặc định
         </Button>
         <Button
           size="sm"

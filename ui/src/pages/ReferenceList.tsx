@@ -81,10 +81,10 @@ export function ReferenceList() {
   });
 
   return (
-    <div className="container max-w-6xl py-10">
+    <div className="container max-w-6xl py-5 pb-24 md:py-10">
       <header className="mb-6 flex items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-serif tracking-tight">Tài liệu</h1>
+          <h1 className="text-2xl md:text-3xl font-serif tracking-tight">Tài liệu</h1>
           <p className="mt-1 text-muted-foreground text-sm">
             {filtersQ.data?.items.length ?? 0} tài liệu —
             chỉ lưu metadata, KHÔNG tải về. Bấm "Mở" để xem trên browser.
@@ -258,7 +258,7 @@ function AddReferenceForm({
   };
 
   return (
-    <Card className="p-6 mb-6 border-primary/40">
+    <Card className="p-4 md:p-6 mb-6 border-primary/40">
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>URL</Label>
@@ -381,7 +381,7 @@ function AddReferenceForm({
             ) : (
               <Plus className="size-4" />
             )}
-            Thêm vào library
+            Thêm
           </Button>
         </div>
       </div>

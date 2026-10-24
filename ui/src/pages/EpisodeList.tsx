@@ -11,6 +11,8 @@ import {
   Facebook,
   Send,
   FileAudio2,
+  History,
+  ImageOff,
   Plus,
   Loader2,
   Search,
@@ -19,10 +21,10 @@ import {
 } from "lucide-react";
 import { api, type EpisodeStatus, type EpisodeSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { seriesInfo, type SeriesId } from "@/lib/series";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 12;
 
@@ -102,18 +104,20 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
 
   return (
     <div className="min-h-screen relative">
-      <div className="container max-w-5xl py-10">
-        <header className="mb-6 flex items-center justify-between gap-6">
+      <div className="container max-w-5xl py-5 pb-24 md:py-10">
+        <header className="mb-4 flex items-center justify-between gap-3 md:mb-6 md:gap-6">
           <div>
-            <h1 className="text-3xl font-serif tracking-tight">{channelName}</h1>
+            <h1 className="text-2xl md:text-3xl font-serif tracking-tight">{channelName}</h1>
             <p className="mt-1 text-muted-foreground text-sm">
               {data
                 ? hasFilter
                   ? `Hiển thị ${filtered.length} / ${total} tập`
                   : `${total} tập`
                 : "Đang tải…"}
-              {" · "}
-              Tạo tập mới rồi upload audio (hoặc gen TTS) trong trang chi tiết
+              <span className="hidden md:inline">
+                {" · "}
+                Tạo tập mới rồi upload audio (hoặc gen TTS) trong trang chi tiết
+              </span>
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -122,14 +126,15 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
               disabled={createEpisode.isPending}
             >
               <Plus className="size-4" />
-              Tạo tập mới
+              <span className="hidden sm:inline">Tạo tập mới</span>
+              <span className="sm:hidden">Tạo tập</span>
             </Button>
           </div>
         </header>
 
         {/* Thanh tìm kiếm + lọc ngày */}
         {data && total > 0 && (
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+          <div className="mb-4 flex flex-col gap-2 sm:mb-6 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -148,8 +153,9 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
                 </button>
               )}
             </div>
-            <div className="flex items-end gap-2">
-              <div>
+            {/* Điện thoại: 2 ô ngày chia đôi hàng, nhãn nhỏ nằm trong ô thay vì phía trên. */}
+            <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 sm:flex">
+              <div className="min-w-0">
                 <label className="block text-xs text-muted-foreground mb-1">
                   Từ ngày
                 </label>
@@ -158,10 +164,10 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
                   value={dateFrom}
                   max={dateTo || undefined}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto sm:px-3"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs text-muted-foreground mb-1">
                   Đến ngày
                 </label>
@@ -170,13 +176,13 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
                   value={dateTo}
                   min={dateFrom || undefined}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto sm:px-3"
                 />
               </div>
               {hasFilter && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <Button variant="ghost" size="sm" onClick={clearFilters} title="Xoá lọc">
                   <X className="size-4" />
-                  Xoá lọc
+                  <span className="hidden sm:inline">Xoá lọc</span>
                 </Button>
               )}
             </div>
@@ -184,7 +190,7 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
         )}
 
         {isLoading && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
             {[0, 1, 2].map((i) => (
               <Card key={i} className="h-44 animate-pulse bg-muted/30" />
             ))}
@@ -192,7 +198,7 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
         )}
 
         {error && (
-          <Card className="border-destructive/40 bg-destructive/5 p-6">
+          <Card className="border-destructive/40 bg-destructive/5 p-4 md:p-6">
             <div className="flex items-center gap-2 font-medium text-destructive">
               <AlertCircle className="size-5" />
               Không kết nối được server
@@ -231,7 +237,7 @@ export function EpisodeList({ series = "bytecast" }: { series?: SeriesId }) {
 
         {data && pageItems.length > 0 && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
               {pageItems.map((ep) => (
                 <EpisodeCard key={ep.name} ep={ep} />
               ))}
@@ -293,8 +299,8 @@ function CreateEpisodeDialog({
   const [title, setTitle] = useState("");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-      <Card className="w-full max-w-md p-0 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-background/80 backdrop-blur-sm p-0 sm:p-4">
+      <Card className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-b-none p-0 sm:rounded-b-lg">
         <div className="px-5 py-3 border-b bg-secondary/30 flex items-center gap-2">
           <Plus className="size-4 text-accent" />
           <span className="font-medium">Tạo tập mới</span>
@@ -397,18 +403,20 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
       to={`/episodes/${encodeURIComponent(ep.name)}`}
       className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className="relative flex flex-col p-5 h-full transition-colors hover:bg-secondary/40 hover:border-primary/40 cursor-pointer">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <h3 className="font-serif text-lg leading-tight line-clamp-2">
+      <Card className="relative flex h-full gap-3 p-3 md:gap-4 md:p-4 transition-colors hover:bg-secondary/40 hover:border-primary/40 cursor-pointer">
+        <CoverThumb ep={ep} />
+        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 font-serif text-base leading-tight md:text-lg">
             {title}
           </h3>
-          <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex shrink-0 items-center gap-1.5">
             <StatusBadge status={ep.status} />
             <PublishBadge config={ep.config} />
           </div>
         </div>
         {ep.config.hook && (
-          <p className="mb-3 line-clamp-2 text-sm text-muted-foreground italic">
+          <p className="mb-2 line-clamp-2 text-xs italic text-muted-foreground md:mb-3 md:text-sm">
             "{ep.config.hook}"
           </p>
         )}
@@ -427,7 +435,12 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
           {ep.renderedAt && (
             <>
               <span>·</span>
-              <span>Rendered {timeAgo(ep.renderedAt)}</span>
+              <span
+                className="shrink-0 whitespace-nowrap"
+                title={`Render ${timeAgo(ep.renderedAt)} — ${new Date(ep.renderedAt).toLocaleString("vi-VN")}`}
+              >
+                {timeAgo(ep.renderedAt).replace(/ trước$/, "")}
+              </span>
             </>
           )}
           <button
@@ -443,48 +456,76 @@ function EpisodeCard({ ep }: { ep: EpisodeSummary }) {
             )}
           </button>
         </div>
+        </div>
       </Card>
     </Link>
   );
 }
 
+/** Cover 9:16 bên trái card; chưa có cover → ô trống có icon. */
+function CoverThumb({ ep }: { ep: EpisodeSummary }) {
+  const src = ep.config.coverImage
+    ? `/input/${encodeURIComponent(ep.config.coverImage)}?t=${ep.mtimeMs}`
+    : null;
+  return (
+    <div className="relative w-14 shrink-0 self-start md:w-16 overflow-hidden rounded-md border bg-muted aspect-[9/16]">
+      {src ? (
+        <img src={src} alt="" loading="lazy" className="size-full object-cover" />
+      ) : (
+        <div className="flex size-full items-center justify-center text-muted-foreground" title="Chưa có cover">
+          <ImageOff className="size-5" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Trạng thái gọn: chấm tròn có icon + màu, nhãn đầy đủ ở tooltip (title). */
+function StatusDot({ title, className, children }: { title: string; className: string; children: React.ReactNode }) {
+  return (
+    <span
+      title={title}
+      aria-label={title}
+      className={cn("inline-flex size-7 shrink-0 items-center justify-center rounded-full border", className)}
+    >
+      {children}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: EpisodeStatus }) {
-  const cfg: Record<
-    EpisodeStatus,
-    { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "accent"; icon: React.ReactNode }
-  > = {
+  const cfg: Record<EpisodeStatus, { label: string; className: string; icon: React.ReactNode }> = {
     "no-audio": {
       label: "Thiếu audio",
-      variant: "destructive",
+      className: "border-destructive/40 bg-destructive/15 text-destructive",
       icon: <AlertCircle className="size-3.5" />,
     },
     draft: {
       label: "Chưa render",
-      variant: "outline",
+      className: "border-border bg-transparent text-muted-foreground",
       icon: <Clock className="size-3.5" />,
     },
     rendering: {
       label: "Đang render",
-      variant: "default",
-      icon: <Clock className="size-3.5 animate-spin" />,
+      className: "border-primary/40 bg-primary/15 text-primary",
+      icon: <Loader2 className="size-3.5 animate-spin" />,
     },
     rendered: {
       label: "Đã render",
-      variant: "accent",
+      className: "border-accent bg-accent text-accent-foreground",
       icon: <CheckCircle2 className="size-3.5" />,
     },
     outdated: {
-      label: "Cũ",
-      variant: "secondary",
-      icon: <AlertCircle className="size-3.5" />,
+      label: "Video cũ — cấu hình đã đổi sau lần render",
+      className: "border-border bg-secondary text-muted-foreground",
+      icon: <History className="size-3.5" />,
     },
   };
   const c = cfg[status];
   return (
-    <Badge variant={c.variant} className="gap-1 shrink-0">
+    <StatusDot title={c.label} className={c.className}>
       {c.icon}
-      {c.label}
-    </Badge>
+    </StatusDot>
   );
 }
 
@@ -500,21 +541,27 @@ function PublishBadge({ config }: { config: EpisodeSummary["config"] }) {
   switch (config.publishStatus) {
     case "published":
       return (
-        <Badge variant="accent" className="gap-1 shrink-0" title={config.fbPermalink ?? undefined}>
-          <Facebook className="size-3.5" /> Đã đăng
-        </Badge>
+        <StatusDot
+          title={config.fbPermalink ? `Đã đăng — ${config.fbPermalink}` : "Đã đăng"}
+          className="border-sky-500/40 bg-sky-500/15 text-sky-400"
+        >
+          <Facebook className="size-3.5" />
+        </StatusDot>
       );
     case "scheduled":
       return (
-        <Badge variant="secondary" className="gap-1 shrink-0" title="Đã hẹn giờ trên Facebook">
-          <CalendarClock className="size-3.5" /> {when ? `Hẹn ${when}` : "Đã hẹn giờ"}
-        </Badge>
+        <StatusDot
+          title={when ? `Đã hẹn giờ đăng ${when}` : "Đã hẹn giờ trên Facebook"}
+          className="border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+        >
+          <CalendarClock className="size-3.5" />
+        </StatusDot>
       );
     case "ready":
       return (
-        <Badge variant="outline" className="gap-1 shrink-0">
-          <Send className="size-3.5" /> Sẵn sàng đăng
-        </Badge>
+        <StatusDot title="Sẵn sàng đăng" className="border-amber-500/40 bg-amber-500/10 text-amber-400">
+          <Send className="size-3.5" />
+        </StatusDot>
       );
     default:
       return null;

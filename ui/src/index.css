@@ -106,3 +106,18 @@
     }
   }
 }
+
+@layer utilities {
+  /* Hàng tab cuộn ngang trên điện thoại — ẩn thanh cuộn nhưng vẫn vuốt được. */
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* iOS Safari phóng to trang khi focus ô nhập chữ < 16px → trên điện thoại ép mọi ô nhập ≥ 16px. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}

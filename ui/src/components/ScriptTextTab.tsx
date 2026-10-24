@@ -19,7 +19,7 @@ export function ScriptTextTab({ ep }: { ep: EpisodeSummary }) {
   if (q.isLoading) return <Card className="h-64 animate-pulse bg-muted/30" />;
   if (q.error) {
     return (
-      <Card className="border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
+      <Card className="border-destructive/40 bg-destructive/5 p-4 md:p-6 text-sm text-destructive">
         {String(q.error)}
       </Card>
     );
@@ -28,7 +28,7 @@ export function ScriptTextTab({ ep }: { ep: EpisodeSummary }) {
 
   if (!data || data.kind === "none") {
     return (
-      <Card className="p-6 text-sm text-muted-foreground">
+      <Card className="p-4 md:p-6 text-sm text-muted-foreground">
         Tập này chưa có kịch bản (<code className="font-mono">input/{ep.name}.story.json</code>) hay bài
         luận gốc (<code className="font-mono">input/{ep.name}.essay.txt</code>).
       </Card>
@@ -37,7 +37,7 @@ export function ScriptTextTab({ ep }: { ep: EpisodeSummary }) {
 
   if (data.kind === "essay") {
     return (
-      <Card className="p-6">
+      <Card className="p-4 md:p-6">
         <div className="mb-4 flex items-center gap-2">
           <FileText className="size-4 text-accent" />
           <h3 className="font-medium">Bài luận gốc</h3>
@@ -53,7 +53,7 @@ export function ScriptTextTab({ ep }: { ep: EpisodeSummary }) {
   const { story } = data;
   const total = story.sections.reduce((n, s) => n + wordCount(s.text), 0);
   return (
-    <Card className="p-6">
+    <Card className="p-4 md:p-6">
       <div className="mb-1 flex items-center gap-2">
         <BookOpen className="size-4 text-accent" />
         <h3 className="font-serif text-xl">{story.title}</h3>

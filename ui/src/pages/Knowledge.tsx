@@ -62,9 +62,9 @@ export function KnowledgePage() {
   ];
 
   return (
-    <div className="container max-w-6xl py-10">
+    <div className="container max-w-6xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
           <Network className="size-7 text-accent" />
           Bản đồ tri thức
         </h1>

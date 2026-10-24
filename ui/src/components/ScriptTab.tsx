@@ -277,7 +277,7 @@ export function ScriptTab({ ep }: { ep: EpisodeSummary }) {
             onClick={() => setImportOpen(true)}
           >
             <ClipboardPaste className="size-3.5" />
-            Paste kịch bản
+            Dán
           </Button>
         </Card>
       )}
@@ -440,7 +440,7 @@ function SourcesPanel({
     essayId !== null || (brainstormId !== null && ideaIdx !== null) || extraNotes.trim().length > 0;
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 md:p-5">
       <div className="flex items-center gap-2 mb-4">
         <Lightbulb className="size-4 text-accent" />
         <h3 className="font-medium">Nguồn input cho kịch bản</h3>
@@ -917,7 +917,7 @@ function ScriptEditor({
     cachedCount > 0 && ttsCost.pending.turnCount < turns.length;
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 md:p-5">
       {/* Header row 1: title + primary action. Row 2 (muted): inline stats.
           Cost + actions phụ inline với title để cụm nút không xuống dòng. */}
       <div className="mb-4">
@@ -1159,7 +1159,7 @@ function ScriptEditor({
           {saveMut.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : null}
-          Lưu thay đổi
+          Lưu
         </Button>
       </div>
 
@@ -1578,11 +1578,11 @@ function VoiceStudioModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-background/80 backdrop-blur-sm p-0 sm:p-4"
       onClick={onClose}
     >
       <Card
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5"
+        className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-b-none p-4 sm:max-h-[90vh] sm:rounded-b-lg sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -1988,11 +1988,11 @@ function ImportScriptModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-background/80 backdrop-blur-sm p-0 sm:p-4"
       onClick={onClose}
     >
       <Card
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5"
+        className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-b-none p-4 sm:max-h-[90vh] sm:rounded-b-lg sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -2279,7 +2279,7 @@ function SelectionBar({
           }
           title="Chọn mọi turn đã có audio cache trong toàn bộ script"
         >
-          Chọn tất cả có audio ({turnsWithAudio.length})
+          Chọn có audio ({turnsWithAudio.length})
         </Button>
         <Button
           size="sm"
@@ -2529,7 +2529,7 @@ function AudioActionsPanel({
   };
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 md:p-5">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Music className="size-4 text-primary" />
         <h3 className="font-medium">Audio actions</h3>

@@ -115,13 +115,13 @@ export function CommentsPage() {
   });
 
   return (
-    <div className="container max-w-3xl py-10">
+    <div className="container max-w-3xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="text-3xl font-serif tracking-tight flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-serif tracking-tight flex items-center gap-3">
           <MessageSquare className="size-7 text-accent" />
           Trả lời comment
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
           Thu thập comment trên Page → AI gợi ý câu trả lời theo ngữ cảnh bài →
           bạn sửa &amp; bấm Approve để đăng. Chỉ đăng khi bạn duyệt.
         </p>
@@ -208,7 +208,7 @@ export function CommentsPage() {
           ) : (
             <XIcon className="size-3.5" />
           )}
-          Bỏ qua đã like
+          Bỏ qua
         </Button>
         <Button
           variant="outline"
@@ -307,7 +307,7 @@ export function CommentsPage() {
         </div>
       )}
       {!listQ.isLoading && comments.length === 0 && (
-        <Card className="p-6 text-sm text-muted-foreground text-center">
+        <Card className="p-4 md:p-6 text-sm text-muted-foreground text-center">
           Chưa có comment. Bấm <strong>Thu thập comment</strong> để lấy từ Page.
         </Card>
       )}
@@ -542,7 +542,7 @@ function CommentCard({
                   ) : (
                     <Send className="size-3.5" />
                   )}
-                  Approve &amp; trả lời
+                  Trả lời
                 </Button>
               </div>
             </div>
@@ -574,7 +574,7 @@ function CommentCard({
               ) : (
                 <RotateCcw className="size-3.5" />
               )}
-              Đưa về chờ trả lời
+              Mở lại
             </Button>
           </div>
         )}

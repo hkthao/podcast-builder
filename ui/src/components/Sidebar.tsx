@@ -5,10 +5,6 @@ import {
   Film,
   Network,
   MessageSquare,
-  Star,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
   BookOpen,
   CalendarDays,
   HardDrive,
@@ -16,11 +12,11 @@ import {
   UploadCloud,
   Music2,
   Coins,
+  Lightbulb,
 } from "lucide-react";
-import { api, cleanupApi, publishApi, type EpisodeStatus } from "@/lib/api";
+import { api, cleanupApi, publishApi } from "@/lib/api";
 import { LOW_DISK_BYTES, fmtBytes } from "@/pages/Cleanup";
 import { cn } from "@/lib/utils";
-import { usePersistedState } from "@/lib/persist";
 
 export function Sidebar() {
   const location = useLocation();
@@ -28,25 +24,7 @@ export function Sidebar() {
     queryKey: ["episodes", "podcast"],
     queryFn: () => api.listEpisodes("podcast"),
   });
-  const [pinned, setPinned] = usePersistedState<string[]>(
-    "sidebar.pinned",
-    [],
-  );
-
-  const togglePin = (name: string) => {
-    setPinned((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
-    );
-  };
-  const isPinned = (name: string) => pinned.includes(name);
-
-  // Pinned trước, recent sau (loại trùng), tối đa 8
   const allEps = data?.episodes ?? [];
-  const pinnedEps = allEps.filter((e) => isPinned(e.name));
-  const restEps = allEps
-    .filter((e) => !isPinned(e.name))
-    .slice(0, Math.max(0, 8 - pinnedEps.length));
-  const recent = [...pinnedEps, ...restEps];
 
   // Dung lượng ổ trống — đỏ khi < 15 GB (render tập dài cần ~8 GB scratch).
   const diskQ = useQuery({ queryKey: ["disk"], queryFn: () => cleanupApi.disk(), refetchInterval: 60_000 });
@@ -73,8 +51,9 @@ export function Sidebar() {
     location.pathname === (series === "bytecast" ? "/" : `/series/${series}`) ||
     (openEp !== undefined && seriesOf(openEp) === series);
 
+  // Màn thấp (điện thoại, cửa sổ nhỏ) thì cả menu cuộn. h-dvh thay h-screen: 100vh trên Safari iOS cao hơn vùng nhìn thấy.
   return (
-    <aside className="w-64 shrink-0 border-r bg-card flex flex-col h-screen sticky top-0">
+    <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col overflow-y-auto overscroll-contain border-r bg-card">
       {/* Cao h-14 = AppBar → 2 viền dưới thẳng hàng. */}
       <div className="flex h-14 shrink-0 items-center border-b px-5">
         <NavLink
@@ -173,68 +152,13 @@ export function Sidebar() {
             icon={<Film className="size-4" />}
             label="Mẫu cảnh podcast"
           />
+          <NavItem
+            to="/prompts"
+            icon={<Lightbulb className="size-4" />}
+            label="System prompts"
+          />
         </div>
       </nav>
-
-      <div className="px-3 pt-3 pb-1 border-t mt-1">
-        <SectionLabel>
-          {pinnedEps.length > 0 ? "Đã ghim & gần đây" : "Tập gần đây"}
-        </SectionLabel>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-        {recent.length === 0 && (
-          <div className="px-3 py-2 text-sm text-muted-foreground">
-            Chưa có tập
-          </div>
-        )}
-        {recent.map((ep) => {
-          const path = `/episodes/${encodeURIComponent(ep.name)}`;
-          const active = location.pathname === path;
-          const pinned = isPinned(ep.name);
-          return (
-            <div
-              key={ep.name}
-              className={cn(
-                "group flex items-center gap-1 rounded-md text-sm transition-colors",
-                "hover:bg-secondary",
-                active && "bg-secondary text-foreground font-medium",
-              )}
-            >
-              <NavLink
-                to={path}
-                className="flex items-center gap-2 flex-1 min-w-0 px-3 py-2"
-                title={ep.config.title}
-              >
-                <StatusDot status={ep.status} />
-                <span className="truncate">{ep.config.title || ep.name}</span>
-              </NavLink>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  togglePin(ep.name);
-                }}
-                className={cn(
-                  "pr-2.5 py-2 transition-opacity",
-                  pinned
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100",
-                )}
-                title={pinned ? "Bỏ pin" : "Pin episode"}
-              >
-                <Star
-                  className={cn(
-                    "size-3.5",
-                    pinned
-                      ? "text-amber-500 fill-amber-500"
-                      : "text-muted-foreground",
-                  )}
-                />
-              </button>
-            </div>
-          );
-        })}
-      </div>
 
     </aside>
   );
@@ -312,16 +236,4 @@ function NavItem({
       {badge && <span className="ml-auto text-xs tabular-nums text-muted-foreground">{badge}</span>}
     </NavLink>
   );
-}
-
-function StatusDot({ status }: { status: EpisodeStatus }) {
-  if (status === "rendered")
-    return <CheckCircle2 className="size-3.5 text-accent shrink-0" />;
-  if (status === "rendering")
-    return <Clock className="size-3.5 text-primary animate-spin shrink-0" />;
-  if (status === "outdated")
-    return <AlertCircle className="size-3.5 text-muted-foreground shrink-0" />;
-  if (status === "no-audio")
-    return <AlertCircle className="size-3.5 text-destructive shrink-0" />;
-  return <Clock className="size-3.5 text-muted-foreground shrink-0" />;
 }

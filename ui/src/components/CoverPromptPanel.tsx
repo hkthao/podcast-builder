@@ -181,7 +181,7 @@ export function CoverPromptPanel({
           >
             {ep.config.accentColor === themeColor
               ? "Đã áp dụng cho sóng"
-              : "Áp dụng cho màu sóng"}
+              : "Dùng cho sóng"}
           </Button>
         </div>
       )}
@@ -267,7 +267,7 @@ export function CoverPromptPanel({
           title="Dùng LLM (OpenAI/Ollama) viết lại prompt — OpenAI tốn phí"
         >
           <Sparkles className="size-3.5" />
-          {showOpenAI ? "Ẩn viết prompt bằng AI" : "Viết prompt bằng AI…"}
+          {showOpenAI ? "Ẩn AI" : "AI viết…"}
         </Button>
         <Button
           size="sm"

@@ -10,6 +10,11 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
+    // IPv4 loopback (không phải 0.0.0.0): container Tailscale gọi vào qua host.docker.internal → 127.0.0.1;
+    // mặc định "localhost" chỉ nghe [::1] nên Docker không tới được. Vẫn KHÔNG mở ra mạng LAN.
+    host: "127.0.0.1",
+    // Truy cập từ điện thoại qua Tailscale (deploy/tailscale: container proxy → host.docker.internal:3000).
+    allowedHosts: [".ts.net", "host.docker.internal"],
     proxy: {
       // Tránh CORS — Vite proxy /api → Hono :3001.
       "/api": {

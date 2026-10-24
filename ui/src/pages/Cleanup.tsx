@@ -44,12 +44,12 @@ export function CleanupPage() {
     });
 
   return (
-    <div className="container max-w-4xl py-10">
+    <div className="container max-w-4xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+        <h1 className="flex items-center gap-2 font-serif text-2xl md:text-3xl tracking-tight">
           <HardDrive className="size-7 text-accent" /> Dọn ổ cứng
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
           Chỉ xoá thứ tạo lại được hoặc thuộc tập cũ. Không bao giờ đụng footage tự quay, audio đang dùng, kịch bản/config.
         </p>
       </header>

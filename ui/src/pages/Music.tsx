@@ -31,12 +31,12 @@ export function MusicPage() {
   const missing = tracks.filter((t) => !t.downloaded).length;
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="container max-w-5xl py-5 pb-24 md:py-10">
       <header className="mb-6">
-        <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+        <h1 className="flex items-center gap-2 font-serif text-2xl md:text-3xl tracking-tight">
           <Music2 className="size-7 text-accent" /> Kho nhạc nền
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
           Bản thu Musopen phát hành CC0 / Public Domain (Wikimedia Commons) — không thuộc hãng đĩa nên không bị đăng ký
           Content ID. Tập mới tự bốc ngẫu nhiên theo kênh, mỗi tập chưa đăng 1 bài khác nhau → lỡ 1 bài bị claim chỉ ảnh
           hưởng 1 tập. Bài bị claim → bấm "Chặn".
@@ -77,7 +77,7 @@ export function MusicPage() {
           {shown.map((t) => (
             <div key={t.id} className={cn("px-4 py-3", !t.usable && "opacity-60")}>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                   <div className="truncate text-sm font-medium">
                     {t.composer} — {t.work}
                   </div>

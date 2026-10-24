@@ -56,13 +56,13 @@ export function RenderQueuePage() {
   const finished = jobs.filter((j) => !isActiveJob(j.status)).slice(0, 30);
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="container max-w-5xl py-5 pb-24 md:py-10">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 font-serif text-3xl tracking-tight">
+          <h1 className="flex items-center gap-2 font-serif text-2xl md:text-3xl tracking-tight">
             <Clapperboard className="size-7 text-accent" /> Hàng đợi render
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2 md:line-clamp-none">
             {q.data ? `${running.length} đang chạy · ${waiting.length} đang chờ` : "Đang tải…"} · server chạy tối đa 2 job song song. Danh sách mất khi
             server khởi động lại.
           </p>
@@ -74,7 +74,7 @@ export function RenderQueuePage() {
           disabled={resetMut.isPending || (!running.length && !waiting.length)}
           title="Dùng khi hàng đợi bị kẹt (job treo không chạy tiếp)"
         >
-          <RotateCcw className="size-4" /> Reset hàng đợi
+          <RotateCcw className="size-4" /> Reset
         </Button>
       </header>
 

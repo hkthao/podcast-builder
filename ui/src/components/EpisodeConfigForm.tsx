@@ -132,7 +132,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
   };
 
   return (
-    <Card className="p-6">
+    <Card className="p-4 md:p-6">
       <div className="mb-6 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           Auto-save sau 500ms khi dừng gõ. Sửa rồi click ra để force save.
@@ -199,7 +199,7 @@ export function EpisodeConfigForm({ ep }: { ep: EpisodeSummary }) {
 
         {/* BGM (file + volume) đã chuyển sang BgmPanel ngay dưới Meta cards. */}
 
-        <div className="grid grid-cols-2 gap-5 pt-2">
+        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2 sm:gap-5">
           <SwitchRow
             label="Hiện Intro (3s cover)"
             hint="Tiêu đề hero 3 dòng + emphasis"

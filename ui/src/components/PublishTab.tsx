@@ -374,7 +374,7 @@ function FacebookPublishTab({
             </code>
           }
         >
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-4 p-5">
+          <div className="grid grid-cols-[1fr_96px] gap-3 p-4 sm:grid-cols-[1fr_180px] sm:gap-4 sm:p-5">
             <div>
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Video (.mp4)
@@ -637,7 +637,7 @@ function FacebookPublishTab({
           </Button>
           <CopyButton
             text={fullCaption}
-            label={`Copy caption + ${hashtags.length} hashtag`}
+            label="Copy caption"
             disabled={fullCaption.length === 0}
           />
         </footer>
@@ -1027,7 +1027,7 @@ function FacebookPublishCard({
         )}
         {hasToken && !isReady && (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">
-            Chưa có video render — sang tab <strong>Render</strong> bấm "Render full" trước.
+            Chưa có video render — sang tab <strong>Render</strong> bấm "Render" trước.
           </p>
         )}
 
@@ -1229,12 +1229,12 @@ function FacebookPublishCard({
           title="Đăng qua Meta Business Suite (Chrome riêng): tự điền video, tiêu đề, mô tả, tags, giờ, playlist và bấm Schedule"
         >
           <Clock className="size-3.5" />
-          Lên lịch qua Business Suite
+          Lên lịch
         </Button>
         <Button variant="outline" size="sm" asChild>
-          <a href={FB_REELS_URL} target="_blank" rel="noreferrer">
+          <a href={FB_REELS_URL} target="_blank" rel="noreferrer" title="Mở FB Reels Creator để đăng thủ công">
             <ExternalLink className="size-3.5" />
-            Mở FB Reels Creator (thủ công)
+            Đăng tay
           </a>
         </Button>
         <Button
