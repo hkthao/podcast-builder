@@ -16,7 +16,10 @@
     "spell-fix": "tsx podcast/scripts/spell-fix.ts",
     "render": "remotion render",
     "migrate": "tsx podcast/scripts/migrate-json-to-sqlite.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "studio:worker": "STUDIO_ROLE=worker STUDIO_DB_PATH=tmp/worker.db tsx server/index.ts",
+    "docker:build": "docker compose -f deploy/docker/docker-compose.yml build",
+    "docker:up": "docker compose -f deploy/docker/docker-compose.yml up -d"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",

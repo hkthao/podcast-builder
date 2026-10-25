@@ -1,0 +1,24 @@
+.git
+.DS_Store
+.env
+node_modules
+ui/node_modules
+ui/dist
+*.tsbuildinfo
+
+# Dữ liệu — bind mount lúc chạy (deploy/docker/docker-compose.yml), không nướng vào image
+input
+output
+tmp
+public
+references
+brainstorm
+essays
+data.db*
+
+# Chỉ chạy trên Mac
+whisper.cpp
+models
+.venv
+docker
+deploy

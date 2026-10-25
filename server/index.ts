@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
+import { serveStatic as serveStaticDir } from "@hono/node-server/serve-static";
 import dotenv from "dotenv";
 import { brainstormRoutes } from "../podcast/server/routes/brainstorm";
 import { episodesRoutes } from "../podcast/server/routes/episodes";
@@ -23,6 +24,7 @@ import { cleanupRoutes } from "../podcast/server/routes/cleanup";
 import { publishRoutes } from "../podcast/server/routes/publish";
 import { musicRoutes } from "../podcast/server/routes/music";
 import { resumePublishQueue } from "../podcast/server/lib/publish-queue";
+import { IS_WORKER, installHostWorker } from "./host-worker";
 import { startFsWatcher } from "../shared/studio-core/events";
 import { sseFromBus } from "../shared/studio-core/sse";
 import {
@@ -41,6 +43,10 @@ const TMP_DIR = path.resolve("tmp");
 const SCENE_CATALOG_DIR = path.resolve("public/scene-catalog");
 
 const PORT = Number(process.env.STUDIO_PORT ?? 3001);
+/** Trong Docker phải nghe 0.0.0.0 để port publish được; chạy thẳng trên Mac giữ loopback. */
+const HOST = process.env.STUDIO_HOST ?? "127.0.0.1";
+/** Docker: server tự phục vụ UI đã build (ui/dist) thay cho Vite dev. */
+const UI_DIST = process.env.STUDIO_UI_DIST ? path.resolve(process.env.STUDIO_UI_DIST) : null;
 /** Origin của Vite dev server. Local-only — không expose. */
 const UI_ORIGIN = process.env.STUDIO_UI_ORIGIN ?? "http://localhost:3000";
 
@@ -71,6 +77,9 @@ app.delete("/api/health/errors", (c) => {
   clearErrors();
   return c.json({ ok: true });
 });
+
+// Docker: render/whisper/Chrome chuyển sang worker trên Mac (phải đứng trước app.route).
+installHostWorker(app);
 
 /** SSE event stream — broadcast fs changes + render progress. */
 app.get("/api/events", (c) => sseFromBus(c));
@@ -193,8 +202,18 @@ app.get("/input/_music/*", async (c) => {
   return sendFile(c, path.join(INPUT_DIR, "_music", rel), rel);
 });
 
+if (UI_DIST) {
+  // SPA: file tĩnh nếu có, còn lại trả index.html cho react-router.
+  app.use("/*", serveStaticDir({ root: path.relative(process.cwd(), UI_DIST) }));
+  app.get("*", async (c, next) => {
+    if (c.req.path.startsWith("/api/")) return next();
+    return c.html(await fs.readFile(path.join(UI_DIST, "index.html"), "utf8"));
+  });
+}
+
 startFsWatcher();
-resumePublishQueue();
+// Worker chỉ chạy job nặng; hàng đợi đăng Graph thuộc về server chính (tránh đăng 2 lần).
+if (!IS_WORKER) resumePublishQueue();
 
 app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
 app.onError((e, c) => {
@@ -210,7 +229,7 @@ serve(
   {
     fetch: app.fetch,
     port: PORT,
-    hostname: "127.0.0.1", // local-only, không bind 0.0.0.0
+    hostname: HOST, // mặc định local-only; Docker set STUDIO_HOST=0.0.0.0 (port chỉ publish ra 127.0.0.1)
   },
   (info) => {
     console.log(

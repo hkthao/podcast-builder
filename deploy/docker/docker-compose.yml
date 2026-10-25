@@ -1,0 +1,35 @@
+# Studio trong Docker — render/whisper/Chrome vẫn chạy trên Mac.
+#   1. Trên Mac:  npm run studio:worker            (worker :3001, giữ terminal mở; không chạy cùng `npm run studio`)
+#   2. npm run docker:build && npm run docker:up    → http://127.0.0.1:3000
+#   docker compose -f deploy/docker/docker-compose.yml logs -f     # xem log
+#   docker compose -f deploy/docker/docker-compose.yml down        # tắt
+# Tailscale (deploy/tailscale) vẫn trỏ host.docker.internal:3000 nên dùng được luôn.
+services:
+  studio:
+    build:
+      context: ../..
+    image: podcast-builder:local
+    container_name: podcast-studio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3001" # chỉ loopback — không mở ra LAN
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      # data.db (+ -wal/-shm) cần cả thư mục → mount repo vào /repo, chỉ dùng cho DB.
+      - STUDIO_DB_PATH=/repo/data.db
+    volumes:
+      - ../..:/repo
+      - ../../input:/app/input
+      - ../../output:/app/output
+      - ../../tmp:/app/tmp
+      - ../../public:/app/public
+      - ../../references:/app/references
+      - ../../brainstorm:/app/brainstorm
+      - ../../essays:/app/essays
+      # Code server đọc thẳng từ máy → sửa code chỉ cần restart container (UI sửa thì build lại).
+      - ../../server:/app/server:ro
+      - ../../podcast:/app/podcast:ro
+      - ../../shared:/app/shared:ro
+      - ../../story:/app/story:ro

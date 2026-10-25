@@ -123,6 +123,8 @@ export function subscribePublishJob(id: string, fn: Listener): () => void {
  */
 const BROWSER_DIR = path.join(PATHS.TMP_DIR, "fb-browser");
 const pidAlive = (pid: number) => {
+  // Trong Docker, fb-browser chạy ở worker trên Mac → không thấy PID của nó, đừng báo "chết".
+  if (process.env.STUDIO_HOST_WORKER) return true;
   try {
     process.kill(pid, 0);
     return true;
