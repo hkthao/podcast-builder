@@ -95,5 +95,8 @@ npx tsx --env-file=.env podcast/scripts/hot-post-guard.ts      # exit 3 = có b�
 - **Quota NotebookLM**: kiểm `nlm-quota.ts` TRƯỚC; dàn mỗi tập 1 take (`--takes=1`) trên Plus, take <cổng thì roll thêm. Bản 13.8' sát cổng 14' → chấp nhận (giọng sạch hơn cổng, memory voice-consistency).
 - **Gemini audio-qc 402** → không QC giọng Nam/Bắc tự động được: ghi vào báo cáo và nhờ user nghe nhanh các tập ByteCast/Dòng Họ Việt.
 
+## Đoạn mở động bằng EffectCraft (thử nghiệm, CHƯA nối vào pipeline render)
+`podcast/scripts/cover-bc/intro-compose.py <slug> --layers DIR --l1 .. --l2 .. --tag ..` dựng đoạn mở 6s (cảnh nhiều lớp parallax + chữ chạy) bằng EffectCraft CLI trong Docker `--network none` (`~/.local/effectcraft/effectcraft-0.21.0-linux-aarch64`, bản Linux arm64, kiểm SHA256 từ release storytold/effectcraft). Mỗi tập bốc ngẫu nhiên có seed theo slug: camera (6), kiểu chữ (7), khí quyển (bụi/mưa/sương/chói đèn; user 2026-11-04 chê hiệu ứng pháo hoa → đã bỏ), hậu kỳ (glow/grain/vignette), kiểu mở. Lớp nguồn PNG 1280x1920 xem `layers_nhelong.py`. Mới có bộ lớp cảnh phòng họp; chưa nối vào thẻ intro Remotion.
+
 ## Đo reach (đang thử nghiệm)
 Từ 2026-10-18 hẹn giờ đăng qua API **1 tuần để đo lại reach** (trước đây đăng API qua Reels chỉ 100–200 view so với đăng tay 2k–4k; đã đổi sang `/videos` kèm tiêu đề + cover). Sau tuần thử, so view các tập đăng API với các tập đăng tay trước đó và báo user trước khi quyết định giữ hay quay lại đăng tay.
