@@ -19,7 +19,7 @@ import path from "node:path";
 import { getApiKey } from "../../shared/studio-core/api-keys-store";
 import { resolvePage } from "../../shared/studio-core/facebook";
 import { fbPageIdFor } from "../server/lib/publish-description";
-import { SERIES_IDS } from "../src/series";
+import { ACTIVE_SERIES_IDS } from "../src/series";
 
 const FACTOR = 3;
 const MIN_PLAYS = 300;
@@ -84,7 +84,7 @@ async function main() {
   const now = new Date();
   const actions: { series: string; hot: string; reason: string; postpone?: string; from?: string; to?: string }[] = [];
 
-  for (const series of SERIES_IDS) {
+  for (const series of ACTIVE_SERIES_IDS) {
     let ps: Post[];
     try {
       ps = await posts(series);

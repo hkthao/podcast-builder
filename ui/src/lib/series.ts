@@ -24,12 +24,6 @@ export const SERIES_OPTIONS: Array<{
     playlistsFile: "_fb-playlists.dong-ho-viet.json",
     tone: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
   },
-  {
-    id: "tien-tam-ly",
-    channelName: "Tiền & Tâm Lý",
-    playlistsFile: "_fb-playlists.tien-tam-ly.json",
-    tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  },
 ];
 
 export const seriesInfo = (id: string | null | undefined) =>

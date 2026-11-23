@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { PATHS } from "../../../shared/studio-core/paths";
-import { SERIES_IDS, type SeriesId } from "../../src/series";
+import { ACTIVE_SERIES_IDS, type SeriesId } from "../../src/series";
 import { getEpisode, type EpisodeSummary } from "./episode-store";
 
 const PLAN_FILE = path.join(PATHS.INPUT_DIR, "_plan.json");
@@ -90,7 +90,7 @@ export async function fillSlots(from: string, days: number): Promise<number> {
   let added = 0;
   for (let i = 0; i < days; i++) {
     const date = addDays(from, i);
-    for (const series of SERIES_IDS) {
+    for (const series of ACTIVE_SERIES_IDS) {
       const every = plan.settings.cadenceDays[series];
       if (!every || every < 1) continue;
       const due = (((dayNumber(date) - plan.settings.offsetDays[series]) % every) + every) % every === 0;

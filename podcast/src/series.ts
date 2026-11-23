@@ -7,6 +7,8 @@
  */
 export const SERIES_IDS = ["bytecast", "chuyen-xua", "dong-ho-viet", "tien-tam-ly"] as const;
 export type SeriesId = (typeof SERIES_IDS)[number];
+/** Kênh còn hoạt động (Tiền & Tâm Lý đã gỡ khỏi app 2026-11-23; config giữ lại cho tập cũ + viz). */
+export const ACTIVE_SERIES_IDS = SERIES_IDS.filter((s) => s !== "tien-tam-ly");
 export const DEFAULT_SERIES: SeriesId = "bytecast";
 
 /** Bảng màu khung video (khớp key COLORS trong theme.ts). */

@@ -11,7 +11,6 @@ import {
   Clapperboard,
   UploadCloud,
   Music2,
-  Coins,
   Lightbulb,
 } from "lucide-react";
 import { api, cleanupApi, publishApi } from "@/lib/api";
@@ -91,14 +90,6 @@ export function Sidebar() {
             tone="bg-rose-500/15 text-rose-600 dark:text-rose-400"
             name="Dòng Họ Việt"
             meta={metaOf("Kể chuyện", "dong-ho-viet")}
-          />
-          <ChannelItem
-            to="/series/tien-tam-ly"
-            active={channelActive("tien-tam-ly")}
-            icon={<Coins className="size-4" />}
-            tone="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-            name="Tiền & Tâm Lý"
-            meta={metaOf("Phân tích", "tien-tam-ly")}
           />
         </div>
         <div className="space-y-0.5">
